@@ -1,3 +1,0 @@
-gtd.serbito.rs {
-    reverse_proxy gtd:8000
-}

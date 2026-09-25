@@ -4,14 +4,15 @@ import logging
 import os
 import re
 import secrets
-import sqlite3
-import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time as dtime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
@@ -23,47 +24,56 @@ BASE_URL = os.getenv("BASE_URL", "https://gtd.serbito.rs").rstrip("/")
 TZ = ZoneInfo(os.getenv("TZ", "Europe/Belgrade"))
 ALLOWED = {int(x) for x in os.getenv("ALLOWED_TG_IDS", "").split(",") if x.strip()}
 DEV = os.getenv("DEV", "") == "1"
-DB_PATH = os.getenv("DB_PATH", "data/gtd.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 COOKIE_SECURE = BASE_URL.startswith("https")
 
 STATUSES = ("inbox", "next", "waiting", "someday", "reference", "done", "trash")
 
 # ───────────────────────── DB ─────────────────────────
-os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-_db = sqlite3.connect(DB_PATH, check_same_thread=False)
-_db.row_factory = sqlite3.Row
-_lock = threading.RLock()
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL не задан. Локально: postgresql://gtd:ПАРОЛЬ@127.0.0.1:5433/gtd "
+        "(через cloud-sql-proxy). В Cloud Run: postgresql://gtd:ПАРОЛЬ@/gtd"
+        "?host=/cloudsql/serbito:europe-west1:serbitodb"
+    )
 
-_db.executescript(
-    """
+_pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5,
+                       kwargs={"row_factory": dict_row}, open=True)
+
+with _pool.connection() as _c:
+    _c.execute(
+        """
 create table if not exists users(
-  id integer primary key, tg_id integer unique, name text, created integer);
+  id bigserial primary key, tg_id bigint unique, name text, created bigint);
 create table if not exists sessions(
-  token text primary key, user_id integer, created integer);
+  token text primary key, user_id bigint, created bigint);
 create table if not exists login_tokens(
-  token text primary key, user_id integer, expires integer);
+  token text primary key, user_id bigint, expires bigint);
 create table if not exists projects(
-  id integer primary key, user_id integer, title text, status text default 'active', created integer);
+  id bigserial primary key, user_id bigint, title text, status text default 'active', created bigint);
 create table if not exists items(
-  id integer primary key, user_id integer, title text, notes text default '',
-  status text default 'inbox', project_id integer, context text,
-  remind_at integer, reminded integer default 0, source text default 'web',
-  created integer, completed_at integer);
+  id bigserial primary key, user_id bigint, title text, notes text default '',
+  status text default 'inbox', project_id bigint, context text,
+  remind_at bigint, reminded integer default 0, source text default 'web',
+  created bigint, completed_at bigint);
 create index if not exists items_user_status on items(user_id, status);
 """
-)
+    )
 
 
 def run(sql, args=()):
-    with _lock:
-        cur = _db.execute(sql, args)
-        _db.commit()
-        return cur.lastrowid
+    """Выполняет запрос. Для insert ... returning id возвращает id, иначе None."""
+    with _pool.connection() as conn:
+        cur = conn.execute(sql, args)
+        if cur.description:
+            r = cur.fetchone()
+            return next(iter(r.values())) if r else None
+        return None
 
 
 def rows(sql, args=()):
-    with _lock:
-        return [dict(r) for r in _db.execute(sql, args).fetchall()]
+    with _pool.connection() as conn:
+        return conn.execute(sql, args).fetchall()
 
 
 def row(sql, args=()):
@@ -179,24 +189,24 @@ def capture(uid: int, raw: str, source: str = "web") -> dict:
     title = title or raw.strip()
     status = "next" if (ctx or proj_id) else "inbox"
     iid = run(
-        "insert into items(user_id,title,status,project_id,context,remind_at,source,created) values(?,?,?,?,?,?,?,?)",
+        "insert into items(user_id,title,status,project_id,context,remind_at,source,created) values(%s,%s,%s,%s,%s,%s,%s,%s) returning id",
         (uid, title, status, proj_id, ctx, remind, source, int(time.time())),
     )
     return item_get(uid, iid)
 
 
 def project_by_title(uid: int, title: str) -> int:
-    r = row("select id from projects where user_id=? and lower(title)=lower(?)", (uid, title))
+    r = row("select id from projects where user_id=%s and lower(title)=lower(%s)", (uid, title))
     if r:
         return r["id"]
-    return run("insert into projects(user_id,title,created) values(?,?,?)", (uid, title, int(time.time())))
+    return run("insert into projects(user_id,title,created) values(%s,%s,%s) returning id", (uid, title, int(time.time())))
 
 
 ITEM_SQL = "select i.*, p.title as project from items i left join projects p on p.id=i.project_id "
 
 
 def item_get(uid, iid):
-    return row(ITEM_SQL + "where i.user_id=? and i.id=?", (uid, iid))
+    return row(ITEM_SQL + "where i.user_id=%s and i.id=%s", (uid, iid))
 
 
 def fmt_ts(ts):
@@ -232,14 +242,14 @@ async def tg(method, **params):
 
 
 def tg_user(tg_id: int, name: str):
-    u = row("select * from users where tg_id=?", (tg_id,))
+    u = row("select * from users where tg_id=%s", (tg_id,))
     if u:
         return u
     allowed = (tg_id in ALLOWED) if ALLOWED else (row("select count(*) c from users")["c"] == 0)
     if not allowed:
         return None
-    uid = run("insert into users(tg_id,name,created) values(?,?,?)", (tg_id, name, int(time.time())))
-    return row("select * from users where id=?", (uid,))
+    uid = run("insert into users(tg_id,name,created) values(%s,%s,%s) returning id", (tg_id, name, int(time.time())))
+    return row("select * from users where id=%s", (uid,))
 
 
 HELP = (
@@ -278,11 +288,11 @@ async def handle_message(msg):
         await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP)
     elif cmd == "/login":
         tok = secrets.token_urlsafe(24)
-        run("insert into login_tokens values(?,?,?)", (tok, u["id"], int(time.time()) + 600))
+        run("insert into login_tokens(token,user_id,expires) values(%s,%s,%s)", (tok, u["id"], int(time.time()) + 600))
         await tg("sendMessage", chat_id=chat, text=f"Вход (10 минут, одноразовая):\n{BASE_URL}/auth?t={tok}")
     elif cmd in ("/inbox", "/next"):
         st = cmd[1:]
-        its = rows(ITEM_SQL + "where i.user_id=? and i.status=? order by i.created limit 20", (u["id"], st))
+        its = rows(ITEM_SQL + "where i.user_id=%s and i.status=%s order by i.created limit 20", (u["id"], st))
         body = "\n".join(f"#{i['id']} {i['title']} {describe(i)}".strip() for i in its) or "Пусто 🎉"
         await tg("sendMessage", chat_id=chat, text=f"{st.upper()}:\n{body}")
     elif cmd == "/done":
@@ -306,12 +316,12 @@ def mark_done(uid, iid):
     it = item_get(uid, iid)
     if not it:
         return False
-    run("update items set status='done', completed_at=? where id=?", (int(time.time()), iid))
+    run("update items set status='done', completed_at=%s where id=%s", (int(time.time()), iid))
     return True
 
 
 async def handle_callback(cb):
-    u = row("select * from users where tg_id=?", (cb["from"]["id"],))
+    u = row("select * from users where tg_id=%s", (cb["from"]["id"],))
     if not u:
         return
     act, _, sid = cb["data"].partition(":")
@@ -325,10 +335,10 @@ async def handle_callback(cb):
         mark_done(u["id"], iid)
         note = "✅ Готово"
     elif act == "snz":
-        run("update items set remind_at=?, reminded=0 where id=?", (int(time.time()) + 3600, iid))
+        run("update items set remind_at=%s, reminded=0 where id=%s", (int(time.time()) + 3600, iid))
         note = "💤 Напомню через час"
     elif act == "next":
-        run("update items set status='next' where id=?", (iid,))
+        run("update items set status='next' where id=%s", (iid,))
         note = "⏭ В Next"
     else:
         return
@@ -368,10 +378,10 @@ async def reminder_loop():
         await asyncio.sleep(15)
         try:
             due = rows("select i.*, u.tg_id from items i join users u on u.id=i.user_id "
-                       "where i.remind_at is not null and i.reminded=0 and i.remind_at<=? "
+                       "where i.remind_at is not null and i.reminded=0 and i.remind_at<=%s "
                        "and i.status not in ('done','trash')", (int(time.time()),))
             for it in due:
-                run("update items set reminded=1 where id=?", (it["id"],))
+                run("update items set reminded=1 where id=%s", (it["id"],))
                 if TOKEN and it["tg_id"]:
                     await tg("sendMessage", chat_id=it["tg_id"], text=f"⏰ {it['title']}",
                              reply_markup=kb_item(it["id"]))
@@ -392,6 +402,7 @@ async def lifespan(app):
     for t in tasks:
         t.cancel()
     await _client.aclose()
+    _pool.close()
 
 
 # ───────────────────────── Web / API ─────────────────────────
@@ -400,7 +411,7 @@ app = FastAPI(lifespan=lifespan)
 
 def current_user(request: Request) -> int:
     sid = request.cookies.get("sid")
-    r = row("select user_id from sessions where token=?", (sid,)) if sid else None
+    r = row("select user_id from sessions where token=%s", (sid,)) if sid else None
     if not r:
         raise HTTPException(401, "auth required")
     return r["user_id"]
@@ -408,7 +419,7 @@ def current_user(request: Request) -> int:
 
 def start_session(uid: int) -> RedirectResponse:
     tok = secrets.token_urlsafe(32)
-    run("insert into sessions values(?,?,?)", (tok, uid, int(time.time())))
+    run("insert into sessions(token,user_id,created) values(%s,%s,%s)", (tok, uid, int(time.time())))
     resp = RedirectResponse("/", status_code=303)
     resp.set_cookie("sid", tok, max_age=60 * 60 * 24 * 90, httponly=True, samesite="lax", secure=COOKIE_SECURE)
     return resp
@@ -416,10 +427,10 @@ def start_session(uid: int) -> RedirectResponse:
 
 @app.get("/auth")
 def auth(t: str):
-    r = row("select * from login_tokens where token=? and expires>?", (t, int(time.time())))
+    r = row("select * from login_tokens where token=%s and expires>%s", (t, int(time.time())))
     if not r:
         return JSONResponse({"error": "Ссылка устарела. Отправь /login боту ещё раз."}, status_code=400)
-    run("delete from login_tokens where token=?", (t,))
+    run("delete from login_tokens where token=%s", (t,))
     return start_session(r["user_id"])
 
 
@@ -428,7 +439,7 @@ def dev_login():
     if not DEV:
         raise HTTPException(404)
     u = row("select id from users limit 1")
-    uid = u["id"] if u else run("insert into users(tg_id,name,created) values(0,'dev',?)", (int(time.time()),))
+    uid = u["id"] if u else run("insert into users(tg_id,name,created) values(0,'dev',%s) returning id", (int(time.time()),))
     return start_session(uid)
 
 
@@ -439,33 +450,33 @@ def config():
 
 @app.post("/api/logout")
 def logout(request: Request):
-    run("delete from sessions where token=?", (request.cookies.get("sid", ""),))
+    run("delete from sessions where token=%s", (request.cookies.get("sid", ""),))
     return {"ok": True}
 
 
 @app.get("/api/counts")
 def counts(uid: int = Depends(current_user)):
     c = {r["status"]: r["n"] for r in rows(
-        "select status, count(*) n from items where user_id=? group by status", (uid,))}
-    c["scheduled"] = row("select count(*) n from items where user_id=? and remind_at is not null "
+        "select status, count(*) n from items where user_id=%s group by status", (uid,))}
+    c["scheduled"] = row("select count(*) n from items where user_id=%s and remind_at is not null "
                          "and status not in ('done','trash')", (uid,))["n"]
-    c["projects"] = row("select count(*) n from projects where user_id=? and status='active'", (uid,))["n"]
+    c["projects"] = row("select count(*) n from projects where user_id=%s and status='active'", (uid,))["n"]
     return c
 
 
 @app.get("/api/items")
 def list_items(status: str = "inbox", project_id: int | None = None, uid: int = Depends(current_user)):
-    where, args = "i.user_id=?", [uid]
+    where, args = "i.user_id=%s", [uid]
     if status == "scheduled":
         where += " and i.remind_at is not null and i.status not in ('done','trash')"
         order = "i.remind_at"
     else:
         order = "i.completed_at desc" if status == "done" else "i.created"
         if status != "all":
-            where += " and i.status=?"
+            where += " and i.status=%s"
             args.append(status)
     if project_id:
-        where += " and i.project_id=?"
+        where += " and i.project_id=%s"
         args.append(project_id)
     return rows(f"{ITEM_SQL} where {where} order by {order} limit 500", args)
 
@@ -490,22 +501,22 @@ def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
         if k == "status":
             if v not in STATUSES:
                 raise HTTPException(400, "bad status")
-            sets.append("completed_at=?")
+            sets.append("completed_at=%s")
             args.append(int(time.time()) if v == "done" else None)
         if k == "remind_at":
             sets.append("reminded=0")
         if k == "context" and v:
             v = str(v).lstrip("@").lower()
-        sets.append(f"{k}=?")
+        sets.append(f"{k}=%s")
         args.append(v or None if k in ("context", "project_id", "remind_at") else v)
     if sets:
-        run(f"update items set {', '.join(sets)} where id=? and user_id=?", (*args, iid, uid))
+        run(f"update items set {', '.join(sets)} where id=%s and user_id=%s", (*args, iid, uid))
     return item_get(uid, iid)
 
 
 @app.delete("/api/items/{iid}")
 def delete_item(iid: int, uid: int = Depends(current_user)):
-    run("delete from items where id=? and user_id=?", (iid, uid))
+    run("delete from items where id=%s and user_id=%s", (iid, uid))
     return {"ok": True}
 
 
@@ -515,7 +526,7 @@ def list_projects(uid: int = Depends(current_user)):
         "select p.*, "
         "(select count(*) from items i where i.project_id=p.id and i.status in ('inbox','next','waiting')) open_count, "
         "(select count(*) from items i where i.project_id=p.id and i.status='next') next_count "
-        "from projects p where p.user_id=? and p.status='active' order by p.title", (uid,))
+        "from projects p where p.user_id=%s and p.status='active' order by p.title", (uid,))
 
 
 @app.post("/api/projects")
@@ -530,7 +541,7 @@ def create_project(body: dict, uid: int = Depends(current_user)):
 def patch_project(pid: int, body: dict, uid: int = Depends(current_user)):
     for k in ("title", "status"):
         if k in body:
-            run(f"update projects set {k}=? where id=? and user_id=?", (body[k], pid, uid))
+            run(f"update projects set {k}=%s where id=%s and user_id=%s", (body[k], pid, uid))
     return {"ok": True}
 
 
