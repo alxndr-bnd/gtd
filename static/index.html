@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GTD</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#3b6cf6;--ok:#1f9d55;--warn:#d97706}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#6b93ff;--ok:#3ec97b;--warn:#f0a03c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+.app{display:flex;min-height:100vh}
+nav{width:230px;padding:16px 10px;border-right:1px solid var(--bd);background:var(--card);flex-shrink:0}
+nav h1{font-size:17px;margin:0 8px 14px}
+nav a{display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
+nav a:hover{background:var(--bg)} nav a.on{background:var(--ac);color:#fff}
+nav a .n{opacity:.7;font-size:13px}
+nav .sep{height:1px;background:var(--bd);margin:10px 4px}
+main{flex:1;max-width:820px;margin:0 auto;padding:20px 16px 80px;width:100%}
+h2{margin:0 0 12px;font-size:20px}
+.cap{display:flex;gap:8px;margin-bottom:16px}
+.cap input{flex:1;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font-size:15px}
+button,select{font:inherit}
+button{padding:8px 14px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);cursor:pointer}
+button.pri{background:var(--ac);color:#fff;border-color:var(--ac)}
+button.sm{padding:3px 8px;font-size:12.5px;color:var(--mut)}
+button.sm:hover{color:var(--tx)}
+.hint{color:var(--mut);font-size:13px;margin:-8px 0 14px}
+.it{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.it input[type=checkbox]{margin-top:4px;width:17px;height:17px}
+.it .b{flex:1;min-width:0}
+.it .t{cursor:pointer;word-break:break-word} .it.done .t{text-decoration:line-through;color:var(--mut)}
+.meta{color:var(--mut);font-size:12.5px;margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
+.meta .due{color:var(--warn)}
+.act{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.chip{padding:3px 10px;border:1px solid var(--bd);border-radius:99px;font-size:13px;cursor:pointer;color:var(--mut)}
+.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.empty{text-align:center;color:var(--mut);padding:40px 0}
+.pj{cursor:pointer} .pj .warn{color:var(--warn)}
+.rv{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.rv h3{margin:0 0 6px;font-size:15px} .rv a{color:var(--ac);cursor:pointer}
+dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);width:min(480px,94vw);padding:18px}
+dialog::backdrop{background:#0008}
+dialog label{display:block;margin:10px 0 3px;color:var(--mut);font-size:13px}
+dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+.row{display:flex;gap:8px;justify-content:space-between;margin-top:16px}
+.login{max-width:420px;margin:15vh auto;text-align:center;padding:0 16px}
+@media(max-width:700px){.app{flex-direction:column}nav{width:100%;display:flex;overflow-x:auto;gap:4px;border-right:0;border-bottom:1px solid var(--bd);padding:8px}nav h1,nav .sep{display:none}nav a{white-space:nowrap;gap:6px}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<dialog id="dlg"></dialog>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const VIEWS = [
+  ['inbox','📥 Inbox'],['next','⏭ Next'],['waiting','⏳ Waiting'],['scheduled','📅 Календарь / напоминания'],
+  ['projects','📁 Проекты'],['someday','💭 Someday'],['reference','📚 Reference'],['done','✅ Готово'],['review','🔍 Weekly Review']];
+const HELP = {inbox:'Всё, что ещё не осмыслено. Разбери: что это и что делать дальше?',
+  next:'Конкретные следующие физические действия.', waiting:'Жду ответа/результата от других.',
+  scheduled:'Задачи с напоминанием — по времени.', someday:'Когда-нибудь / может быть.', reference:'Материалы без действия.', done:'Выполнено.'};
+let S = {view:'inbox', items:[], projects:[], counts:{}, ctx:null, pid:null, cfg:{}};
+
+async function api(path, method='GET', body){
+  const r = await fetch('/api'+path, {method, headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
+  if(r.status===401) throw new Error('auth');
+  return r.json();
+}
+const fmtTs = ts => ts ? new Date(ts*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+const toLocalInput = ts => { if(!ts) return ''; const d=new Date(ts*1000); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); };
+
+async function load(){
+  try{
+    S.counts = await api('/counts');
+    S.projects = await api('/projects');
+    if(S.view==='projects' && !S.pid) S.items=[];
+    else if(S.view==='projects') S.items = await api('/items?status=all&project_id='+S.pid);
+    else if(S.view!=='review') S.items = await api('/items?status='+S.view);
+    else S.items = await api('/items?status=all');
+    render();
+  }catch(e){ if(e.message==='auth') return loginScreen(); console.error(e); }
+}
+
+async function loginScreen(){
+  S.cfg = await fetch('/api/config').then(r=>r.json());
+  $('#root').innerHTML = `<div class="login"><h1>GTD</h1>
+    <p>Открой Telegram-бота${S.cfg.bot?` <b>@${esc(S.cfg.bot)}</b>`:''} и отправь ему <code>/login</code> — он пришлёт ссылку для входа.</p>
+    ${S.cfg.bot?`<p><a href="https://t.me/${esc(S.cfg.bot)}"><button class="pri">Открыть бота</button></a></p>`:''}
+    ${S.cfg.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}</div>`;
+}
+
+function navHtml(){
+  return `<nav><h1>GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
+    <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
+    <div class="sep"></div><a data-act="logout">Выйти</a></nav>`;
+}
+
+function itemHtml(it){
+  const acts = [];
+  if(it.status==='inbox') acts.push(['next','→ Next'],['waiting','→ Waiting'],['someday','→ Someday'],['reference','→ Ref'],['trash','🗑']);
+  else if(it.status==='next') acts.push(['waiting','→ Waiting'],['someday','→ Someday']);
+  else if(it.status==='waiting') acts.push(['next','→ Next']);
+  else if(it.status==='someday') acts.push(['next','→ Next']);
+  else if(it.status==='done') acts.push(['next','↩︎ Вернуть']);
+  return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}">
+    <input type="checkbox" data-act="toggle" ${it.status==='done'?'checked':''}>
+    <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
+      <div class="meta">${it.remind_at?`<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`:''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
+      ${acts.length?`<div class="act">${acts.map(([s,l])=>`<button class="sm" data-act="mv" data-st="${s}">${l}</button>`).join('')}</div>`:''}
+    </div></div>`;
+}
+
+function render(){
+  let body='';
+  if(S.view==='review') body = reviewHtml();
+  else if(S.view==='projects' && !S.pid) body = projectsHtml();
+  else{
+    let items = S.items;
+    let chips='';
+    if(S.view==='next'){
+      const ctxs=[...new Set(items.map(i=>i.context).filter(Boolean))];
+      if(ctxs.length) chips=`<div class="chips"><span class="chip ${!S.ctx?'on':''}" data-ctx="">все</span>${ctxs.map(c=>`<span class="chip ${S.ctx===c?'on':''}" data-ctx="${esc(c)}">@${esc(c)}</span>`).join('')}</div>`;
+      if(S.ctx) items=items.filter(i=>i.context===S.ctx);
+    }
+    const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
+    body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}</h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2><div class="hint">${HELP[S.view]||''}</div>`}
+      ${chips}${items.map(itemHtml).join('') || '<div class="empty">Пусто 🎉</div>'}`;
+  }
+  $('#root').innerHTML = `<div class="app">${navHtml()}<main>
+    <div class="cap"><input id="cap" placeholder="Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»" autofocus>
+    <button class="pri" data-act="capture">Добавить</button></div>${body}</main></div>`;
+}
+
+function projectsHtml(){
+  return `<h2>📁 Проекты</h2><div class="hint">Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.</div>
+  <div class="cap"><input id="np" placeholder="Новый проект"><button data-act="newproj">Создать</button></div>
+  ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}"><div class="b"><div class="t">${esc(p.title)}</div>
+    <div class="meta"><span>${p.open_count} открыто</span>${p.next_count?'':'<span class="warn">⚠ нет следующего действия</span>'}</div></div>
+    <button class="sm" data-act="closeproj" data-pid="${p.id}">Завершить</button></div>`).join('') || '<div class="empty">Проектов нет</div>'}`;
+}
+
+function reviewHtml(){
+  const wk = Date.now()/1000 - 7*86400;
+  const stalled = S.projects.filter(p=>!p.next_count);
+  const oldWait = S.items.filter(i=>i.status==='waiting' && i.created<wk);
+  const soon = S.items.filter(i=>i.remind_at && !['done','trash'].includes(i.status)).sort((a,b)=>a.remind_at-b.remind_at).slice(0,8);
+  const c=S.counts;
+  return `<h2>🔍 Weekly Review</h2>
+  <div class="rv"><h3>1. Очистить голову</h3>Запиши всё, что в голове, в поле захвата выше.</div>
+  <div class="rv"><h3>2. Inbox → ноль</h3>В инбоксе: <b>${c.inbox||0}</b> — <a data-view="inbox">разобрать</a></div>
+  <div class="rv"><h3>3. Проекты без следующего действия</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):'Все проекты движутся ✅'}</div>
+  <div class="rv"><h3>4. Waiting старше недели</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):'Ничего не зависло ✅'}</div>
+  <div class="rv"><h3>5. Ближайшие напоминания</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):'Нет'}</div>
+  <div class="rv"><h3>6. Someday/Maybe</h3>Идей: <b>${c.someday||0}</b> — <a data-view="someday">просмотреть</a>. Что-то пора активировать?</div>`;
+}
+
+function openEdit(id){
+  const it = S.items.find(i=>i.id===id); if(!it) return;
+  const d = $('#dlg');
+  d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px">Редактирование</h3>
+    <label>Название</label><input name="title" value="${esc(it.title)}" required>
+    <label>Заметки</label><textarea name="notes" rows="3">${esc(it.notes)}</textarea>
+    <label>Список</label><select name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option ${s===it.status?'selected':''}>${s}</option>`).join('')}</select>
+    <label>Проект</label><select name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
+    <label>Контекст (@)</label><input name="context" value="${esc(it.context||'')}" placeholder="работа, дом, телефон…">
+    <label>Напомнить</label><input type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
+    <div class="row"><button type="button" data-act="del" style="color:#d33">Удалить</button><span><button type="button" data-act="cancel">Отмена</button> <button class="pri" value="ok">Сохранить</button></span></div></form>`;
+  d.showModal();
+  $('#ef').onsubmit = async e => {
+    const f = new FormData(e.target);
+    await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
+      project_id:f.get('project_id')?+f.get('project_id'):null, context:f.get('context'),
+      remind_at:f.get('remind')?Math.floor(new Date(f.get('remind')).getTime()/1000):null});
+    load();
+  };
+  d.querySelector('[data-act=cancel]').onclick = () => d.close();
+  d.querySelector('[data-act=del]').onclick = async () => { if(confirm('Удалить задачу?')){ await api('/items/'+id,'DELETE'); d.close(); load(); } };
+}
+
+async function capture(){
+  const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
+  inp.value=''; await api('/capture','POST',{text:v}); load();
+}
+
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return;
+  const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
+  if(act==='capture') return capture();
+  if(act==='edit') return openEdit(id);
+  if(act==='mv'){ await api('/items/'+id,'PATCH',{status:el.dataset.st}); return load(); }
+  if(act==='logout'){ await api('/logout','POST'); return loginScreen(); }
+  if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
+  if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
+  if(act==='back'){ e.preventDefault(); S.pid=null; return load(); }
+  if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
+  if(el.dataset.view){ S.view=el.dataset.view; S.ctx=null; S.pid=el.dataset.pid?+el.dataset.pid:null; return load(); }
+  if(el.dataset.pid && el.classList.contains('pj')){ S.pid=+el.dataset.pid; return load(); }
+});
+document.addEventListener('change', async e => {
+  if(e.target.dataset.act==='toggle'){
+    const id = +e.target.closest('.it').dataset.id;
+    await api('/items/'+id,'PATCH',{status:e.target.checked?'done':'next'}); load();
+  }
+});
+document.addEventListener('keydown', e => { if(e.key==='Enter' && e.target.id==='cap') capture(); if(e.key==='Enter' && e.target.id==='np') document.querySelector('[data-act=newproj]').click(); });
+load();
+</script>
+</body>
+</html>
