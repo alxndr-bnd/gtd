@@ -122,9 +122,39 @@ def test_reminders_marked_even_without_bot(tg, monkeypatch):
 
 # ── /email: привязка почты из бота ──
 
-def test_email_command_without_address(tg):
+def test_email_command_without_address_asks_for_it(tg, mail):
     bot_message("/email")
-    assert "/email you@example.com" in texts(tg)[-1]
+    assert "Пришли адрес почты" in texts(tg)[-1]
+    bot_message("Tom@Example.com")  # адрес следующим сообщением
+    assert mail[-1][0] == "tom@example.com"
+
+
+def test_start_shows_buttons(tg):
+    bot_message("/start")
+    kb = tg[-1][1]["reply_markup"]["keyboard"]
+    assert [b["text"] for b in kb[0]] == [A.BTN_START, A.BTN_EMAIL]
+    bot_message(A.BTN_START)
+    assert "GTD-бот готов" in texts(tg)[-1] and A.row("select count(*) n from items")["n"] == 0
+
+
+def test_add_email_button_flow(tg, mail):
+    bot_message(A.BTN_EMAIL)
+    assert "Пришли адрес почты" in texts(tg)[-1]
+    bot_message("tom@example.com")
+    assert "Код отправлен на tom@example.com" in texts(tg)[-1]
+    bot_message(last_code(mail))
+    assert "привязана" in texts(tg)[-1]
+    assert A.row("select email from users where tg_id=777")["email"] == "tom@example.com"
+    bot_message(A.BTN_EMAIL)  # уже привязана — предлагаем сменить
+    assert "Сейчас привязана tom@example.com" in texts(tg)[-1]
+    assert A.row("select count(*) n from items")["n"] == 0  # кнопки не превращаются в задачи
+
+
+def test_waiting_for_email_but_got_a_task(tg, mail):
+    bot_message(A.BTN_EMAIL)
+    bot_message("купить хлеб")  # передумал — это обычная задача
+    assert A.row("select title from items")["title"] == "купить хлеб" and mail == []
+    assert A.row("select count(*) n from tg_email_links")["n"] == 0
 
 
 def test_email_links_free_address(tg, mail):
@@ -186,3 +216,61 @@ def test_email_merge_declined(tg, mail, login, new_client):
     bot_callback(no_cb)
     assert "не объединяю" in texts(tg)[-1]
     assert A.row("select count(*) n from users")["n"] == 2 and A.row("select count(*) n from merge_offers")["n"] == 0
+
+
+# ── вебхук и будильник: в проде бот не опрашивает Telegram и инстанс может спать ──
+
+def test_webhook_requires_secret(client, tg):
+    upd = {"update_id": 1, "message": {"chat": {"id": 777}, "from": {"id": 777, "first_name": "Tom"}, "text": "из вебхука"}}
+    assert client.post("/tg/webhook", json=upd).status_code == 403
+    assert client.post("/tg/webhook", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": "nope"}).status_code == 403
+    r = client.post("/tg/webhook", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": A.webhook_secret()})
+    assert r.json() == {"ok": True} and A.row("select title from items")["title"] == "из вебхука"
+
+
+def test_webhook_off_without_bot(client):
+    assert client.post("/tg/webhook", json={}, headers={"X-Telegram-Bot-Api-Secret-Token": A.webhook_secret()}).status_code == 403
+
+
+def test_cron_reminders(client, tg, monkeypatch):
+    bot_message("полить цветы")
+    A.run("update items set remind_at=%s", (int(time.time()) - 1,))
+    assert client.post("/tasks/reminders").status_code == 403  # секрет не задан — закрыто
+    monkeypatch.setattr(A, "CRON_SECRET", "s3cret")
+    assert client.post("/tasks/reminders", headers={"X-Cron-Secret": "wrong"}).status_code == 403
+    assert client.post("/tasks/reminders", headers={"X-Cron-Secret": "s3cret"}).json() == {"sent": 1}
+    assert client.post("/tasks/reminders", headers={"X-Cron-Secret": "s3cret"}).json() == {"sent": 0}
+
+
+def fake_tg(monkeypatch, answers):
+    calls = []
+
+    async def fake(method, **params):
+        calls.append((method, params))
+        return answers.get(method, True)
+    monkeypatch.setattr(A, "tg", fake)
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    return calls
+
+
+def test_bot_setup_sets_webhook_in_prod(monkeypatch):
+    calls = fake_tg(monkeypatch, {"getMe": {"username": "gtdsrbot"}})
+    monkeypatch.setattr(A, "WEBHOOK", True)
+    monkeypatch.setattr(A, "BASE_URL", "https://gtd.serbito.rs")
+    asyncio.run(A.bot_setup())
+    assert A.BOT_USERNAME == "gtdsrbot"
+    hook = dict(calls)["setWebhook"]
+    assert hook["url"] == "https://gtd.serbito.rs/tg/webhook" and hook["secret_token"] == A.webhook_secret()
+
+
+def test_bot_setup_local_has_no_webhook(monkeypatch):
+    calls = fake_tg(monkeypatch, {"getMe": {"username": "gtdsrbot"}})
+    monkeypatch.setattr(A, "WEBHOOK", False)
+    asyncio.run(A.bot_setup())
+    assert "setWebhook" not in dict(calls)
+
+
+def test_local_polling_leaves_prod_webhook_alone(monkeypatch):
+    calls = fake_tg(monkeypatch, {"getWebhookInfo": {"url": "https://gtd.serbito.rs/tg/webhook"}})
+    asyncio.run(A.poll_loop())  # вернулся сразу, а не завис в getUpdates
+    assert [m for m, _ in calls] == ["getWebhookInfo"]

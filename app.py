@@ -36,6 +36,11 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", '"GTD" <info@serbito.rs>')
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+# Будильник напоминаний: Cloud Scheduler раз в минуту шлёт POST /tasks/reminders с этим секретом
+CRON_SECRET = os.getenv("CRON_SECRET", "")
+# Прод (https): Telegram сам шлёт апдейты вебхуком — инстанс спит, пока никто не пишет.
+# Локально (http): long polling, чтобы бот работал без публичного адреса.
+WEBHOOK = BASE_URL.startswith("https://")
 
 
 def init_sentry() -> bool:
@@ -303,6 +308,16 @@ HELP = (
 )
 
 
+BTN_START, BTN_EMAIL = "🚀 Начать", "📧 Добавить email"
+# Постоянная клавиатура под полем ввода: онбординг и привязка почты в одно нажатие
+KB_MAIN = {"keyboard": [[{"text": BTN_START}, {"text": BTN_EMAIL}]], "resize_keyboard": True, "is_persistent": True}
+
+
+def webhook_secret() -> str:
+    """Секрет заголовка X-Telegram-Bot-Api-Secret-Token — выводим из токена, отдельный не нужен."""
+    return hashlib.sha256(f"gtd-webhook:{TOKEN}".encode()).hexdigest()
+
+
 def kb_item(iid, done_only=False):
     return {"inline_keyboard": [[
         {"text": "✅ Готово", "callback_data": f"done:{iid}"},
@@ -349,11 +364,19 @@ async def tg_login_confirm(cb, nonce):
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
 
 
+async def tg_email_ask(chat, u):
+    """Кнопка «Добавить email» или /email без адреса: ждём адрес следующим сообщением."""
+    run("insert into tg_email_links(tg_id,email,expires) values(%s,null,%s) on conflict(tg_id) do update "
+        "set email=null, expires=excluded.expires", (u["tg_id"], int(time.time()) + 600))
+    now = f"Сейчас привязана {u['email']} — пришли другой адрес, чтобы сменить.\n\n" if u.get("email") else ""
+    await tg("sendMessage", chat_id=chat, text=f"{now}Пришли адрес почты — вышлю на него код. С этой почтой "
+             "можно будет входить на сайте по коду или через Google.", reply_markup=KB_MAIN)
+
+
 async def tg_email_start(chat, u, email):
     """/email адрес — шлём код на почту; пришедшие потом 6 цифр сверяем в tg_email_verify."""
     if not email:
-        await tg("sendMessage", chat_id=chat, text="Пришли: /email you@example.com — вышлю код, и почта "
-                 "привяжется к этому аккаунту: с ней можно будет входить на сайте.")
+        await tg_email_ask(chat, u)
         return
     try:
         send_code(email, f"tg:{u['tg_id']}")
@@ -410,13 +433,19 @@ async def handle_message(msg):
     if not text:
         await tg("sendMessage", chat_id=chat, text="Пока понимаю только текст.")
         return
-    if re.fullmatch(r"\d{6}", text):  # код из письма — только если ждём его, иначе это обычная задача
-        pending = row("select email from tg_email_links where tg_id=%s and expires>%s", (u["tg_id"], int(time.time())))
-        if pending:
-            await tg_email_verify(chat, u, pending["email"], text)
+    pending = row("select email from tg_email_links where tg_id=%s and expires>%s", (u["tg_id"], int(time.time())))
+    if pending and pending["email"] is None and not text.startswith("/") and text not in (BTN_START, BTN_EMAIL):
+        if EMAIL_RE.match(text.lower()):  # ждали адрес после «Добавить email»
+            await tg_email_start(chat, u, text.lower())
             return
-    if cmd in ("/start", "/help"):
-        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP)
+        run("delete from tg_email_links where tg_id=%s", (u["tg_id"],))  # передумал — это обычная задача
+    if pending and pending["email"] and re.fullmatch(r"\d{6}", text):  # код из письма, только если ждём его
+        await tg_email_verify(chat, u, pending["email"], text)
+        return
+    if text == BTN_EMAIL:
+        await tg_email_ask(chat, u)
+    elif cmd in ("/start", "/help") or text == BTN_START:
+        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=KB_MAIN)
     elif cmd == "/login":
         tok = secrets.token_urlsafe(24)
         run("insert into login_tokens(token,user_id,expires) values(%s,%s,%s)", (tok, u["id"], int(time.time()) + 600))
@@ -487,7 +516,18 @@ async def handle_callback(cb):
                  text=f"{note}: {it['title']}")
 
 
-async def poll_loop():
+async def dispatch(up: dict):
+    try:
+        if "message" in up:
+            await handle_message(up["message"])
+        elif "callback_query" in up:
+            await handle_callback(up["callback_query"])
+    except Exception:  # noqa: BLE001
+        log.exception("update failed")
+
+
+async def bot_setup():
+    """На старте: имя бота, меню команд и (в проде) вебхук. Идемпотентно — на каждом холодном старте."""
     global BOT_USERNAME
     me = await tg("getMe")
     BOT_USERNAME = (me or {}).get("username", "")
@@ -495,8 +535,19 @@ async def poll_loop():
         {"command": "inbox", "description": "Инбокс"}, {"command": "next", "description": "Следующие действия"},
         {"command": "done", "description": "Закрыть задачу: /done 12"},
         {"command": "login", "description": "Ссылка для входа в веб"},
-        {"command": "email", "description": "Привязать почту: /email you@example.com"},
+        {"command": "email", "description": "Привязать почту"},
         {"command": "help", "description": "Помощь"}])
+    if WEBHOOK:
+        await tg("setWebhook", url=f"{BASE_URL}/tg/webhook", secret_token=webhook_secret(),
+                 allowed_updates=["message", "callback_query"])
+
+
+async def poll_loop():
+    """Только локально. Если у бота уже вебхук прода — не трогаем его, иначе увели бы апдейты."""
+    info = await tg("getWebhookInfo")
+    if (info or {}).get("url"):
+        log.warning("у бота настроен вебхук %s — локальный polling не запускаю", info["url"])
+        return
     offset = 0
     while True:
         ups = await tg("getUpdates", offset=offset, timeout=30, allowed_updates=["message", "callback_query"])
@@ -505,24 +556,23 @@ async def poll_loop():
             continue
         for up in ups:
             offset = up["update_id"] + 1
-            try:
-                if "message" in up:
-                    await handle_message(up["message"])
-                elif "callback_query" in up:
-                    await handle_callback(up["callback_query"])
-            except Exception:  # noqa: BLE001
-                log.exception("update failed")
+            await dispatch(up)
 
 
 async def send_due_reminders():
     due = rows("select i.*, u.tg_id from items i join users u on u.id=i.user_id "
                "where i.remind_at is not null and i.reminded=0 and i.remind_at<=%s "
                "and i.status not in ('done','trash')", (int(time.time()),))
+    sent = 0
     for it in due:
-        run("update items set reminded=1 where id=%s", (it["id"],))
+        # Атомарно «забираем» напоминание: два параллельных запуска не пришлют его дважды
+        if run("update items set reminded=1 where id=%s and reminded=0 returning id", (it["id"],)) is None:
+            continue
         if TOKEN and it["tg_id"]:
             await tg("sendMessage", chat_id=it["tg_id"], text=f"⏰ {it['title']}",
                      reply_markup=kb_item(it["id"]))
+            sent += 1
+    return sent
 
 
 async def reminder_loop():
@@ -538,11 +588,18 @@ async def reminder_loop():
 async def lifespan(app):
     global _client
     _client = httpx.AsyncClient()
-    tasks = [asyncio.create_task(reminder_loop())]
+    tasks = []
     if TOKEN:
-        tasks.append(asyncio.create_task(poll_loop()))
+        try:
+            await asyncio.wait_for(bot_setup(), 15)
+        except TimeoutError:
+            log.warning("Telegram не ответил на старте — бот поднимется со следующим холодным стартом")
+        if not WEBHOOK:
+            tasks.append(asyncio.create_task(poll_loop()))
     else:
         log.warning("TELEGRAM_BOT_TOKEN не задан — бот выключен")
+    if not WEBHOOK:  # в проде напоминания будит Cloud Scheduler через /tasks/reminders
+        tasks.append(asyncio.create_task(reminder_loop()))
     yield
     for t in tasks:
         t.cancel()
@@ -902,6 +959,25 @@ def config(request: Request):
     # user — чтобы фронт сразу знал, показывать ли вход, без заведомого 401 на /api/counts
     return {"bot": BOT_USERNAME if TOKEN else "", "dev": DEV, "google": GOOGLE_CLIENT_ID,
             "email": bool(SMTP_PASSWORD or DEV), "user": bool(session_user(request))}
+
+
+@app.post("/tg/webhook")
+async def tg_webhook(request: Request):
+    """Апдейты от Telegram. Проверяем секретный заголовок, который задали в setWebhook."""
+    got = request.headers.get("x-telegram-bot-api-secret-token", "")
+    if not TOKEN or not hmac.compare_digest(got, webhook_secret()):
+        raise HTTPException(403)
+    await dispatch(await request.json())
+    return {"ok": True}
+
+
+@app.post("/tasks/reminders")
+async def cron_reminders(request: Request):
+    """Будильник от Cloud Scheduler (раз в минуту): рассылает наступившие напоминания."""
+    got = request.headers.get("x-cron-secret", "")
+    if not CRON_SECRET or not hmac.compare_digest(got, CRON_SECRET):
+        raise HTTPException(403)
+    return {"sent": await send_due_reminders()}
 
 
 @app.get("/api/contexts")

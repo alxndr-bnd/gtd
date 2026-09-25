@@ -25,7 +25,7 @@ env:
   DEPLOYER_SA: gtd-deployer@serbito.iam.gserviceaccount.com
   RUNTIME_SA: gtd-run@serbito.iam.gserviceaccount.com
   CLOUD_SQL: serbito:europe-west1:serbitodb
-  SECRETS: DATABASE_URL=gtd-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,SMTP_PASSWORD=EMAIL_HOST_PASSWORD:latest,SENTRY_DSN=gtd-sentry-dsn:latest
+  SECRETS: DATABASE_URL=gtd-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,SMTP_PASSWORD=EMAIL_HOST_PASSWORD:latest,SENTRY_DSN=gtd-sentry-dsn:latest,CRON_SECRET=gtd-cron-secret:latest
 
 jobs:
   deploy:
@@ -33,6 +33,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      # checkout делает git init — без этого git печатает многострочный hint про имя ветки master
+      - run: git config --global init.defaultBranch main
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -82,9 +85,8 @@ jobs:
       # потом получает трафик. Не ответила — выходим, старая ревизия продолжает обслуживать.
       # Первый деплой (сервиса ещё нет) — сразу на 100% и проверка, что он отвечает.
       #
-      # Бот работает long polling'ом, а напоминания — фоновой задачей, поэтому инстанс
-      # держится всегда (min=1) с CPU без троттлинга, и он один (max=1): два поллера
-      # getUpdates конфликтуют. На время прогрева кандидата их кратко двое — бот переживёт 409.
+      # Бот на вебхуке, напоминания будит Cloud Scheduler (/tasks/reminders) — фоновых циклов нет,
+      # поэтому min=0 и CPU только на время запросов: без трафика инстанс спит и не стоит денег.
       - name: Deploy a candidate revision and switch traffic
         run: |
           set -euo pipefail
@@ -107,9 +109,10 @@ jobs:
             --platform managed
             --allow-unauthenticated
             --service-account "$RUNTIME_SA"
-            --min-instances=1
-            --max-instances=1
-            --no-cpu-throttling
+            --min-instances=0
+            --max-instances=2
+            --cpu-throttling
+            --cpu-boost
             --concurrency=80
             --memory=512Mi
             --cpu=1

@@ -37,7 +37,7 @@ g projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$RUNTIME" 
   --role roles/cloudsql.client --condition=None >/dev/null
 
 echo "==> Секреты"
-for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn; do
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn gtd-cron-secret; do
   g secrets describe "$s" >/dev/null 2>&1 || g secrets create "$s" --replication-policy=automatic >/dev/null
 done
 has_value() { g secrets versions list "$1" --format='value(state)' | grep -qi enabled; }
@@ -64,7 +64,8 @@ if ! has_value gtd-sentry-dsn; then
   [[ -n "$dsn" ]] || { echo "Без DSN деплой не пройдёт: секрет подключён в workflow" >&2; exit 1; }
   put_value gtd-sentry-dsn "$dsn"
 fi
-for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
+has_value gtd-cron-secret || put_value gtd-cron-secret "$(openssl rand -hex 32)"
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn gtd-cron-secret GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
   g secrets add-iam-policy-binding "$s" --member "serviceAccount:$RUNTIME" \
     --role roles/secretmanager.secretAccessor >/dev/null
 done
@@ -85,5 +86,16 @@ fi
 g iam service-accounts add-iam-policy-binding "$DEPLOYER" --role roles/iam.workloadIdentityUser \
   --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL/attribute.repository/$REPO" \
   >/dev/null
+
+echo "==> Cloud Scheduler: будильник напоминаний раз в минуту"
+cron_args=(--location "$REGION" --schedule "* * * * *" --time-zone "Europe/Belgrade"
+  --uri "https://gtd.serbito.rs/tasks/reminders" --http-method POST
+  --headers "X-Cron-Secret=$(g secrets versions access latest --secret gtd-cron-secret)"
+  --attempt-deadline 60s)
+if g scheduler jobs describe gtd-reminders --location "$REGION" >/dev/null 2>&1; then
+  g scheduler jobs update http gtd-reminders "${cron_args[@]/--headers/--update-headers}" >/dev/null
+else
+  g scheduler jobs create http gtd-reminders "${cron_args[@]}" >/dev/null
+fi
 
 echo "Готово. Первый релиз: scripts/release_minor.sh \"…\"; после него — домен (см. README)."
