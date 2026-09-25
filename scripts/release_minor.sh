@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Релиз gtd (по образцу serbito): гейт → коммит → следующий минорный тег vX.Y.0 → push.
+# Пуш тега запускает .github/workflows/deploy.yml — сборку и деплой в Cloud Run.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+msg="${1:-}"
+if [[ -z "$msg" ]]; then
+  echo "Usage: $0 \"commit message\" [new_file …]"
+  echo "  Изменения в отслеживаемых файлах добавляются сами (git add -u)."
+  echo "  Новые файлы — только явно, чтобы в релиз не уехал черновой мусор."
+  exit 1
+fi
+shift  # дальше в $@ — явно перечисленные новые файлы (может быть пусто)
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$branch" != "main" ]]; then
+  echo "Релиз только из main (сейчас: $branch)" >&2
+  exit 1
+fi
+
+# --- гейт: код хотя бы компилируется ---
+echo "==> py_compile app.py"
+python3 -m py_compile app.py
+
+git add -u
+if [[ $# -gt 0 ]]; then
+  git add -- "$@"
+fi
+
+if git diff --cached --quiet; then
+  git commit --allow-empty -m "$msg"
+else
+  git commit -m "$msg"
+fi
+
+latest_tag="$(git tag --list 'v*.*.*' --sort=-v:refname | head -n 1)"
+if [[ -z "$latest_tag" ]]; then
+  next_tag="v0.1.0"
+else
+  version="${latest_tag#v}"
+  IFS='.' read -r major minor patch <<< "$version"
+  next_tag="v${major}.$((minor + 1)).0"
+fi
+
+git tag "$next_tag"
+git push
+git push origin "$next_tag"
+
+echo "Released $next_tag — деплой: https://github.com/alxndr-bnd/gtd/actions"

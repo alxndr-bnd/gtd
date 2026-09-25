@@ -1,10 +1,14 @@
 """GTD for free — веб-UI + Telegram-бот (захват задач и напоминания)."""
 import asyncio
+import hashlib
+import hmac
 import logging
 import os
 import re
 import secrets
+import smtplib
 import time
+from email.message import EmailMessage
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time as dtime, timedelta
 from zoneinfo import ZoneInfo
@@ -22,8 +26,14 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 BASE_URL = os.getenv("BASE_URL", "https://gtd.serbito.rs").rstrip("/")
 TZ = ZoneInfo(os.getenv("TZ", "Europe/Belgrade"))
-ALLOWED = {int(x) for x in os.getenv("ALLOWED_TG_IDS", "").split(",") if x.strip()}
 DEV = os.getenv("DEV", "") == "1"
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+# Почта — через Brevo SMTP relay, тот же аккаунт, что у serbito
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", '"GTD" <info@serbito.rs>')
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 COOKIE_SECURE = BASE_URL.startswith("https")
 
@@ -57,6 +67,14 @@ create table if not exists items(
   remind_at bigint, reminded integer default 0, source text default 'web',
   created bigint, completed_at bigint);
 create index if not exists items_user_status on items(user_id, status);
+alter table users add column if not exists email text;
+alter table users add column if not exists google_sub text;
+create unique index if not exists users_email on users(email);
+create unique index if not exists users_google_sub on users(google_sub);
+create table if not exists email_codes(
+  email text primary key, code_hash text, expires bigint, attempts integer default 0, sent bigint);
+create table if not exists tg_logins(
+  nonce text primary key, link_user_id bigint, user_id bigint, status text default 'pending', expires bigint);
 """
     )
 
@@ -245,9 +263,6 @@ def tg_user(tg_id: int, name: str):
     u = row("select * from users where tg_id=%s", (tg_id,))
     if u:
         return u
-    allowed = (tg_id in ALLOWED) if ALLOWED else (row("select count(*) c from users")["c"] == 0)
-    if not allowed:
-        return None
     uid = run("insert into users(tg_id,name,created) values(%s,%s,%s) returning id", (tg_id, name, int(time.time())))
     return row("select * from users where id=%s", (uid,))
 
@@ -271,19 +286,56 @@ def kb_item(iid, done_only=False):
     ]]}
 
 
+def tg_login_get(nonce):
+    return row("select * from tg_logins where nonce=%s and expires>%s and status='pending'",
+               (nonce, int(time.time())))
+
+
+async def tg_login_prompt(chat, nonce):
+    """/start <nonce> — пришли с кнопки «Войти через Telegram» на сайте. Просим подтвердить явно:
+    иначе чужую ссылку можно подсунуть жертве и получить сессию в её аккаунт."""
+    r = tg_login_get(nonce)
+    if not r:
+        await tg("sendMessage", chat_id=chat, text="Ссылка устарела — нажми кнопку на сайте ещё раз.")
+        return
+    what = "привязать этот Telegram к аккаунту GTD" if r["link_user_id"] else "войти в GTD в браузере"
+    await tg("sendMessage", chat_id=chat,
+             text=f"Подтвердить: {what}?\n\nЖми, только если сам только что нажал кнопку на сайте.",
+             reply_markup={"inline_keyboard": [[{"text": "✅ Подтвердить", "callback_data": f"tgok:{nonce}"}]]})
+
+
+async def tg_login_confirm(cb, nonce):
+    frm, msg = cb["from"], cb.get("message", {})
+    r = tg_login_get(nonce)
+    if not r:
+        note = "Ссылка устарела — нажми кнопку на сайте ещё раз"
+    elif r["link_user_id"]:
+        ok = attach(r["link_user_id"], "tg_id", frm["id"])
+        run("update tg_logins set status=%s, user_id=%s where nonce=%s",
+            ("ok" if ok else "taken", r["link_user_id"], nonce))
+        note = "✅ Telegram привязан — вернись в браузер" if ok else "Этот Telegram уже привязан к другому аккаунту с задачами"
+    else:
+        u = tg_user(frm["id"], frm.get("first_name", ""))
+        run("update tg_logins set status='ok', user_id=%s where nonce=%s", (u["id"], nonce))
+        note = "✅ Вход подтверждён — вернись в браузер"
+    await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
+    if msg:
+        await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
+
+
 async def handle_message(msg):
     chat = msg["chat"]["id"]
     frm = msg.get("from", {})
-    u = tg_user(frm.get("id"), frm.get("first_name", ""))
-    if not u:
-        await tg("sendMessage", chat_id=chat, text="Доступ закрыт.")
-        return
     text = (msg.get("text") or msg.get("caption") or "").strip()
+    cmd, _, arg = text.partition(" ")
+    cmd = cmd.split("@")[0].lower()
+    if cmd == "/start" and arg.strip():
+        await tg_login_prompt(chat, arg.strip())
+        return
+    u = tg_user(frm.get("id"), frm.get("first_name", ""))
     if not text:
         await tg("sendMessage", chat_id=chat, text="Пока понимаю только текст.")
         return
-    cmd, _, arg = text.partition(" ")
-    cmd = cmd.split("@")[0].lower()
     if cmd in ("/start", "/help"):
         await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP)
     elif cmd == "/login":
@@ -321,10 +373,13 @@ def mark_done(uid, iid):
 
 
 async def handle_callback(cb):
+    act, _, sid = cb["data"].partition(":")
+    if act == "tgok":
+        await tg_login_confirm(cb, sid)
+        return
     u = row("select * from users where tg_id=%s", (cb["from"]["id"],))
     if not u:
         return
-    act, _, sid = cb["data"].partition(":")
     iid = int(sid)
     it = item_get(u["id"], iid)
     msg = cb.get("message", {})
@@ -409,20 +464,214 @@ async def lifespan(app):
 app = FastAPI(lifespan=lifespan)
 
 
-def current_user(request: Request) -> int:
+def session_user(request: Request) -> int | None:
     sid = request.cookies.get("sid")
     r = row("select user_id from sessions where token=%s", (sid,)) if sid else None
-    if not r:
+    return r["user_id"] if r else None
+
+
+def current_user(request: Request) -> int:
+    uid = session_user(request)
+    if not uid:
         raise HTTPException(401, "auth required")
-    return r["user_id"]
+    return uid
+
+
+def set_session(resp, uid: int):
+    tok = secrets.token_urlsafe(32)
+    run("insert into sessions(token,user_id,created) values(%s,%s,%s)", (tok, uid, int(time.time())))
+    resp.set_cookie("sid", tok, max_age=60 * 60 * 24 * 90, httponly=True, samesite="lax", secure=COOKIE_SECURE)
+    return resp
 
 
 def start_session(uid: int) -> RedirectResponse:
-    tok = secrets.token_urlsafe(32)
-    run("insert into sessions(token,user_id,created) values(%s,%s,%s)", (tok, uid, int(time.time())))
-    resp = RedirectResponse("/", status_code=303)
-    resp.set_cookie("sid", tok, max_age=60 * 60 * 24 * 90, httponly=True, samesite="lax", secure=COOKIE_SECURE)
-    return resp
+    return set_session(RedirectResponse("/", status_code=303), uid)
+
+
+# ───────────────────────── Аккаунты ─────────────────────────
+# Один аккаунт = одна строка users; способы входа — её колонки tg_id / email / google_sub.
+# Google и код на почту с одинаковым адресом попадают в один аккаунт; Telegram привязывается из «Аккаунта».
+IDENTITIES = ("tg_id", "email", "google_sub")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_hits: dict[str, list[float]] = {}
+
+
+def rate_ok(key: str, limit: int, window: int) -> bool:
+    """Скользящее окно в памяти инстанса — от массовой рассылки кодов, не от целевой атаки."""
+    now = time.time()
+    hits = [t for t in _hits.get(key, []) if t > now - window]
+    _hits[key] = hits
+    if len(hits) >= limit:
+        return False
+    hits.append(now)
+    return True
+
+
+def client_ip(request: Request) -> str:
+    return request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+
+
+def attach(uid: int, field: str, value) -> bool:
+    """Привязывает способ входа к аккаунту uid. Если он уже у другого аккаунта — забираем,
+    только когда тот пустой (нет задач и проектов); опустевший без способов входа удаляем."""
+    assert field in IDENTITIES
+    other = row(f"select * from users where {field}=%s", (value,))
+    if other and other["id"] != uid:
+        busy = row("select exists(select 1 from items where user_id=%s) "
+                   "or exists(select 1 from projects where user_id=%s) b", (other["id"], other["id"]))["b"]
+        if busy:
+            return False
+        run(f"update users set {field}=null where id=%s", (other["id"],))
+        if not any(other[f] for f in IDENTITIES if f != field):
+            run("delete from sessions where user_id=%s", (other["id"],))
+            run("delete from login_tokens where user_id=%s", (other["id"],))
+            run("delete from users where id=%s", (other["id"],))
+    run(f"update users set {field}=%s where id=%s", (value, uid))
+    return True
+
+
+def email_user(email: str) -> int:
+    u = row("select id from users where email=%s", (email,))
+    if u:
+        return u["id"]
+    return run("insert into users(email,name,created) values(%s,%s,%s) returning id",
+               (email, email.split("@")[0], int(time.time())))
+
+
+def google_user(sub: str, email: str, name: str) -> int:
+    u = row("select id from users where google_sub=%s", (sub,)) or row("select id from users where email=%s", (email,))
+    if u:
+        run("update users set google_sub=%s where id=%s", (sub, u["id"]))
+        return u["id"]
+    return run("insert into users(google_sub,email,name,created) values(%s,%s,%s,%s) returning id",
+               (sub, email, name or email.split("@")[0], int(time.time())))
+
+
+def google_verify(credential: str) -> dict | None:
+    """Проверка ID-токена Sign in with Google: подпись и срок проверяет tokeninfo, остальное — мы."""
+    try:
+        r = httpx.get("https://oauth2.googleapis.com/tokeninfo", params={"id_token": credential}, timeout=10)
+    except httpx.HTTPError as e:
+        log.warning("google tokeninfo failed: %s", e)
+        return None
+    d = r.json() if r.status_code == 200 else {}
+    if (d.get("aud") != GOOGLE_CLIENT_ID or d.get("iss") not in ("accounts.google.com", "https://accounts.google.com")
+            or str(d.get("email_verified")).lower() != "true" or not d.get("email")):
+        return None
+    return d
+
+
+def code_hash(email: str, code: str) -> str:
+    return hashlib.sha256(f"{email}:{code}".encode()).hexdigest()
+
+
+def send_email(to: str, subject: str, body: str):
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"] = EMAIL_FROM, to, subject
+    m.set_content(body)
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
+        s.starttls()
+        s.login(SMTP_USER, SMTP_PASSWORD)
+        s.send_message(m)
+
+
+@app.post("/api/auth/google")
+def auth_google(body: dict, request: Request):
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(400, "Вход через Google не настроен")
+    d = google_verify(body.get("credential") or "")
+    if not d:
+        raise HTTPException(400, "Google не подтвердил вход — попробуй ещё раз")
+    email = d["email"].lower()
+    uid = session_user(request) if body.get("link") else None
+    if uid:
+        if not attach(uid, "google_sub", d["sub"]):
+            raise HTTPException(409, "Этот Google-аккаунт уже привязан к другому аккаунту с задачами")
+        if not row("select email from users where id=%s", (uid,))["email"]:
+            attach(uid, "email", email)
+        return {"ok": True}
+    return set_session(JSONResponse({"ok": True}), google_user(d["sub"], email, d.get("name", "")))
+
+
+@app.post("/api/auth/email/start")
+def auth_email_start(body: dict, request: Request):
+    email = (body.get("email") or "").strip().lower()
+    if len(email) > 254 or not EMAIL_RE.match(email):
+        raise HTTPException(400, "Неверный адрес почты")
+    if not (SMTP_PASSWORD or DEV):
+        raise HTTPException(400, "Вход по почте не настроен")
+    now = int(time.time())
+    prev = row("select sent from email_codes where email=%s", (email,))
+    if prev and prev["sent"] > now - 60:
+        raise HTTPException(429, "Код уже отправлен — новый можно запросить через минуту")
+    if not rate_ok("ip:" + client_ip(request), 5, 600):
+        raise HTTPException(429, "Слишком много запросов — попробуй через 10 минут")
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    run("delete from email_codes where expires<%s", (now,))
+    run("insert into email_codes(email,code_hash,expires,attempts,sent) values(%s,%s,%s,0,%s) "
+        "on conflict(email) do update set code_hash=excluded.code_hash, expires=excluded.expires, "
+        "attempts=0, sent=excluded.sent", (email, code_hash(email, code), now + 600, now))
+    if not SMTP_PASSWORD:
+        log.warning("DEV: код входа для %s — %s", email, code)
+        return {"ok": True}
+    try:
+        send_email(email, f"Код входа в GTD: {code}",
+                   f"Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.")
+    except (smtplib.SMTPException, OSError) as e:
+        log.warning("smtp to %s failed: %s", email, e)
+        run("delete from email_codes where email=%s", (email,))
+        raise HTTPException(502, "Не удалось отправить письмо — попробуй позже")
+    return {"ok": True}
+
+
+@app.post("/api/auth/email/verify")
+def auth_email_verify(body: dict, request: Request):
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    r = row("select * from email_codes where email=%s and expires>%s", (email, int(time.time())))
+    if not r or r["attempts"] >= 5:
+        raise HTTPException(400, "Код устарел — запроси новый")
+    if not hmac.compare_digest(r["code_hash"], code_hash(email, code)):
+        run("update email_codes set attempts=attempts+1 where email=%s", (email,))
+        raise HTTPException(400, "Неверный код")
+    run("delete from email_codes where email=%s", (email,))
+    uid = session_user(request) if body.get("link") else None
+    if uid:
+        if not attach(uid, "email", email):
+            raise HTTPException(409, "Эта почта уже привязана к другому аккаунту с задачами")
+        return {"ok": True}
+    return set_session(JSONResponse({"ok": True}), email_user(email))
+
+
+@app.post("/api/auth/tg/start")
+def auth_tg_start(body: dict, request: Request):
+    if not (TOKEN and BOT_USERNAME):
+        raise HTTPException(400, "Telegram-бот выключен")
+    nonce = secrets.token_urlsafe(16)
+    now = int(time.time())
+    run("delete from tg_logins where expires<%s", (now,))
+    link_uid = session_user(request) if body.get("link") else None
+    run("insert into tg_logins(nonce,link_user_id,expires) values(%s,%s,%s)", (nonce, link_uid, now + 600))
+    return {"nonce": nonce, "url": f"https://t.me/{BOT_USERNAME}?start={nonce}"}
+
+
+@app.get("/api/auth/tg/poll")
+def auth_tg_poll(nonce: str):
+    r = row("select * from tg_logins where nonce=%s", (nonce,))
+    if not r or r["expires"] < time.time():
+        return {"status": "expired"}
+    if r["status"] == "pending":
+        return {"status": "pending"}
+    run("delete from tg_logins where nonce=%s", (nonce,))
+    if r["status"] != "ok" or r["link_user_id"]:
+        return {"status": r["status"]}
+    return set_session(JSONResponse({"status": "ok"}), r["user_id"])
+
+
+@app.get("/api/me")
+def me(uid: int = Depends(current_user)):
+    u = row("select name, email, tg_id, google_sub from users where id=%s", (uid,))
+    return {"name": u["name"], "email": u["email"], "tg": bool(u["tg_id"]), "google": bool(u["google_sub"])}
 
 
 @app.get("/auth")
@@ -445,7 +694,8 @@ def dev_login():
 
 @app.get("/api/config")
 def config():
-    return {"bot": BOT_USERNAME, "dev": DEV}
+    return {"bot": BOT_USERNAME if TOKEN else "", "dev": DEV, "google": GOOGLE_CLIENT_ID,
+            "email": bool(SMTP_PASSWORD or DEV)}
 
 
 @app.post("/api/logout")

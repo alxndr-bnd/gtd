@@ -45,7 +45,13 @@ dialog::backdrop{background:#0008}
 dialog label{display:block;margin:10px 0 3px;color:var(--mut);font-size:13px}
 dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
 .row{display:flex;gap:8px;justify-content:space-between;margin-top:16px}
-.login{max-width:420px;margin:15vh auto;text-align:center;padding:0 16px}
+.login{max-width:420px;margin:12vh auto;text-align:center;padding:0 16px}
+.login .cap{margin:0}
+.gbtn{display:flex;min-height:44px} .login .gbtn{justify-content:center}
+.or{color:var(--mut);font-size:13px;margin:14px 0;display:flex;align-items:center;gap:10px}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
+.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em}
+.rv .cap{margin:8px 0 0}
 @media(max-width:700px){.app{flex-direction:column}nav{width:100%;display:flex;overflow-x:auto;gap:4px;border-right:0;border-bottom:1px solid var(--bd);padding:8px}nav h1,nav .sep{display:none}nav a{white-space:nowrap;gap:6px}}
 </style>
 </head>
@@ -73,9 +79,11 @@ const toLocalInput = ts => { if(!ts) return ''; const d=new Date(ts*1000); d.set
 
 async function load(){
   try{
+    if(!S.cfgLoaded){ S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true; }
     S.counts = await api('/counts');
     S.projects = await api('/projects');
-    if(S.view==='projects' && !S.pid) S.items=[];
+    if(S.view==='account') S.me = await api('/me');
+    else if(S.view==='projects' && !S.pid) S.items=[];
     else if(S.view==='projects') S.items = await api('/items?status=all&project_id='+S.pid);
     else if(S.view!=='review') S.items = await api('/items?status='+S.view);
     else S.items = await api('/items?status=all');
@@ -84,17 +92,93 @@ async function load(){
 }
 
 async function loginScreen(){
-  S.cfg = await fetch('/api/config').then(r=>r.json());
-  $('#root').innerHTML = `<div class="login"><h1>GTD</h1>
-    <p>Открой Telegram-бота${S.cfg.bot?` <b>@${esc(S.cfg.bot)}</b>`:''} и отправь ему <code>/login</code> — он пришлёт ссылку для входа.</p>
-    ${S.cfg.bot?`<p><a href="https://t.me/${esc(S.cfg.bot)}"><button class="pri">Открыть бота</button></a></p>`:''}
-    ${S.cfg.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}</div>`;
+  S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
+  S.view = 'inbox'; S.pid = null;
+  const c = S.cfg, parts = [];
+  if(c.google) parts.push('<div class="gbtn"></div>');
+  if(c.email) parts.push(emailFormHtml('Войти по коду'));
+  if(c.bot) parts.push('<button data-act="tglogin">✈️ Войти через Telegram</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>');
+  $('#root').innerHTML = `<div class="login"><h1>GTD</h1><p class="hint" style="margin:0 0 20px">Вход или регистрация — аккаунт создастся сам</p>
+    ${parts.join('<div class="or">или</div>') || '<p>Способы входа не настроены.</p>'}
+    <div class="msg" id="authmsg"></div>
+    ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}</div>`;
+  mountGoogle();
+}
+
+// ── Вход и привязка: одни и те же кнопки; на экране приложения (есть .app) они привязывают способ к аккаунту
+const linking = () => !!$('.app');
+const authMsg = t => { const el = $('#authmsg'); if(el) el.textContent = t; };
+async function authPost(path, body){
+  const r = await fetch('/api/auth/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.detail || 'Ошибка, попробуй ещё раз');
+  return d;
+}
+const emailFormHtml = label => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="Почта">
+  <button data-act="emailsend">${label}</button></div><div id="emcode"></div>`;
+
+function mountGoogle(){
+  const el = $('.gbtn'); if(!el || !S.cfg.google) return;
+  const go = () => {
+    google.accounts.id.initialize({client_id:S.cfg.google, callback: async ({credential}) => {
+      try{ await authPost('google', {credential, link:linking()}); load(); }catch(err){ authMsg(err.message); }
+    }});
+    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:'ru'});
+  };
+  if(window.google?.accounts) return go();
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.onload = go;
+  document.head.appendChild(s);
+}
+
+async function emailSend(){
+  const email = $('#em').value.trim(); if(!email) return;
+  try{
+    await authPost('email/start', {email}); S.email = email;
+    $('#emcode').innerHTML = `<div class="cap" style="margin-top:8px"><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из письма">
+      <button class="pri" data-act="emailverify">${linking()?'Подтвердить':'Войти'}</button></div>`;
+    $('#code').focus(); authMsg(`Код отправлен на ${email}, действует 10 минут`);
+  }catch(err){ authMsg(err.message); }
+}
+
+async function emailVerify(){
+  try{ await authPost('email/verify', {email:S.email, code:$('#code').value.trim(), link:linking()}); load(); }
+  catch(err){ authMsg(err.message); }
+}
+
+async function tgStart(){
+  try{
+    const d = await authPost('tg/start', {link:linking()});
+    $('#tgst').innerHTML = `<p><a href="${esc(d.url)}" target="_blank" rel="noopener"><button class="pri">Открыть Telegram</button></a></p>
+      В боте нажми «Start», затем «Подтвердить» — страница обновится сама.`;
+    tgPoll(d.nonce);
+  }catch(err){ authMsg(err.message); }
+}
+
+async function tgPoll(nonce){
+  clearTimeout(S.tgTimer);
+  const r = await fetch('/api/auth/tg/poll?nonce='+encodeURIComponent(nonce)).then(r=>r.json()).catch(()=>({status:'pending'}));
+  if(r.status==='ok') return load();
+  if(r.status==='taken') return authMsg('Этот Telegram уже привязан к другому аккаунту с задачами');
+  if(r.status==='expired') return authMsg('Время вышло — нажми кнопку ещё раз');
+  S.tgTimer = setTimeout(()=>tgPoll(nonce), 2000);
+}
+
+function accountHtml(){
+  const m = S.me, c = S.cfg;
+  return `<h2>👤 Аккаунт</h2><div class="hint">Любой привязанный способ открывает этот же аккаунт.</div>
+  <div class="rv"><h3>Google</h3>${m.google?'✅ Привязан':c.google?'<div class="gbtn"></div>':'Не настроен на сервере'}</div>
+  <div class="rv"><h3>Почта</h3>${m.email?`✅ ${esc(m.email)} — вход по одноразовому коду`:'Не привязана'}
+    ${c.email?emailFormHtml(m.email?'Сменить':'Привязать'):''}</div>
+  <div class="rv"><h3>Telegram</h3>${m.tg?'✅ Привязан — бот принимает задачи и присылает напоминания'
+    :c.bot?'<button data-act="tglogin">Привязать Telegram</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>':'Бот выключен'}</div>
+  <div class="msg" id="authmsg"></div>`;
 }
 
 function navHtml(){
   return `<nav><h1>GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
-    <div class="sep"></div><a data-act="logout">Выйти</a></nav>`;
+    <div class="sep"></div><a class="${S.view==='account'?'on':''}" data-view="account">👤 Аккаунт</a><a data-act="logout">Выйти</a></nav>`;
 }
 
 function itemHtml(it){
@@ -115,6 +199,7 @@ function itemHtml(it){
 function render(){
   let body='';
   if(S.view==='review') body = reviewHtml();
+  else if(S.view==='account') body = accountHtml();
   else if(S.view==='projects' && !S.pid) body = projectsHtml();
   else{
     let items = S.items;
@@ -131,6 +216,7 @@ function render(){
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>
     <div class="cap"><input id="cap" placeholder="Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»" autofocus>
     <button class="pri" data-act="capture">Добавить</button></div>${body}</main></div>`;
+  if(S.view==='account') mountGoogle();
 }
 
 function projectsHtml(){
@@ -188,6 +274,9 @@ document.addEventListener('click', async e => {
   const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return;
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
   if(act==='capture') return capture();
+  if(act==='emailsend') return emailSend();
+  if(act==='emailverify') return emailVerify();
+  if(act==='tglogin') return tgStart();
   if(act==='edit') return openEdit(id);
   if(act==='mv'){ await api('/items/'+id,'PATCH',{status:el.dataset.st}); return load(); }
   if(act==='logout'){ await api('/logout','POST'); return loginScreen(); }
@@ -204,7 +293,13 @@ document.addEventListener('change', async e => {
     await api('/items/'+id,'PATCH',{status:e.target.checked?'done':'next'}); load();
   }
 });
-document.addEventListener('keydown', e => { if(e.key==='Enter' && e.target.id==='cap') capture(); if(e.key==='Enter' && e.target.id==='np') document.querySelector('[data-act=newproj]').click(); });
+document.addEventListener('keydown', e => {
+  if(e.key!=='Enter') return;
+  if(e.target.id==='cap') capture();
+  if(e.target.id==='np') document.querySelector('[data-act=newproj]').click();
+  if(e.target.id==='em') emailSend();
+  if(e.target.id==='code') emailVerify();
+});
 load();
 </script>
 </body>

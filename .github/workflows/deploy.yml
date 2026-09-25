@@ -1,0 +1,154 @@
+name: Deploy to Cloud Run
+
+# Деплой только по тегу v*.*.* (его ставит scripts/release_minor.sh). Без workflow_dispatch:
+# иначе нерелизный код обходит тег. Авторизация keyless через Workload Identity Federation,
+# разовая настройка GCP — scripts/setup_gcp.sh. Схема как у tickets-booking.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  id-token: write # OIDC-токен для WIF
+
+# Два тега подряд не должны гоняться за переключение трафика.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGION: europe-west1
+  SERVICE: gtd
+  IMAGE: europe-west1-docker.pkg.dev/serbito/gtd/gtd:${{ github.sha }}
+  WIF_PROVIDER: projects/488744139718/locations/global/workloadIdentityPools/github-pool/providers/github
+  DEPLOYER_SA: gtd-deployer@serbito.iam.gserviceaccount.com
+  RUNTIME_SA: gtd-run@serbito.iam.gserviceaccount.com
+  CLOUD_SQL: serbito:europe-west1:serbitodb
+  SECRETS: DATABASE_URL=gtd-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,SMTP_PASSWORD=EMAIL_HOST_PASSWORD:latest
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: serbito
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+
+      - name: Build and push the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true
+
+      # Гейт: CVE и утёкшие секреты в образе. Архив релиза со сверкой sha256, а не install.sh
+      # по сети. Новая версия = новый хеш из trivy_<ver>_checksums.txt.
+      - name: Trivy image scan
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+        run: |
+          set -euo pipefail
+          curl -sfL --retry 3 -o trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  trivy.tar.gz" | sha256sum -c -
+          tar -xzf trivy.tar.gz trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+          rm -f trivy.tar.gz trivy
+          trivy image --scanners vuln,secret --severity HIGH,CRITICAL \
+            --ignore-unfixed --exit-code 1 --format table --timeout 10m "$IMAGE"
+
+      # Новая ревизия поднимается без трафика под тегом candidate, прогревается до 200 и только
+      # потом получает трафик. Не ответила — выходим, старая ревизия продолжает обслуживать.
+      # Первый деплой (сервиса ещё нет) — сразу на 100% и проверка, что он отвечает.
+      #
+      # Бот работает long polling'ом, а напоминания — фоновой задачей, поэтому инстанс
+      # держится всегда (min=1) с CPU без троттлинга, и он один (max=1): два поллера
+      # getUpdates конфликтуют. На время прогрева кандидата их кратко двое — бот переживёт 409.
+      - name: Deploy a candidate revision and switch traffic
+        run: |
+          set -euo pipefail
+          # Бот необязателен: пока в секрете нет ни одной версии, деплоим без него.
+          # --set-secrets целиком задаёт набор, так что добавленный позже токен подхватится.
+          if [ -n "$(gcloud secrets versions list gtd-telegram-bot-token --filter=state=enabled --limit=1 --format='value(name)')" ]; then
+            SECRETS="$SECRETS,TELEGRAM_BOT_TOKEN=gtd-telegram-bot-token:latest"
+          else
+            echo "::warning::gtd-telegram-bot-token пуст — деплой без Telegram-бота."
+          fi
+          COMMON=(
+            --image "$IMAGE"
+            --region "$REGION"
+            --platform managed
+            --allow-unauthenticated
+            --service-account "$RUNTIME_SA"
+            --min-instances=1
+            --max-instances=1
+            --no-cpu-throttling
+            --concurrency=80
+            --memory=512Mi
+            --cpu=1
+            --timeout=60
+            --set-cloudsql-instances "$CLOUD_SQL"
+            --env-vars-file .github/deploy.env.yaml
+            --set-secrets "$SECRETS"
+          )
+
+          probe() {
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$1/api/config")" || true
+              echo "  probe $i -> $code"
+              [ "$code" = "200" ] && return 0
+              sleep 3
+            done
+            return 1
+          }
+
+          # Явный list, а не describe 2>/dev/null: протухший токен не должен читаться
+          # как «сервиса нет» и деплоить сразу на весь трафик.
+          EXISTING="$(gcloud run services list --region "$REGION" \
+            --filter="metadata.name=$SERVICE" --format='value(metadata.name)')"
+
+          if [ -n "$EXISTING" ]; then
+            gcloud run deploy "$SERVICE" "${COMMON[@]}" --no-traffic --tag candidate
+            SVC_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
+            CAND_URL="https://candidate---${SVC_URL#https://}"
+            echo "Warming candidate: $CAND_URL"
+            if ! probe "$CAND_URL"; then
+              echo "::error::Кандидат не ответил 200 — трафик не переключаю, работает прежняя ревизия."
+              exit 1
+            fi
+            # По имени, а не --to-latest: иначе сервис остаётся в режиме автопромоута.
+            REVISION="$(gcloud run services describe "$SERVICE" --region "$REGION" \
+              --format='value(status.latestCreatedRevisionName)')"
+            gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions "$REVISION=100"
+            gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags candidate \
+              || echo "::warning::Трафик на $REVISION, но тег candidate не снялся — снять руками."
+          else
+            echo "Сервиса $SERVICE ещё нет — первый деплой."
+            gcloud run deploy "$SERVICE" "${COMMON[@]}"
+            SVC_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
+            if ! probe "$SVC_URL"; then
+              echo "::error::Сервис создан, но не отвечает 200 на ${SVC_URL}/api/config."
+              exit 1
+            fi
+          fi
+          echo "Deployed ${GITHUB_REF_NAME}: $SVC_URL" >> "$GITHUB_STEP_SUMMARY"
