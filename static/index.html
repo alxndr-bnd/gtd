@@ -19,7 +19,8 @@ if(location.hostname==='gtd.serbito.rs'){
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 .app{display:flex;min-height:100vh}
 nav{width:230px;padding:16px 10px;border-right:1px solid var(--bd);background:var(--card);flex-shrink:0}
-nav h1{font-size:17px;margin:0 8px 14px}
+nav h1{font-size:17px;margin:0 8px 14px;cursor:pointer;display:inline-block} nav h1:hover{color:var(--ac)}
+button.icon{display:flex;align-items:center;justify-content:center;padding:0 16px} .hero button.icon svg{width:26px;height:26px}
 nav a{display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
 nav a:hover{background:var(--bg)} nav a.on{background:var(--ac);color:#fff}
 nav a .n{opacity:.7;font-size:13px}
@@ -62,6 +63,15 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .rv .cap{margin:8px 0 0}
 .capw{position:relative;flex:1;display:flex} .capw input{width:100%}
 .ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;z-index:10;overflow:hidden}
+.hero{padding-top:22vh;text-align:center}
+.hero.solo{min-height:calc(100vh - 140px);padding-top:0;display:flex;flex-direction:column;justify-content:center}
+.hero h2{font-size:24px;margin-bottom:14px}
+.hero .cap{margin-bottom:10px}
+.hero .cap input{padding:16px 18px;font-size:17px;border-radius:14px}
+.hero .cap button{padding:0 22px;border-radius:14px}
+.hero .hint{margin:0 0 24px}
+.ac{text-align:left}
+@media(max-width:700px){.hero{padding-top:8vh}.hero.solo{min-height:calc(100vh - 170px)}}
 .aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:#fff}
 .aco small{opacity:.7;margin-left:6px}
 @media(max-width:700px){.app{flex-direction:column}nav{width:100%;display:flex;overflow-x:auto;gap:4px;border-right:0;border-bottom:1px solid var(--bd);padding:8px}nav h1,nav .sep{display:none}nav a{white-space:nowrap;gap:6px}}
@@ -203,7 +213,7 @@ function accountHtml(){
 }
 
 function navHtml(){
-  return `<nav><h1>GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
+  return `<nav><h1 data-view="inbox" title="На Inbox">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
     <div class="sep"></div><a class="${S.view==='account'?'on':''}" data-view="account">👤 Аккаунт</a><a data-act="logout">Выйти</a></nav>`;
 }
@@ -223,8 +233,16 @@ function itemHtml(it){
     </div></div>`;
 }
 
+// Стрелка, входящая в лоток: «положить во входящие»
+const ICON_INBOX = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
+  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/>
+  <path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M4 14h4l1.5 2h5l1.5-2h4"/></svg>`;
+const capHtml = () => `<div class="cap"><div class="capw"><input id="cap" autocomplete="off" placeholder="Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»" autofocus>
+    <div id="ac" class="ac" role="listbox" hidden></div></div>
+  <button class="pri icon" data-act="capture" aria-label="Добавить в Inbox" title="Добавить в Inbox">${ICON_INBOX}</button></div>`;
+
 function render(){
-  let body='';
+  let body='', hero='';
   if(S.view==='review') body = reviewHtml();
   else if(S.view==='account') body = accountHtml();
   else if(S.view==='projects' && !S.pid) body = projectsHtml();
@@ -237,15 +255,17 @@ function render(){
       if(S.ctx) items=items.filter(i=>i.context===S.ctx);
     }
     const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
-    body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}
+    if(S.view==='inbox'){
+      // Inbox — точка входа: поле захвата по центру экрана, задачи под ним (пустой инбокс — ровно посередине)
+      hero = `<section class="hero ${items.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
+        <div class="hint">${items.length?HELP.inbox:'Inbox пуст 🎉 — запиши, что крутится в голове'}</div></section>`;
+      body = items.map(itemHtml).join('');
+    } else body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ Переименовать</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 Удалить</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2><div class="hint">${HELP[S.view]||''}</div>`}
       ${chips}${items.map(itemHtml).join('') || '<div class="empty">Пусто 🎉</div>'}`;
   }
-  $('#root').innerHTML = `<div class="app">${navHtml()}<main>
-    <div class="cap"><div class="capw"><input id="cap" autocomplete="off" placeholder="Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»" autofocus>
-      <div id="ac" class="ac" role="listbox" hidden></div></div>
-    <button class="pri" data-act="capture">Добавить</button></div>${body}</main></div>`;
+  $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
   if(S.view==='account') mountGoogle();
 }
 
@@ -340,7 +360,8 @@ function openDeleteProject(pid){
 
 async function capture(){
   const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
-  inp.value=''; acClose(); await api('/capture','POST',{text:v}); load();
+  inp.value=''; acClose(); await api('/capture','POST',{text:v});
+  await load(); $('#cap')?.focus();  // записываем подряд, не кликая в поле снова
 }
 
 // ── Подсказки в поле захвата: «@» — существующие контексты, «#» — активные проекты.
