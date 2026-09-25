@@ -37,10 +37,10 @@ g projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$RUNTIME" 
   --role roles/cloudsql.client --condition=None >/dev/null
 
 echo "==> Секреты"
-for s in gtd-database-url gtd-telegram-bot-token; do
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn; do
   g secrets describe "$s" >/dev/null 2>&1 || g secrets create "$s" --replication-policy=automatic >/dev/null
 done
-has_value() { [[ -n "$(g secrets versions list "$1" --filter=state=enabled --limit=1 --format='value(name)')" ]]; }
+has_value() { g secrets versions list "$1" --format='value(state)' | grep -qi enabled; }
 put_value() { printf '%s' "$2" | g secrets versions add "$1" --data-file=- >/dev/null; echo "    записан $1"; }
 
 if ! has_value gtd-database-url; then
@@ -59,7 +59,12 @@ if ! has_value gtd-telegram-bot-token; then
   fi
 fi
 # GOOGLE_CLIENT_ID и EMAIL_HOST_PASSWORD — общие с serbito, доступ только на чтение этих двух
-for s in gtd-database-url gtd-telegram-bot-token GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
+if ! has_value gtd-sentry-dsn; then
+  read -rsp "DSN проекта gtd в Sentry (nohandoff): " dsn || dsn=""; echo
+  [[ -n "$dsn" ]] || { echo "Без DSN деплой не пройдёт: секрет подключён в workflow" >&2; exit 1; }
+  put_value gtd-sentry-dsn "$dsn"
+fi
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
   g secrets add-iam-policy-binding "$s" --member "serviceAccount:$RUNTIME" \
     --role roles/secretmanager.secretAccessor >/dev/null
 done

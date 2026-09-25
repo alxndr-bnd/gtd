@@ -19,9 +19,9 @@ if [[ "$branch" != "main" ]]; then
   exit 1
 fi
 
-# --- гейт: код хотя бы компилируется ---
-echo "==> py_compile app.py"
-python3 -m py_compile app.py
+# --- гейт: тесты (локальный Postgres, временная база) ---
+echo "==> pytest"
+.venv/bin/python -m pytest
 
 git add -u
 if [[ $# -gt 0 ]]; then

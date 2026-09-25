@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import psycopg
+import sentry_sdk
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -34,6 +35,21 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", '"GTD" <info@serbito.rs>')
+SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+
+
+def init_sentry() -> bool:
+    """Ошибки — в Sentry (проект gtd). Только если задан DSN: локально и в тестах молчит.
+    log.exception из фоновых циклов бота и напоминаний тоже уходит туда (logging-интеграция)."""
+    if not SENTRY_DSN:
+        return False
+    sentry_sdk.init(dsn=SENTRY_DSN, release=os.getenv("SENTRY_RELEASE") or None,
+                    environment="production" if os.getenv("K_SERVICE") else "development",
+                    send_default_pii=False, traces_sample_rate=0.1)
+    return True
+
+
+init_sentry()
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 COOKIE_SECURE = BASE_URL.startswith("https")
 
@@ -75,6 +91,11 @@ create table if not exists email_codes(
   email text primary key, code_hash text, expires bigint, attempts integer default 0, sent bigint);
 create table if not exists tg_logins(
   nonce text primary key, link_user_id bigint, user_id bigint, status text default 'pending', expires bigint);
+alter table tg_logins add column if not exists merge text;
+create table if not exists merge_offers(
+  token text primary key, keep_uid bigint, drop_uid bigint, field text, value text, expires bigint);
+create table if not exists tg_email_links(
+  tg_id bigint primary key, email text, expires bigint);
 """
     )
 
@@ -147,7 +168,8 @@ def parse_when(text: str, now: datetime):
         except ValueError:
             pass
     if base is None:
-        m = re.search(r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\b", text)
+        # Месяц — две цифры: «24.10», «1.02»; иначе «версия 1.2» становится 1 февраля
+        m = re.search(r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b", text)
         if m:
             try:
                 y = int(m.group(3)) if m.group(3) else now.year
@@ -214,9 +236,11 @@ def capture(uid: int, raw: str, source: str = "web") -> dict:
 
 
 def project_by_title(uid: int, title: str) -> int:
-    r = row("select id from projects where user_id=%s and lower(title)=lower(%s)", (uid, title))
-    if r:
-        return r["id"]
+    # Регистр сравниваем в Python: lower() в Postgres для кириллицы зависит от локали базы
+    key = title.casefold()
+    for r in rows("select id, title from projects where user_id=%s", (uid,)):
+        if r["title"].casefold() == key:
+            return r["id"]
     return run("insert into projects(user_id,title,created) values(%s,%s,%s) returning id", (uid, title, int(time.time())))
 
 
@@ -274,7 +298,8 @@ HELP = (
     "• «через 2 часа проверить деплой»\n"
     "• «в пятницу отчёт #Клиент_X @работа» → сразу в Next, проект и контекст\n\n"
     "/inbox — что в инбоксе\n/next — следующие действия\n/done 12 — закрыть задачу №12\n"
-    "/login — ссылка для входа в веб-интерфейс"
+    "/login — ссылка для входа в веб-интерфейс\n"
+    "/email you@example.com — привязать почту: входить на сайте по коду или через Google"
 )
 
 
@@ -310,15 +335,64 @@ async def tg_login_confirm(cb, nonce):
     if not r:
         note = "Ссылка устарела — нажми кнопку на сайте ещё раз"
     elif r["link_user_id"]:
-        ok = attach(r["link_user_id"], "tg_id", frm["id"])
-        run("update tg_logins set status=%s, user_id=%s where nonce=%s",
-            ("ok" if ok else "taken", r["link_user_id"], nonce))
-        note = "✅ Telegram привязан — вернись в браузер" if ok else "Этот Telegram уже привязан к другому аккаунту с задачами"
+        res = link_identity(r["link_user_id"], "tg_id", frm["id"])
+        run("update tg_logins set status=%s, user_id=%s, merge=%s where nonce=%s",
+            ("ok" if res["ok"] else "merge", r["link_user_id"], res.get("merge"), nonce))
+        note = ("✅ Telegram привязан — вернись в браузер" if res["ok"]
+                else "У этого Telegram уже есть свой аккаунт с задачами — подтверди объединение в браузере")
     else:
         u = tg_user(frm["id"], frm.get("first_name", ""))
         run("update tg_logins set status='ok', user_id=%s where nonce=%s", (u["id"], nonce))
         note = "✅ Вход подтверждён — вернись в браузер"
     await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
+    if msg:
+        await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
+
+
+async def tg_email_start(chat, u, email):
+    """/email адрес — шлём код на почту; пришедшие потом 6 цифр сверяем в tg_email_verify."""
+    if not email:
+        await tg("sendMessage", chat_id=chat, text="Пришли: /email you@example.com — вышлю код, и почта "
+                 "привяжется к этому аккаунту: с ней можно будет входить на сайте.")
+        return
+    try:
+        send_code(email, f"tg:{u['tg_id']}")
+    except AuthError as e:
+        await tg("sendMessage", chat_id=chat, text=e.detail)
+        return
+    run("insert into tg_email_links(tg_id,email,expires) values(%s,%s,%s) on conflict(tg_id) do update "
+        "set email=excluded.email, expires=excluded.expires", (u["tg_id"], email, int(time.time()) + 600))
+    await tg("sendMessage", chat_id=chat, text=f"Код отправлен на {email}. Пришли его сюда — 6 цифр.")
+
+
+async def tg_email_verify(chat, u, email, code):
+    try:
+        check_code(email, code)
+    except AuthError as e:
+        await tg("sendMessage", chat_id=chat, text=e.detail)
+        return
+    run("delete from tg_email_links where tg_id=%s", (u["tg_id"],))
+    res = link_identity(u["id"], "email", email)
+    if res["ok"]:
+        await tg("sendMessage", chat_id=chat, text=f"✅ Почта {email} привязана. На сайте можно входить "
+                 f"по коду на неё или через Google с этим адресом: {BASE_URL}")
+        return
+    await tg("sendMessage", chat_id=chat, text=merge_text(res, f"Почта {email}"),
+             reply_markup={"inline_keyboard": [[{"text": "🔗 Объединить", "callback_data": f"merge:{res['merge']}"},
+                                                {"text": "Не сейчас", "callback_data": f"nomerge:{res['merge']}"}]]})
+
+
+async def tg_merge_answer(cb, token, accept):
+    u = row("select id from users where tg_id=%s", (cb["from"]["id"],))
+    if not accept:
+        run("delete from merge_offers where token=%s and keep_uid=%s", (token, u["id"] if u else None))
+        note = "Ок, не объединяю. Передумаешь — снова /email"
+    elif u and merge_apply(token, u["id"]):
+        note = "✅ Аккаунты объединены"
+    else:
+        note = "Предложение устарело — начни заново с /email"
+    await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
+    msg = cb.get("message", {})
     if msg:
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
 
@@ -336,12 +410,19 @@ async def handle_message(msg):
     if not text:
         await tg("sendMessage", chat_id=chat, text="Пока понимаю только текст.")
         return
+    if re.fullmatch(r"\d{6}", text):  # код из письма — только если ждём его, иначе это обычная задача
+        pending = row("select email from tg_email_links where tg_id=%s and expires>%s", (u["tg_id"], int(time.time())))
+        if pending:
+            await tg_email_verify(chat, u, pending["email"], text)
+            return
     if cmd in ("/start", "/help"):
         await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP)
     elif cmd == "/login":
         tok = secrets.token_urlsafe(24)
         run("insert into login_tokens(token,user_id,expires) values(%s,%s,%s)", (tok, u["id"], int(time.time()) + 600))
         await tg("sendMessage", chat_id=chat, text=f"Вход (10 минут, одноразовая):\n{BASE_URL}/auth?t={tok}")
+    elif cmd == "/email":
+        await tg_email_start(chat, u, arg.strip().lower())
     elif cmd in ("/inbox", "/next"):
         st = cmd[1:]
         its = rows(ITEM_SQL + "where i.user_id=%s and i.status=%s order by i.created limit 20", (u["id"], st))
@@ -377,6 +458,9 @@ async def handle_callback(cb):
     if act == "tgok":
         await tg_login_confirm(cb, sid)
         return
+    if act in ("merge", "nomerge"):
+        await tg_merge_answer(cb, sid, act == "merge")
+        return
     u = row("select * from users where tg_id=%s", (cb["from"]["id"],))
     if not u:
         return
@@ -410,7 +494,9 @@ async def poll_loop():
     await tg("setMyCommands", commands=[
         {"command": "inbox", "description": "Инбокс"}, {"command": "next", "description": "Следующие действия"},
         {"command": "done", "description": "Закрыть задачу: /done 12"},
-        {"command": "login", "description": "Ссылка для входа в веб"}, {"command": "help", "description": "Помощь"}])
+        {"command": "login", "description": "Ссылка для входа в веб"},
+        {"command": "email", "description": "Привязать почту: /email you@example.com"},
+        {"command": "help", "description": "Помощь"}])
     offset = 0
     while True:
         ups = await tg("getUpdates", offset=offset, timeout=30, allowed_updates=["message", "callback_query"])
@@ -428,18 +514,22 @@ async def poll_loop():
                 log.exception("update failed")
 
 
+async def send_due_reminders():
+    due = rows("select i.*, u.tg_id from items i join users u on u.id=i.user_id "
+               "where i.remind_at is not null and i.reminded=0 and i.remind_at<=%s "
+               "and i.status not in ('done','trash')", (int(time.time()),))
+    for it in due:
+        run("update items set reminded=1 where id=%s", (it["id"],))
+        if TOKEN and it["tg_id"]:
+            await tg("sendMessage", chat_id=it["tg_id"], text=f"⏰ {it['title']}",
+                     reply_markup=kb_item(it["id"]))
+
+
 async def reminder_loop():
     while True:
         await asyncio.sleep(15)
         try:
-            due = rows("select i.*, u.tg_id from items i join users u on u.id=i.user_id "
-                       "where i.remind_at is not null and i.reminded=0 and i.remind_at<=%s "
-                       "and i.status not in ('done','trash')", (int(time.time()),))
-            for it in due:
-                run("update items set reminded=1 where id=%s", (it["id"],))
-                if TOKEN and it["tg_id"]:
-                    await tg("sendMessage", chat_id=it["tg_id"], text=f"⏰ {it['title']}",
-                             reply_markup=kb_item(it["id"]))
+            await send_due_reminders()
         except Exception:  # noqa: BLE001
             log.exception("reminder loop")
 
@@ -511,23 +601,102 @@ def client_ip(request: Request) -> str:
     return request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
 
 
-def attach(uid: int, field: str, value) -> bool:
-    """Привязывает способ входа к аккаунту uid. Если он уже у другого аккаунта — забираем,
-    только когда тот пустой (нет задач и проектов); опустевший без способов входа удаляем."""
+class AuthError(Exception):
+    def __init__(self, status: int, detail: str):
+        super().__init__(detail)
+        self.status, self.detail = status, detail
+
+
+def has_data(uid: int) -> bool:
+    return row("select exists(select 1 from items where user_id=%s) "
+               "or exists(select 1 from projects where user_id=%s) b", (uid, uid))["b"]
+
+
+def attach(uid: int, field: str, value) -> int | None:
+    """Привязывает способ входа к аккаунту uid. Если он уже у другого аккаунта: пустой (без задач
+    и проектов) — забираем, опустевший без способов входа удаляем; с данными — ничего не меняем
+    и возвращаем его id, чтобы вызывающий предложил объединить аккаунты."""
     assert field in IDENTITIES
     other = row(f"select * from users where {field}=%s", (value,))
     if other and other["id"] != uid:
-        busy = row("select exists(select 1 from items where user_id=%s) "
-                   "or exists(select 1 from projects where user_id=%s) b", (other["id"], other["id"]))["b"]
-        if busy:
-            return False
+        if has_data(other["id"]):
+            return other["id"]
         run(f"update users set {field}=null where id=%s", (other["id"],))
         if not any(other[f] for f in IDENTITIES if f != field):
             run("delete from sessions where user_id=%s", (other["id"],))
             run("delete from login_tokens where user_id=%s", (other["id"],))
             run("delete from users where id=%s", (other["id"],))
     run(f"update users set {field}=%s where id=%s", (value, uid))
+    return None
+
+
+def merge_accounts(keep: int, drop: int):
+    """Всё из drop переезжает в keep, drop удаляется — одной транзакцией. Одноимённые проекты
+    склеиваются; сессии drop продолжают работать уже в keep; способы входа, которых у keep нет,
+    он получает от drop."""
+    with _pool.connection() as c, c.transaction():
+        k = c.execute("select * from users where id=%s for update", (keep,)).fetchone()
+        d = c.execute("select * from users where id=%s for update", (drop,)).fetchone()
+        if not k or not d or keep == drop:
+            raise AuthError(400, "Аккаунт для объединения не найден")
+        mine = {p["title"].casefold(): p["id"]
+                for p in c.execute("select id, title from projects where user_id=%s", (keep,)).fetchall()}
+        for p in c.execute("select id, title from projects where user_id=%s", (drop,)).fetchall():
+            same = mine.get(p["title"].casefold())
+            if same:
+                c.execute("update items set project_id=%s where project_id=%s", (same, p["id"]))
+                c.execute("delete from projects where id=%s", (p["id"],))
+            else:
+                c.execute("update projects set user_id=%s where id=%s", (keep, p["id"]))
+        for table in ("items", "sessions", "login_tokens"):
+            c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
+        c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
+        moved = {f: d[f] for f in IDENTITIES if d[f] and not k[f]}
+        c.execute("delete from merge_offers where keep_uid=%s or drop_uid=%s", (drop, drop))
+        c.execute("delete from users where id=%s", (drop,))  # освобождает уникальные tg_id/email/google_sub
+        for f, v in moved.items():
+            c.execute(f"update users set {f}=%s where id=%s", (v, keep))
+    log.info("merged account %s into %s", drop, keep)
+
+
+def account_stats(uid: int) -> dict:
+    return row("select (select count(*) from items where user_id=%s and status<>'trash') items, "
+               "(select count(*) from projects where user_id=%s and status='active') projects", (uid, uid))
+
+
+def link_identity(uid: int, field: str, value) -> dict:
+    """Привязать способ входа к uid. {"ok": True} — готово; иначе — предложение объединить аккаунты.
+    Если свой аккаунт ещё пустой и ничего не теряется, просто переезжаем в тот, где уже есть данные."""
+    other = attach(uid, field, value)
+    if other is None:
+        return {"ok": True}
+    me_, them = row("select * from users where id=%s", (uid,)), row("select * from users where id=%s", (other,))
+    if not has_data(uid) and not any(me_[f] and them[f] for f in IDENTITIES):
+        merge_accounts(other, uid)
+        return {"ok": True}
+    tok = secrets.token_urlsafe(16)
+    now = int(time.time())
+    run("delete from merge_offers where expires<%s", (now,))
+    run("insert into merge_offers(token,keep_uid,drop_uid,field,value,expires) values(%s,%s,%s,%s,%s,%s)",
+        (tok, uid, other, field, str(value), now + 600))
+    return {"ok": False, "merge": tok, **account_stats(other)}
+
+
+def merge_apply(token: str, keep_uid: int) -> bool:
+    """Подтверждение объединения. Подтверждает только тот, кто его начал (keep)."""
+    o = row("select * from merge_offers where token=%s and expires>%s", (token, int(time.time())))
+    if not o or o["keep_uid"] != keep_uid:
+        return False
+    run("delete from merge_offers where token=%s", (token,))
+    merge_accounts(o["keep_uid"], o["drop_uid"])
+    value = int(o["value"]) if o["field"] == "tg_id" else o["value"]
+    run(f"update users set {o['field']}=%s where id=%s", (value, o["keep_uid"]))  # тот способ, ради которого всё
     return True
+
+
+def merge_text(offer: dict, what: str) -> str:
+    return (f"{what} уже у другого аккаунта: задач — {offer['items']}, проектов — {offer['projects']}. "
+            "Объединить его с этим? Всё окажется в одном аккаунте, и войти можно будет любым способом.")
 
 
 def email_user(email: str) -> int:
@@ -575,6 +744,52 @@ def send_email(to: str, subject: str, body: str):
         s.send_message(m)
 
 
+def send_code(email: str, rate_key: str):
+    """Одноразовый код на почту. Кулдаун минута на адрес, 5 писем за 10 минут на rate_key."""
+    if len(email) > 254 or not EMAIL_RE.match(email):
+        raise AuthError(400, "Неверный адрес почты")
+    if not (SMTP_PASSWORD or DEV):
+        raise AuthError(400, "Вход по почте не настроен")
+    now = int(time.time())
+    prev = row("select sent from email_codes where email=%s", (email,))
+    if prev and prev["sent"] > now - 60:
+        raise AuthError(429, "Код уже отправлен — новый можно запросить через минуту")
+    if not rate_ok(rate_key, 5, 600):
+        raise AuthError(429, "Слишком много запросов — попробуй через 10 минут")
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    run("delete from email_codes where expires<%s", (now,))
+    run("insert into email_codes(email,code_hash,expires,attempts,sent) values(%s,%s,%s,0,%s) "
+        "on conflict(email) do update set code_hash=excluded.code_hash, expires=excluded.expires, "
+        "attempts=0, sent=excluded.sent", (email, code_hash(email, code), now + 600, now))
+    if not SMTP_PASSWORD:
+        log.warning("DEV: код входа для %s — %s", email, code)
+        return
+    try:
+        send_email(email, f"Код входа в GTD: {code}",
+                   f"Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.")
+    except (smtplib.SMTPException, OSError) as e:
+        log.warning("smtp to %s failed: %s", email, e)
+        run("delete from email_codes where email=%s", (email,))
+        raise AuthError(502, "Не удалось отправить письмо — попробуй позже")
+
+
+def check_code(email: str, code: str):
+    """Сверяет код; 5 неверных попыток — и код сгорает. Верный код одноразовый."""
+    r = row("select * from email_codes where email=%s and expires>%s", (email, int(time.time())))
+    if not r or r["attempts"] >= 5:
+        raise AuthError(400, "Код устарел — запроси новый")
+    if not hmac.compare_digest(r["code_hash"], code_hash(email, code)):
+        run("update email_codes set attempts=attempts+1 where email=%s", (email,))
+        raise AuthError(400, "Неверный код")
+    run("delete from email_codes where email=%s", (email,))
+
+
+def link_response(res: dict, what: str):
+    if res["ok"]:
+        return {"ok": True}
+    return JSONResponse({**res, "detail": merge_text(res, what)}, status_code=409)
+
+
 @app.post("/api/auth/google")
 def auth_google(body: dict, request: Request):
     if not GOOGLE_CLIENT_ID:
@@ -585,62 +800,46 @@ def auth_google(body: dict, request: Request):
     email = d["email"].lower()
     uid = session_user(request) if body.get("link") else None
     if uid:
-        if not attach(uid, "google_sub", d["sub"]):
-            raise HTTPException(409, "Этот Google-аккаунт уже привязан к другому аккаунту с задачами")
-        if not row("select email from users where id=%s", (uid,))["email"]:
-            attach(uid, "email", email)
-        return {"ok": True}
+        res = link_identity(uid, "google_sub", d["sub"])
+        if res["ok"]:
+            uid = session_user(request)  # после переезда сессия уже в другом аккаунте
+            if not row("select email from users where id=%s", (uid,))["email"]:
+                attach(uid, "email", email)
+        return link_response(res, "Этот Google-аккаунт")
     return set_session(JSONResponse({"ok": True}), google_user(d["sub"], email, d.get("name", "")))
 
 
 @app.post("/api/auth/email/start")
 def auth_email_start(body: dict, request: Request):
-    email = (body.get("email") or "").strip().lower()
-    if len(email) > 254 or not EMAIL_RE.match(email):
-        raise HTTPException(400, "Неверный адрес почты")
-    if not (SMTP_PASSWORD or DEV):
-        raise HTTPException(400, "Вход по почте не настроен")
-    now = int(time.time())
-    prev = row("select sent from email_codes where email=%s", (email,))
-    if prev and prev["sent"] > now - 60:
-        raise HTTPException(429, "Код уже отправлен — новый можно запросить через минуту")
-    if not rate_ok("ip:" + client_ip(request), 5, 600):
-        raise HTTPException(429, "Слишком много запросов — попробуй через 10 минут")
-    code = f"{secrets.randbelow(10 ** 6):06d}"
-    run("delete from email_codes where expires<%s", (now,))
-    run("insert into email_codes(email,code_hash,expires,attempts,sent) values(%s,%s,%s,0,%s) "
-        "on conflict(email) do update set code_hash=excluded.code_hash, expires=excluded.expires, "
-        "attempts=0, sent=excluded.sent", (email, code_hash(email, code), now + 600, now))
-    if not SMTP_PASSWORD:
-        log.warning("DEV: код входа для %s — %s", email, code)
-        return {"ok": True}
     try:
-        send_email(email, f"Код входа в GTD: {code}",
-                   f"Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.")
-    except (smtplib.SMTPException, OSError) as e:
-        log.warning("smtp to %s failed: %s", email, e)
-        run("delete from email_codes where email=%s", (email,))
-        raise HTTPException(502, "Не удалось отправить письмо — попробуй позже")
+        send_code((body.get("email") or "").strip().lower(), "ip:" + client_ip(request))
+    except AuthError as e:
+        raise HTTPException(e.status, e.detail)
     return {"ok": True}
 
 
 @app.post("/api/auth/email/verify")
 def auth_email_verify(body: dict, request: Request):
     email = (body.get("email") or "").strip().lower()
-    code = (body.get("code") or "").strip()
-    r = row("select * from email_codes where email=%s and expires>%s", (email, int(time.time())))
-    if not r or r["attempts"] >= 5:
-        raise HTTPException(400, "Код устарел — запроси новый")
-    if not hmac.compare_digest(r["code_hash"], code_hash(email, code)):
-        run("update email_codes set attempts=attempts+1 where email=%s", (email,))
-        raise HTTPException(400, "Неверный код")
-    run("delete from email_codes where email=%s", (email,))
+    try:
+        check_code(email, (body.get("code") or "").strip())
+    except AuthError as e:
+        raise HTTPException(e.status, e.detail)
     uid = session_user(request) if body.get("link") else None
     if uid:
-        if not attach(uid, "email", email):
-            raise HTTPException(409, "Эта почта уже привязана к другому аккаунту с задачами")
-        return {"ok": True}
+        return link_response(link_identity(uid, "email", email), "Эта почта")
     return set_session(JSONResponse({"ok": True}), email_user(email))
+
+
+@app.post("/api/auth/merge")
+def auth_merge(body: dict, uid: int = Depends(current_user)):
+    try:
+        ok = merge_apply(body.get("token") or "", uid)
+    except AuthError as e:
+        raise HTTPException(e.status, e.detail)
+    if not ok:
+        raise HTTPException(400, "Предложение устарело — привяжи способ входа ещё раз")
+    return {"ok": True}
 
 
 @app.post("/api/auth/tg/start")
@@ -663,6 +862,12 @@ def auth_tg_poll(nonce: str):
     if r["status"] == "pending":
         return {"status": "pending"}
     run("delete from tg_logins where nonce=%s", (nonce,))
+    if r["status"] == "merge":
+        o = row("select drop_uid from merge_offers where token=%s", (r["merge"],))
+        if not o:
+            return {"status": "expired"}
+        stats = account_stats(o["drop_uid"])
+        return {"status": "merge", "merge": r["merge"], **stats, "detail": merge_text(stats, "Этот Telegram")}
     if r["status"] != "ok" or r["link_user_id"]:
         return {"status": r["status"]}
     return set_session(JSONResponse({"status": "ok"}), r["user_id"])
@@ -693,9 +898,18 @@ def dev_login():
 
 
 @app.get("/api/config")
-def config():
+def config(request: Request):
+    # user — чтобы фронт сразу знал, показывать ли вход, без заведомого 401 на /api/counts
     return {"bot": BOT_USERNAME if TOKEN else "", "dev": DEV, "google": GOOGLE_CLIENT_ID,
-            "email": bool(SMTP_PASSWORD or DEV)}
+            "email": bool(SMTP_PASSWORD or DEV), "user": bool(session_user(request))}
+
+
+@app.get("/api/contexts")
+def list_contexts(uid: int = Depends(current_user)):
+    """Контексты пользователя для подсказок @ — самые частые первыми."""
+    return [r["context"] for r in rows(
+        "select context, count(*) n from items where user_id=%s and context is not null and status<>'trash' "
+        "group by context order by n desc, context", (uid,))]
 
 
 @app.post("/api/logout")

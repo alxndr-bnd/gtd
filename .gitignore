@@ -27,3 +27,6 @@ caddy_data/
 .idea/
 .vscode/
 *.swp
+
+# Артефакты браузерных проверок
+.playwright-mcp/

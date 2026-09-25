@@ -25,11 +25,12 @@ env:
   DEPLOYER_SA: gtd-deployer@serbito.iam.gserviceaccount.com
   RUNTIME_SA: gtd-run@serbito.iam.gserviceaccount.com
   CLOUD_SQL: serbito:europe-west1:serbitodb
-  SECRETS: DATABASE_URL=gtd-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,SMTP_PASSWORD=EMAIL_HOST_PASSWORD:latest
+  SECRETS: DATABASE_URL=gtd-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,SMTP_PASSWORD=EMAIL_HOST_PASSWORD:latest,SENTRY_DSN=gtd-sentry-dsn:latest
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # Явная версия: ubuntu-latest переезжает на 26.04 (2026-10-19) — обновлять осознанно
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +49,7 @@ jobs:
       - name: Configure Docker auth for Artifact Registry
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build and push the image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -89,11 +90,17 @@ jobs:
           set -euo pipefail
           # Бот необязателен: пока в секрете нет ни одной версии, деплоим без него.
           # --set-secrets целиком задаёт набор, так что добавленный позже токен подхватится.
-          if [ -n "$(gcloud secrets versions list gtd-telegram-bot-token --filter=state=enabled --limit=1 --format='value(name)')" ]; then
+          # Без --filter: на пустом секрете gcloud ругается «filter keys were not present».
+          ENABLED="$(gcloud secrets versions list gtd-telegram-bot-token --format=json | jq '[.[] | select(.state=="ENABLED")] | length')"
+          if [ "$ENABLED" -gt 0 ]; then
             SECRETS="$SECRETS,TELEGRAM_BOT_TOKEN=gtd-telegram-bot-token:latest"
           else
-            echo "::warning::gtd-telegram-bot-token пуст — деплой без Telegram-бота."
+            echo "::notice::gtd-telegram-bot-token пуст — деплой без Telegram-бота (scripts/setup_gcp.sh добавит токен)."
           fi
+          # Релиз для Sentry — из тега (v0.3.0 → gtd@0.3.0), к несекретным env из файла
+          ENV_FILE="$RUNNER_TEMP/deploy.env.yaml"
+          cp .github/deploy.env.yaml "$ENV_FILE"
+          echo "SENTRY_RELEASE: \"gtd@${GITHUB_REF_NAME#v}\"" >> "$ENV_FILE"
           COMMON=(
             --image "$IMAGE"
             --region "$REGION"
@@ -108,7 +115,7 @@ jobs:
             --cpu=1
             --timeout=60
             --set-cloudsql-instances "$CLOUD_SQL"
-            --env-vars-file .github/deploy.env.yaml
+            --env-vars-file "$ENV_FILE"
             --set-secrets "$SECRETS"
           )
 

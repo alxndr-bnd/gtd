@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GTD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+<script>
+// Cloudflare Web Analytics (без cookies) — только на проде: токен привязан к gtd.serbito.rs
+if(location.hostname==='gtd.serbito.rs'){
+  const s=document.createElement('script'); s.defer=true; s.src='https://static.cloudflareinsights.com/beacon.min.js';
+  s.dataset.cfBeacon='{"token": "f8d8fa129e284768aebb986131e987c7"}'; document.head.appendChild(s);
+}
+</script>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#3b6cf6;--ok:#1f9d55;--warn:#d97706}
 @media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#6b93ff;--ok:#3ec97b;--warn:#f0a03c}}
@@ -50,8 +58,12 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .gbtn{display:flex;min-height:44px} .login .gbtn{justify-content:center}
 .or{color:var(--mut);font-size:13px;margin:14px 0;display:flex;align-items:center;gap:10px}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
-.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em}
+.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} .msg .rv{color:var(--tx);font-size:14px}
 .rv .cap{margin:8px 0 0}
+.capw{position:relative;flex:1;display:flex} .capw input{width:100%}
+.ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;z-index:10;overflow:hidden}
+.aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:#fff}
+.aco small{opacity:.7;margin-left:6px}
 @media(max-width:700px){.app{flex-direction:column}nav{width:100%;display:flex;overflow-x:auto;gap:4px;border-right:0;border-bottom:1px solid var(--bd);padding:8px}nav h1,nav .sep{display:none}nav a{white-space:nowrap;gap:6px}}
 </style>
 </head>
@@ -67,7 +79,7 @@ const VIEWS = [
 const HELP = {inbox:'Всё, что ещё не осмыслено. Разбери: что это и что делать дальше?',
   next:'Конкретные следующие физические действия.', waiting:'Жду ответа/результата от других.',
   scheduled:'Задачи с напоминанием — по времени.', someday:'Когда-нибудь / может быть.', reference:'Материалы без действия.', done:'Выполнено.'};
-let S = {view:'inbox', items:[], projects:[], counts:{}, ctx:null, pid:null, cfg:{}};
+let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, pid:null, cfg:{}};
 
 async function api(path, method='GET', body){
   const r = await fetch('/api'+path, {method, headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
@@ -79,9 +91,13 @@ const toLocalInput = ts => { if(!ts) return ''; const d=new Date(ts*1000); d.set
 
 async function load(){
   try{
-    if(!S.cfgLoaded){ S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true; }
+    if(!S.cfgLoaded){
+      S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
+      if(!S.cfg.user) return loginScreen();
+    }
     S.counts = await api('/counts');
     S.projects = await api('/projects');
+    S.contexts = await api('/contexts');
     if(S.view==='account') S.me = await api('/me');
     else if(S.view==='projects' && !S.pid) S.items=[];
     else if(S.view==='projects') S.items = await api('/items?status=all&project_id='+S.pid);
@@ -111,8 +127,19 @@ const authMsg = t => { const el = $('#authmsg'); if(el) el.textContent = t; };
 async function authPost(path, body){
   const r = await fetch('/api/auth/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   const d = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d.detail || 'Ошибка, попробуй ещё раз');
+  if(!r.ok) throw Object.assign(new Error(d.detail || 'Ошибка, попробуй ещё раз'), {data:d});
   return d;
+}
+// Способ входа уже у другого аккаунта с задачами — сервер предлагает объединить аккаунты
+function authFail(err){ if(err.data?.merge) mergeOffer(err.data); else authMsg(err.message); }
+function mergeOffer(d){
+  const el = $('#authmsg'); if(!el) return;
+  el.innerHTML = `<div class="rv" style="text-align:left">${esc(d.detail)}
+    <div class="row" style="justify-content:flex-start"><button class="pri" data-act="merge" data-token="${esc(d.merge)}">🔗 Объединить в один</button>
+    <button data-act="nomerge">Не сейчас</button></div></div>`;
+}
+async function mergeApply(token){
+  try{ await authPost('merge', {token}); load(); }catch(err){ authMsg(err.message); }
 }
 const emailFormHtml = label => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="Почта">
   <button data-act="emailsend">${label}</button></div><div id="emcode"></div>`;
@@ -121,7 +148,7 @@ function mountGoogle(){
   const el = $('.gbtn'); if(!el || !S.cfg.google) return;
   const go = () => {
     google.accounts.id.initialize({client_id:S.cfg.google, callback: async ({credential}) => {
-      try{ await authPost('google', {credential, link:linking()}); load(); }catch(err){ authMsg(err.message); }
+      try{ await authPost('google', {credential, link:linking()}); load(); }catch(err){ authFail(err); }
     }});
     google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:'ru'});
   };
@@ -143,7 +170,7 @@ async function emailSend(){
 
 async function emailVerify(){
   try{ await authPost('email/verify', {email:S.email, code:$('#code').value.trim(), link:linking()}); load(); }
-  catch(err){ authMsg(err.message); }
+  catch(err){ authFail(err); }
 }
 
 async function tgStart(){
@@ -159,7 +186,7 @@ async function tgPoll(nonce){
   clearTimeout(S.tgTimer);
   const r = await fetch('/api/auth/tg/poll?nonce='+encodeURIComponent(nonce)).then(r=>r.json()).catch(()=>({status:'pending'}));
   if(r.status==='ok') return load();
-  if(r.status==='taken') return authMsg('Этот Telegram уже привязан к другому аккаунту с задачами');
+  if(r.status==='merge') return mergeOffer(r);
   if(r.status==='expired') return authMsg('Время вышло — нажми кнопку ещё раз');
   S.tgTimer = setTimeout(()=>tgPoll(nonce), 2000);
 }
@@ -214,7 +241,8 @@ function render(){
       ${chips}${items.map(itemHtml).join('') || '<div class="empty">Пусто 🎉</div>'}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>
-    <div class="cap"><input id="cap" placeholder="Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»" autofocus>
+    <div class="cap"><div class="capw"><input id="cap" autocomplete="off" placeholder="Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»" autofocus>
+      <div id="ac" class="ac" role="listbox" hidden></div></div>
     <button class="pri" data-act="capture">Добавить</button></div>${body}</main></div>`;
   if(S.view==='account') mountGoogle();
 }
@@ -267,7 +295,37 @@ function openEdit(id){
 
 async function capture(){
   const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
-  inp.value=''; await api('/capture','POST',{text:v}); load();
+  inp.value=''; acClose(); await api('/capture','POST',{text:v}); load();
+}
+
+// ── Подсказки в поле захвата: «@» — существующие контексты, «#» — активные проекты.
+// Сервер разбирает #проект как [\w-]+ с «_» вместо пробелов, поэтому вставляем так же.
+const AC = {items:[], i:0, start:0, end:0};
+function acUpdate(inp){
+  const pos = inp.selectionStart, m = inp.value.slice(0, pos).match(/(?:^|\s)([@#])([\p{L}\p{N}_-]*)$/u);
+  if(!m) return acClose();
+  const [, sig, q] = m, ql = q.toLowerCase();
+  const pool = sig==='@'
+    ? S.contexts.map(c => ({label:'@'+c, ins:'@'+c}))
+    : S.projects.filter(p => /^[\p{L}\p{N}_\s-]+$/u.test(p.title))
+        .map(p => ({label:'#'+p.title, ins:'#'+p.title.trim().replace(/\s+/g,'_')}));
+  const key = o => o.ins.slice(1).toLowerCase();
+  AC.items = pool.filter(o => key(o).includes(ql) && key(o)!==ql)
+    .sort((a,b) => key(b).startsWith(ql) - key(a).startsWith(ql)).slice(0, 8);
+  AC.start = pos - q.length - 1; AC.end = pos; AC.i = 0;
+  acDraw();
+}
+function acDraw(){
+  const box = $('#ac'); if(!box) return;
+  box.hidden = !AC.items.length;
+  box.innerHTML = AC.items.map((o,k) => `<div class="aco ${k===AC.i?'on':''}" role="option" data-ac="${k}">${esc(o.label)}</div>`).join('');
+}
+function acClose(){ AC.items = []; acDraw(); }
+function acPick(k){
+  const inp = $('#cap'), o = AC.items[k]; if(!o) return;
+  const rest = inp.value.slice(AC.end), ins = o.ins + (rest.startsWith(' ') ? '' : ' ');
+  inp.value = inp.value.slice(0, AC.start) + ins + rest;
+  const p = AC.start + ins.length; inp.setSelectionRange(p, p); inp.focus(); acClose();
 }
 
 document.addEventListener('click', async e => {
@@ -277,6 +335,8 @@ document.addEventListener('click', async e => {
   if(act==='emailsend') return emailSend();
   if(act==='emailverify') return emailVerify();
   if(act==='tglogin') return tgStart();
+  if(act==='merge') return mergeApply(el.dataset.token);
+  if(act==='nomerge') return authMsg('');
   if(act==='edit') return openEdit(id);
   if(act==='mv'){ await api('/items/'+id,'PATCH',{status:el.dataset.st}); return load(); }
   if(act==='logout'){ await api('/logout','POST'); return loginScreen(); }
@@ -293,7 +353,21 @@ document.addEventListener('change', async e => {
     await api('/items/'+id,'PATCH',{status:e.target.checked?'done':'next'}); load();
   }
 });
+document.addEventListener('input', e => { if(e.target.id==='cap') acUpdate(e.target); });
+// mousedown, а не click: клик по подсказке не должен уводить фокус из поля
+document.addEventListener('mousedown', e => {
+  const o = e.target.closest('[data-ac]');
+  if(o){ e.preventDefault(); acPick(+o.dataset.ac); }
+  else if(!e.target.closest('.capw')) acClose();
+});
 document.addEventListener('keydown', e => {
+  if(e.target.id==='cap' && AC.items.length){
+    if(e.key==='ArrowDown' || e.key==='ArrowUp'){
+      e.preventDefault(); AC.i = (AC.i + (e.key==='ArrowDown' ? 1 : -1) + AC.items.length) % AC.items.length; return acDraw();
+    }
+    if(e.key==='Enter' || e.key==='Tab'){ e.preventDefault(); return acPick(AC.i); }
+    if(e.key==='Escape') return acClose();
+  }
   if(e.key!=='Enter') return;
   if(e.target.id==='cap') capture();
   if(e.target.id==='np') document.querySelector('[data-act=newproj]').click();
