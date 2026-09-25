@@ -1065,7 +1065,8 @@ def list_projects(uid: int = Depends(current_user)):
     return rows(
         "select p.*, "
         "(select count(*) from items i where i.project_id=p.id and i.status in ('inbox','next','waiting')) open_count, "
-        "(select count(*) from items i where i.project_id=p.id and i.status='next') next_count "
+        "(select count(*) from items i where i.project_id=p.id and i.status='next') next_count, "
+        "(select count(*) from items i where i.project_id=p.id) total_count "
         "from projects p where p.user_id=%s and p.status='active' order by p.title", (uid,))
 
 
@@ -1077,12 +1078,44 @@ def create_project(body: dict, uid: int = Depends(current_user)):
     return {"id": project_by_title(uid, title)}
 
 
+def project_get(uid: int, pid: int) -> dict:
+    p = row("select * from projects where id=%s and user_id=%s", (pid, uid))
+    if not p:
+        raise HTTPException(404)
+    return p
+
+
 @app.patch("/api/projects/{pid}")
 def patch_project(pid: int, body: dict, uid: int = Depends(current_user)):
-    for k in ("title", "status"):
-        if k in body:
-            run(f"update projects set {k}=%s where id=%s and user_id=%s", (body[k], pid, uid))
-    return {"ok": True}
+    project_get(uid, pid)
+    if "title" in body:
+        title = (body.get("title") or "").strip()
+        if not title:
+            raise HTTPException(400, "Название не может быть пустым")
+        if any(r["id"] != pid and r["title"].casefold() == title.casefold()
+               for r in rows("select id, title from projects where user_id=%s", (uid,))):
+            raise HTTPException(409, f"Проект «{title}» уже есть")
+        run("update projects set title=%s where id=%s and user_id=%s", (title, pid, uid))
+    if "status" in body:
+        if body["status"] not in ("active", "done"):
+            raise HTTPException(400, "bad status")
+        run("update projects set status=%s where id=%s and user_id=%s", (body["status"], pid, uid))
+    return project_get(uid, pid)
+
+
+@app.delete("/api/projects/{pid}")
+def delete_project(pid: int, items: str = "keep", uid: int = Depends(current_user)):
+    """items=keep — задачи остаются, просто без проекта; items=delete — удаляются вместе с проектом."""
+    if items not in ("keep", "delete"):
+        raise HTTPException(400, "items: keep или delete")
+    project_get(uid, pid)
+    with _pool.connection() as c, c.transaction():
+        if items == "delete":
+            n = c.execute("delete from items where project_id=%s and user_id=%s", (pid, uid)).rowcount
+        else:
+            n = c.execute("update items set project_id=null where project_id=%s and user_id=%s", (pid, uid)).rowcount
+        c.execute("delete from projects where id=%s and user_id=%s", (pid, uid))
+    return {"ok": True, "items": items, "affected": n}
 
 
 @app.get("/")

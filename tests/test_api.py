@@ -128,3 +128,54 @@ def test_dev_login_creates_user(client):
 def test_dev_login_disabled_in_prod(client, monkeypatch):
     monkeypatch.setattr(A, "DEV", False)
     assert client.get("/dev-login").status_code == 404
+
+
+# ── Проекты: переименование и удаление ──
+
+def test_rename_project(client, login):
+    uid = login(client)
+    pid = client.post("/api/projects", json={"title": "Ремонт"}).json()["id"]
+    other = client.post("/api/projects", json={"title": "Отпуск"}).json()["id"]
+    assert client.patch(f"/api/projects/{pid}", json={"title": "  Ремонт кухни "}).json()["title"] == "Ремонт кухни"
+    assert client.patch(f"/api/projects/{pid}", json={"title": " "}).status_code == 400
+    r = client.patch(f"/api/projects/{pid}", json={"title": "отпуск"})
+    assert r.status_code == 409 and "уже есть" in r.json()["detail"]
+    assert client.patch(f"/api/projects/{pid}", json={"title": "ремонт КУХНИ"}).status_code == 200  # свой — можно
+    assert client.patch(f"/api/projects/{other}", json={"status": "weird"}).status_code == 400
+    A.capture(uid, "плитка #ремонт_кухни")  # захват находит переименованный проект
+    assert A.row("select count(*) n from projects where user_id=%s", (uid,))["n"] == 2
+
+
+def test_delete_project_keep_items(client, login):
+    uid = login(client)
+    a = A.capture(uid, "купить краску #Ремонт")
+    A.capture(uid, "без проекта")
+    pid = a["project_id"]
+    assert client.get("/api/projects").json()[0]["total_count"] == 1
+    r = client.delete(f"/api/projects/{pid}").json()  # по умолчанию задачи остаются
+    assert r == {"ok": True, "items": "keep", "affected": 1}
+    it = client.get("/api/items?status=all").json()
+    assert len(it) == 2 and all(i["project_id"] is None for i in it)
+    assert client.get("/api/projects").json() == []
+
+
+def test_delete_project_with_items(client, login):
+    uid = login(client)
+    for t in ("a #Ремонт", "b #Ремонт", "c #Отпуск"):
+        A.capture(uid, t)
+    pid = A.row("select id from projects where title='Ремонт'")["id"]
+    assert client.delete(f"/api/projects/{pid}?items=delete").json()["affected"] == 2
+    assert [i["title"] for i in client.get("/api/items?status=all").json()] == ["c"]
+    assert [p["title"] for p in client.get("/api/projects").json()] == ["Отпуск"]
+    assert client.delete(f"/api/projects/{pid}").status_code == 404
+    assert client.delete(f"/api/projects/{pid}?items=all").status_code == 400
+
+
+def test_foreign_project_untouchable(new_client, login):
+    alice, bob = new_client(), new_client()
+    uid = login(alice, "alice@example.com")
+    login(bob, "bob@example.com")
+    pid = A.capture(uid, "секрет #Личное")["project_id"]
+    assert bob.patch(f"/api/projects/{pid}", json={"title": "взлом"}).status_code == 404
+    assert bob.delete(f"/api/projects/{pid}?items=delete").status_code == 404
+    assert A.row("select title from projects")["title"] == "Личное" and A.row("select count(*) n from items")["n"] == 1

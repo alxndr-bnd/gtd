@@ -237,7 +237,9 @@ function render(){
       if(S.ctx) items=items.filter(i=>i.context===S.ctx);
     }
     const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
-    body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}</h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2><div class="hint">${HELP[S.view]||''}</div>`}
+    body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}
+      <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ Переименовать</button>
+      <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 Удалить</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2><div class="hint">${HELP[S.view]||''}</div>`}
       ${chips}${items.map(itemHtml).join('') || '<div class="empty">Пусто 🎉</div>'}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>
@@ -252,6 +254,8 @@ function projectsHtml(){
   <div class="cap"><input id="np" placeholder="Новый проект"><button data-act="newproj">Создать</button></div>
   ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}"><div class="b"><div class="t">${esc(p.title)}</div>
     <div class="meta"><span>${p.open_count} открыто</span>${p.next_count?'':'<span class="warn">⚠ нет следующего действия</span>'}</div></div>
+    <button class="sm" data-act="renameproj" data-pid="${p.id}" title="Переименовать">✏️</button>
+    <button class="sm" data-act="delproj" data-pid="${p.id}" title="Удалить">🗑</button>
     <button class="sm" data-act="closeproj" data-pid="${p.id}">Завершить</button></div>`).join('') || '<div class="empty">Проектов нет</div>'}`;
 }
 
@@ -291,6 +295,47 @@ function openEdit(id){
   };
   d.querySelector('[data-act=cancel]').onclick = () => d.close();
   d.querySelector('[data-act=del]').onclick = async () => { if(confirm('Удалить задачу?')){ await api('/items/'+id,'DELETE'); d.close(); load(); } };
+}
+
+// ── Проекты: переименование и удаление (с задачами или только снять проект с задач)
+async function projApi(pid, method, body, query=''){
+  const r = await fetch(`/api/projects/${pid}${query}`, {method, headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.detail || 'Не получилось, попробуй ещё раз');
+  return d;
+}
+function openRenameProject(pid){
+  const p = S.projects.find(x=>x.id===pid); if(!p) return;
+  const d = $('#dlg');
+  d.innerHTML = `<form method="dialog" id="pf"><h3 style="margin:0 0 6px">Переименовать проект</h3>
+    <label>Название</label><input name="title" value="${esc(p.title)}" required>
+    <div class="msg" id="pfmsg"></div>
+    <div class="row"><span></span><span><button type="button" data-act="cancel">Отмена</button> <button class="pri" value="ok">Сохранить</button></span></div></form>`;
+  d.showModal();
+  d.querySelector('[data-act=cancel]').onclick = () => d.close();
+  $('#pf').onsubmit = async e => {
+    e.preventDefault();
+    try{ await projApi(pid, 'PATCH', {title:new FormData(e.target).get('title')}); d.close(); load(); }
+    catch(err){ $('#pfmsg').textContent = err.message; }
+  };
+}
+function openDeleteProject(pid){
+  const p = S.projects.find(x=>x.id===pid); if(!p) return;
+  const n = p.total_count, d = $('#dlg');
+  d.innerHTML = `<h3 style="margin:0 0 6px">Удалить проект «${esc(p.title)}»?</h3>
+    <p class="hint" style="margin:0">${n ? `В нём задач: ${n}. Что с ними сделать?` : 'Задач в нём нет.'}</p>
+    <div class="msg" id="pdmsg"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+      ${n ? `<button data-del="keep">Удалить проект, задачи оставить без проекта</button>
+      <button data-del="delete" style="color:#d33">Удалить проект вместе с задачами (${n})</button>`
+          : `<button data-del="keep" style="color:#d33">Удалить проект</button>`}
+      <button data-del="">Отмена</button></div>`;
+  d.showModal();
+  d.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if(!b.dataset.del) return d.close();
+    try{ await projApi(pid, 'DELETE', null, '?items='+b.dataset.del); d.close(); if(S.pid===pid) S.pid=null; load(); }
+    catch(err){ $('#pdmsg').textContent = err.message; }
+  });
 }
 
 async function capture(){
@@ -341,6 +386,8 @@ document.addEventListener('click', async e => {
   if(act==='mv'){ await api('/items/'+id,'PATCH',{status:el.dataset.st}); return load(); }
   if(act==='logout'){ await api('/logout','POST'); return loginScreen(); }
   if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
+  if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
+  if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
   if(act==='back'){ e.preventDefault(); S.pid=null; return load(); }
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
