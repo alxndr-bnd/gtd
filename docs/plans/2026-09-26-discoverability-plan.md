@@ -31,9 +31,9 @@
 | Каталоги: AlternativeTo, GitHub, Search Console | [SERBITO-261](https://serbito.atlassian.net/browse/SERBITO-261) | 4 | To Do |
 | Общий блок «Другие проекты» — история | [SERBITO-260](https://serbito.atlassian.net/browse/SERBITO-260) | 5 | In Progress |
 | · в gtd | [SERBITO-263](https://serbito.atlassian.net/browse/SERBITO-263) | 5 | In Progress |
-| · в Planning Poker | [SERBITO-264](https://serbito.atlassian.net/browse/SERBITO-264) | 5 | In Progress |
-| · в Javi | [SERBITO-265](https://serbito.atlassian.net/browse/SERBITO-265) | 5 | In Progress |
-| · в Serbito | [SERBITO-266](https://serbito.atlassian.net/browse/SERBITO-266) | 5 | In Progress |
+| · в Planning Poker | [SERBITO-264](https://serbito.atlassian.net/browse/SERBITO-264) | 5 | Closed — poker v0.46.0 |
+| · в Javi | [SERBITO-265](https://serbito.atlassian.net/browse/SERBITO-265) | 5 | Closed — javi v0.54.0 |
+| · в Serbito | [SERBITO-266](https://serbito.atlassian.net/browse/SERBITO-266) | 5 | Closed — serbito v1.385.0 |
 | README на GitHub: раздел «Other projects» и «Made by No Handoff» (публичные gtd, poker, javi; serbito приватный — вне охвата) | [SERBITO-267](https://serbito.atlassian.net/browse/SERBITO-267) | 5 | In Progress |
 
 Замер через 6 недель — [SERBITO-262](https://serbito.atlassian.net/browse/SERBITO-262). Найденные по ходу недоработки заводятся в Jira багами с меткой `finding`.

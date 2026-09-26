@@ -30,3 +30,6 @@ caddy_data/
 
 # Артефакты браузерных проверок
 .playwright-mcp/
+
+# Рабочие копии субагентов Claude Code
+.claude/
