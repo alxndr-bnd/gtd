@@ -236,3 +236,29 @@ def test_public_pages(watch, path, status, ready):
     w.goto(path, status)
     w.page.wait_for_load_state("load")
     w.wait(ready, path)
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_telegram_fallback_deep_link(watch, monkeypatch, lang):
+    """SERBITO-292: не на gtd.serbito.rs Login Widget не грузится (запрос к telegram.org уронил бы тест) —
+    работает запасной путь: кнопка → ссылка в бота, и на экране входа, и в «Аккаунте»."""
+    monkeypatch.setattr(A, "TOKEN", "smoke-token")  # бот «включён»: /api/config отдаёт его имя
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
+    link = 'a[href^="https://t.me/gtd_smoke_bot?start="]'
+    w = watch(lang)
+    w.goto("/en/" if lang == "en" else "/")
+    w.wait('#signin button.tgfb[data-act="tglogin"]', f"[{lang}] вход: кнопка Telegram")
+    assert w.page.is_visible("#signin .tgfb") and not w.page.locator(".tgw script").count()
+    w.page.click('#signin [data-act="tglogin"]')
+    w.wait(f"#tgst {link}", f"[{lang}] вход: ссылка в бота")
+
+    A.run("insert into users(name,created,lang) values('Smoke',%s,%s)", (int(time.time()), lang))
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    w.page.click("nav .navfoot button.user")
+    w.page.click('nav .navfoot .umenu a[data-view="account"]')
+    w.wait('main button.tgfb[data-act="tglogin"]', f"[{lang}] account: кнопка Telegram")
+    assert w.page.is_visible("main .tgfb") and not w.page.locator(".tgw script").count()
+    w.page.click('main [data-act="tglogin"]')
+    w.wait(f"main #tgst {link}", f"[{lang}] account: ссылка в бота")
+    w.check(f"[{lang}] итог")
