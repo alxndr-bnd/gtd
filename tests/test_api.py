@@ -179,3 +179,73 @@ def test_foreign_project_untouchable(new_client, login):
     assert bob.patch(f"/api/projects/{pid}", json={"title": "взлом"}).status_code == 404
     assert bob.delete(f"/api/projects/{pid}?items=delete").status_code == 404
     assert A.row("select title from projects")["title"] == "Личное" and A.row("select count(*) n from items")["n"] == 1
+
+
+# ── Номера задач и ссылки /i/N ──
+
+def test_numbers_are_per_user_and_never_reused(client, login):
+    alice = login(client)
+    bob = A.email_user("bob@example.com")
+    a1, a2 = A.capture(alice, "a1"), A.capture(alice, "a2")
+    b1 = A.capture(bob, "b1")
+    assert (a1["num"], a2["num"], b1["num"]) == (1, 2, 1)  # у каждого с единицы
+    client.delete(f"/api/items/{a2['id']}")
+    assert A.capture(alice, "a3")["num"] == 3  # номер удалённой #2 не переиспользуется
+
+
+def test_item_link_by_number(new_client, login):
+    alice, bob = new_client(), new_client()
+    uid = login(alice, "alice@example.com")
+    login(bob, "bob@example.com")
+    it = A.capture(uid, "секрет")
+    assert alice.get(f"/api/items/n/{it['num']}").json()["title"] == "секрет"
+    assert bob.get(f"/api/items/n/{it['num']}").status_code == 404  # у Боба своя #1 не существует
+    assert new_client().get(f"/api/items/n/{it['num']}").status_code == 401
+    page = new_client().get(f"/i/{it['num']}")  # страницу отдаём всем, данные — только владельцу
+    assert page.status_code == 200 and "<title>GTD</title>" in page.text
+
+
+def test_merge_renumbers_moved_tasks(new_client, login, mail):
+    c, carol = new_client(), new_client()
+    alice = login(c, "alice@example.com")
+    for t in ("a1", "a2"):
+        c.post("/api/capture", json={"text": t})
+    login(carol, "carol@example.com")
+    for t in ("c1", "c2"):
+        carol.post("/api/capture", json={"text": t})
+    c.post("/api/auth/email/start", json={"email": "carol@example.com"})
+    code = __import__("conftest").last_code(mail)
+    token = c.post("/api/auth/email/verify", json={"email": "carol@example.com", "code": code, "link": True}).json()["merge"]
+    assert c.post("/api/auth/merge", json={"token": token}).json() == {"ok": True}
+    nums = {i["title"]: i["num"] for i in c.get("/api/items?status=all").json()}
+    assert nums == {"a1": 1, "a2": 2, "c1": 3, "c2": 4}
+    assert A.capture(alice, "next")["num"] == 5
+
+
+def test_dev_version_only_in_dev(client, monkeypatch):
+    v = client.get("/api/dev/version").json()["v"]
+    assert v and client.get("/api/dev/version").json()["v"] == v  # стабильна, пока ничего не менялось
+    monkeypatch.setattr(A, "DEV", False)
+    assert client.get("/api/dev/version").status_code == 404
+
+
+def test_undo_seconds_setting(client, login):
+    login(client)
+    assert client.get("/api/me").json()["undo_seconds"] == 30  # по умолчанию
+    for n in (5, 10, 30):
+        assert client.patch("/api/me", json={"undo_seconds": n}).json()["undo_seconds"] == n
+    for bad in (0, 15, "30", None):
+        assert client.patch("/api/me", json={"undo_seconds": bad}).status_code == 400
+    assert client.get("/api/me").json()["undo_seconds"] == 30
+    assert client.patch("/api/me", json={}).status_code == 200  # без полей — ничего не меняется
+
+
+def test_google_analytics_only_on_prod_domain(client, monkeypatch):
+    assert "googletagmanager" not in client.get("/").text  # ID не задан — GA нет
+    monkeypatch.setattr(A, "GA_ID", "G-TEST123")
+    prod = client.get("/", headers={"host": "gtd.serbito.rs"}).text
+    assert "gtag/js?id=G-TEST123" in prod and "send_page_view: false" in prod and "<!--GA-->" not in prod
+    for host in ("localhost:8000", "gtd-488744139718.europe-west1.run.app"):
+        page = client.get("/", headers={"host": host}).text
+        assert "googletagmanager" not in page and "<!--GA-->" not in page, host
+    assert "gtag/js?id=G-TEST123" in client.get("/i/5", headers={"host": "gtd.serbito.rs"}).text

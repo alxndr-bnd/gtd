@@ -37,8 +37,10 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
-    A.run("truncate users, sessions, login_tokens, projects, items, email_codes, tg_logins restart identity")
+    A.run("truncate users, sessions, login_tokens, projects, items, email_codes, tg_logins, merge_offers, "
+          "tg_email_links, activity restart identity")
     A._hits.clear()
+    A._seen_today.clear()
     monkeypatch.setattr(A, "TOKEN", "")
     monkeypatch.setattr(A, "BOT_USERNAME", "")
 

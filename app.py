@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import hmac
+import html
 import logging
 import os
 import re
@@ -19,15 +20,20 @@ import sentry_sdk
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 log = logging.getLogger("gtd")
 logging.basicConfig(level=logging.INFO)
+# httpx на INFO пишет полный URL каждого запроса, а в URL Telegram API зашит токен бота — в логи он не должен попадать
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 BASE_URL = os.getenv("BASE_URL", "https://gtd.serbito.rs").rstrip("/")
 TZ = ZoneInfo(os.getenv("TZ", "Europe/Belgrade"))
 DEV = os.getenv("DEV", "") == "1"
+# Кто видит «Статистику» — id аккаунтов, а не почты: конфиг лежит в публичном репозитории
+ADMIN_USER_IDS = {int(x) for x in os.getenv("ADMIN_USER_IDS", "").split(",") if x.strip()}
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 # Почта — через Brevo SMTP relay, тот же аккаунт, что у serbito
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
@@ -36,6 +42,9 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", '"GTD" <info@serbito.rs>')
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+# Google Analytics 4: поток данных для gtd.serbito.rs. Пусто — GA не подключается
+GA_ID = os.getenv("GA_MEASUREMENT_ID", "")
+GA_HOST = "gtd.serbito.rs"
 # Будильник напоминаний: Cloud Scheduler раз в минуту шлёт POST /tasks/reminders с этим секретом
 CRON_SECRET = os.getenv("CRON_SECRET", "")
 # Прод (https): Telegram сам шлёт апдейты вебхуком — инстанс спит, пока никто не пишет.
@@ -50,8 +59,29 @@ def init_sentry() -> bool:
         return False
     sentry_sdk.init(dsn=SENTRY_DSN, release=os.getenv("SENTRY_RELEASE") or None,
                     environment="production" if os.getenv("K_SERVICE") else "development",
-                    send_default_pii=False, traces_sample_rate=0.1)
+                    send_default_pii=False, traces_sample_rate=0.1,
+                    # Данные пользователей в Sentry не уходят: ни локальные переменные кадров (там бывают
+                    # названия задач), ни тела запросов; токен бота вычищается из всего, что осталось
+                    include_local_variables=False, max_request_body_size="never",
+                    before_send=sentry_scrub, before_send_transaction=sentry_scrub,
+                    before_breadcrumb=lambda crumb, hint: None if crumb.get("category") in ("httpx", "httplib") else sentry_scrub(crumb, hint))
     return True
+
+
+BOT_TOKEN_RE = re.compile(r"bot\d+:[A-Za-z0-9_-]{20,}")
+
+
+def sentry_scrub(event, hint=None):
+    """Рекурсивно заменяет токен бота на «bot<redacted>» во всех строках события."""
+    def clean(v):
+        if isinstance(v, str):
+            return BOT_TOKEN_RE.sub("bot<redacted>", v)
+        if isinstance(v, dict):
+            return {k: clean(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [clean(x) for x in v]
+        return v
+    return clean(event)
 
 
 init_sentry()
@@ -68,8 +98,11 @@ if not DATABASE_URL:
         "?host=/cloudsql/serbito:europe-west1:serbitodb"
     )
 
+# prepare_threshold=None: без серверных prepared statements. С ними миграция схемы под работающим
+# сервером (новая колонка в items → другой набор у select i.*) роняет запросы «cached plan must not
+# change result type» (Sentry GTD-1, деплой добавляет колонки, пока старая ревизия ещё обслуживает)
 _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5,
-                       kwargs={"row_factory": dict_row}, open=True)
+                       kwargs={"row_factory": dict_row, "prepare_threshold": None}, open=True)
 
 with _pool.connection() as _c:
     _c.execute(
@@ -101,6 +134,24 @@ create table if not exists merge_offers(
   token text primary key, keep_uid bigint, drop_uid bigint, field text, value text, expires bigint);
 create table if not exists tg_email_links(
   tg_id bigint primary key, email text, expires bigint);
+-- Свой номер задачи у каждого пользователя (#1, #2…) из счётчика users.item_seq: номера не
+-- переиспользуются, поэтому ссылка /i/N никогда не откроет другую задачу. Бэкфилл — один раз.
+alter table items add column if not exists num bigint;
+alter table users add column if not exists item_seq bigint not null default 0;
+update items i set num = x.n from (
+  select id, coalesce((select max(num) from items m where m.user_id = t.user_id), 0)
+             + row_number() over (partition by user_id order by id) n
+  from items t where num is null) x
+where i.id = x.id;
+update users u set item_seq = coalesce((select max(num) from items i where i.user_id = u.id), 0)
+where item_seq < coalesce((select max(num) from items i where i.user_id = u.id), 0);
+create unique index if not exists items_user_num on items(user_id, num);
+-- Настройки пользователя: сколько секунд живёт «Отменить» после действия с задачей
+alter table users add column if not exists undo_seconds integer not null default 30;
+-- Аналитика использования: только факт активности (кто/день/канал/сколько действий) — без содержимого
+create table if not exists activity(
+  user_id bigint not null, day date not null, channel text not null, actions integer not null default 0,
+  primary key (user_id, day, channel));
 """
     )
 
@@ -123,6 +174,24 @@ def rows(sql, args=()):
 def row(sql, args=()):
     r = rows(sql, args)
     return r[0] if r else None
+
+
+_seen_today: set = set()
+
+
+def track(uid, channel: str, n: int = 1):
+    """Аналитика: пользователь uid был активен сегодня в канале web/telegram (+n действий).
+    Пишем только факт и счётчик — ни названий задач, ни текста, ни IP. n=0 — просто заходил;
+    такие отметки дедуплицируются в памяти, чтобы не писать в базу на каждый запрос."""
+    if not uid:
+        return
+    day = datetime.now(TZ).date()
+    if n == 0:
+        if (uid, day, channel) in _seen_today:
+            return
+        _seen_today.add((uid, day, channel))
+    run("insert into activity(user_id,day,channel,actions) values(%s,%s,%s,%s) on conflict(user_id,day,channel) "
+        "do update set actions = activity.actions + excluded.actions", (uid, day, channel, n))
 
 
 # ───────────────────────── Парсинг захвата ─────────────────────────
@@ -230,12 +299,16 @@ def capture(uid: int, raw: str, source: str = "web") -> dict:
     if m:
         proj_id = project_by_title(uid, m.group(1).replace("_", " "))
         text = text[: m.start()] + text[m.end():]
+    track(uid, "telegram" if source == "telegram" else "web")
     title, remind = parse_when(text, now)
     title = title or raw.strip()
     status = "next" if (ctx or proj_id) else "inbox"
     iid = run(
-        "insert into items(user_id,title,status,project_id,context,remind_at,source,created) values(%s,%s,%s,%s,%s,%s,%s,%s) returning id",
-        (uid, title, status, proj_id, ctx, remind, source, int(time.time())),
+        # Номер — из счётчика пользователя, атомарно в одной команде (изменяющий подзапрос — только в WITH)
+        "with seq as (update users set item_seq=item_seq+1 where id=%s returning item_seq) "
+        "insert into items(user_id,num,title,status,project_id,context,remind_at,source,created) "
+        "select %s, seq.item_seq, %s,%s,%s,%s,%s,%s,%s from seq returning id",
+        (uid, uid, title, status, proj_id, ctx, remind, source, int(time.time())),
     )
     return item_get(uid, iid)
 
@@ -254,6 +327,11 @@ ITEM_SQL = "select i.*, p.title as project from items i left join projects p on 
 
 def item_get(uid, iid):
     return row(ITEM_SQL + "where i.user_id=%s and i.id=%s", (uid, iid))
+
+
+def item_by_num(uid, num):
+    """По номеру, который видит пользователь (#N в боте и в ссылке /i/N)."""
+    return row(ITEM_SQL + "where i.user_id=%s and i.num=%s", (uid, num))
 
 
 def fmt_ts(ts):
@@ -309,13 +387,28 @@ HELP = (
 
 
 BTN_START, BTN_EMAIL = "🚀 Начать", "📧 Добавить email"
-# Постоянная клавиатура под полем ввода: онбординг и привязка почты в одно нажатие
-KB_MAIN = {"keyboard": [[{"text": BTN_START}, {"text": BTN_EMAIL}]], "resize_keyboard": True, "is_persistent": True}
+# Кнопки — под приветствием (inline), а не постоянной клавиатурой: поле ввода остаётся свободным
+KB_START = {"inline_keyboard": [[{"text": BTN_START, "callback_data": "help"},
+                                 {"text": BTN_EMAIL, "callback_data": "addemail"}]]}
+# Постоянную клавиатуру прежних версий Telegram убирает только ответом с remove_keyboard
+KB_REMOVE = {"remove_keyboard": True}
 
 
 def webhook_secret() -> str:
     """Секрет заголовка X-Telegram-Bot-Api-Secret-Token — выводим из токена, отдельный не нужен."""
     return hashlib.sha256(f"gtd-webhook:{TOKEN}".encode()).hexdigest()
+
+
+# Ответы бота с кликабельным «#N» — ссылкой на задачу на сайте (открывается после входа)
+HTML_MSG = {"parse_mode": "HTML", "link_preview_options": {"is_disabled": True}}
+
+
+def item_url(num: int) -> str:
+    return f"{BASE_URL}/i/{num}"
+
+
+def item_ref(it: dict) -> str:
+    return f'<a href="{item_url(it["num"])}">#{it["num"]}</a>'
 
 
 def kb_item(iid, done_only=False):
@@ -364,13 +457,13 @@ async def tg_login_confirm(cb, nonce):
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
 
 
-async def tg_email_ask(chat, u):
+async def tg_email_ask(chat, u, reply_markup=None):
     """Кнопка «Добавить email» или /email без адреса: ждём адрес следующим сообщением."""
     run("insert into tg_email_links(tg_id,email,expires) values(%s,null,%s) on conflict(tg_id) do update "
         "set email=null, expires=excluded.expires", (u["tg_id"], int(time.time()) + 600))
     now = f"Сейчас привязана {u['email']} — пришли другой адрес, чтобы сменить.\n\n" if u.get("email") else ""
     await tg("sendMessage", chat_id=chat, text=f"{now}Пришли адрес почты — вышлю на него код. С этой почтой "
-             "можно будет входить на сайте по коду или через Google.", reply_markup=KB_MAIN)
+             "можно будет входить на сайте по коду или через Google.", reply_markup=reply_markup)
 
 
 async def tg_email_start(chat, u, email):
@@ -430,6 +523,8 @@ async def handle_message(msg):
         await tg_login_prompt(chat, arg.strip())
         return
     u = tg_user(frm.get("id"), frm.get("first_name", ""))
+    if text.startswith("/"):
+        track(u["id"], "telegram")
     if not text:
         await tg("sendMessage", chat_id=chat, text="Пока понимаю только текст.")
         return
@@ -442,10 +537,12 @@ async def handle_message(msg):
     if pending and pending["email"] and re.fullmatch(r"\d{6}", text):  # код из письма, только если ждём его
         await tg_email_verify(chat, u, pending["email"], text)
         return
-    if text == BTN_EMAIL:
-        await tg_email_ask(chat, u)
-    elif cmd in ("/start", "/help") or text == BTN_START:
-        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=KB_MAIN)
+    if text == BTN_EMAIL:  # нажали кнопку старой постоянной клавиатуры — отвечаем и убираем её
+        await tg_email_ask(chat, u, KB_REMOVE)
+    elif text == BTN_START:
+        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=KB_REMOVE)
+    elif cmd in ("/start", "/help"):
+        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=KB_START)
     elif cmd == "/login":
         tok = secrets.token_urlsafe(24)
         run("insert into login_tokens(token,user_id,expires) values(%s,%s,%s)", (tok, u["id"], int(time.time()) + 600))
@@ -455,31 +552,37 @@ async def handle_message(msg):
     elif cmd in ("/inbox", "/next"):
         st = cmd[1:]
         its = rows(ITEM_SQL + "where i.user_id=%s and i.status=%s order by i.created limit 20", (u["id"], st))
-        body = "\n".join(f"#{i['id']} {i['title']} {describe(i)}".strip() for i in its) or "Пусто 🎉"
-        await tg("sendMessage", chat_id=chat, text=f"{st.upper()}:\n{body}")
+        body = "\n".join(f"{item_ref(i)} {html.escape(i['title'])} {html.escape(describe(i))}".strip()
+                         for i in its) or "Пусто 🎉"
+        await tg("sendMessage", chat_id=chat, text=f"{st.upper()}:\n{body}", **HTML_MSG)
     elif cmd == "/done":
         try:
             iid = int(arg.strip().lstrip("#"))
         except ValueError:
             await tg("sendMessage", chat_id=chat, text="Использование: /done 12")
             return
-        ok = mark_done(u["id"], iid)
-        await tg("sendMessage", chat_id=chat, text="✅ Готово" if ok else "Не нашёл такую задачу")
+        it = mark_done(u["id"], num=iid)
+        if it:
+            await tg("sendMessage", chat_id=chat, text=f"✅ Готово: {item_ref(it)} {html.escape(it['title'])}", **HTML_MSG)
+        else:
+            await tg("sendMessage", chat_id=chat, text="Не нашёл такую задачу")
     elif text.startswith("/"):
         await tg("sendMessage", chat_id=chat, text=HELP)
     else:
         it = capture(u["id"], text, "telegram")
         where = "Next" if it["status"] == "next" else "Inbox"
-        await tg("sendMessage", chat_id=chat, text=f"✓ {where} #{it['id']}: {it['title']}\n{describe(it)}".strip(),
-                 reply_markup=kb_item(it["id"]))
+        await tg("sendMessage", chat_id=chat,
+                 text=f"✓ {where} {item_ref(it)}: {html.escape(it['title'])}\n{html.escape(describe(it))}".strip(),
+                 reply_markup=kb_item(it["id"]), **HTML_MSG)
 
 
-def mark_done(uid, iid):
-    it = item_get(uid, iid)
+def mark_done(uid, iid=None, num=None):
+    """Закрывает задачу по id (кнопки) или по номеру (/done N); возвращает её или None."""
+    it = item_get(uid, iid) if iid is not None else item_by_num(uid, num)
     if not it:
-        return False
-    run("update items set status='done', completed_at=%s where id=%s", (int(time.time()), iid))
-    return True
+        return None
+    run("update items set status='done', completed_at=%s where id=%s", (int(time.time()), it["id"]))
+    return it
 
 
 async def handle_callback(cb):
@@ -490,9 +593,18 @@ async def handle_callback(cb):
     if act in ("merge", "nomerge"):
         await tg_merge_answer(cb, sid, act == "merge")
         return
+    if act in ("help", "addemail"):  # кнопки под приветствием
+        chat = (cb.get("message") or {}).get("chat", {}).get("id", cb["from"]["id"])
+        await tg("answerCallbackQuery", callback_query_id=cb["id"])
+        if act == "help":
+            await tg("sendMessage", chat_id=chat, text=HELP)
+        else:
+            await tg_email_ask(chat, tg_user(cb["from"]["id"], cb["from"].get("first_name", "")))
+        return
     u = row("select * from users where tg_id=%s", (cb["from"]["id"],))
     if not u:
         return
+    track(u["id"], "telegram")
     iid = int(sid)
     it = item_get(u["id"], iid)
     msg = cb.get("message", {})
@@ -569,8 +681,8 @@ async def send_due_reminders():
         if run("update items set reminded=1 where id=%s and reminded=0 returning id", (it["id"],)) is None:
             continue
         if TOKEN and it["tg_id"]:
-            await tg("sendMessage", chat_id=it["tg_id"], text=f"⏰ {it['title']}",
-                     reply_markup=kb_item(it["id"]))
+            await tg("sendMessage", chat_id=it["tg_id"], text=f"⏰ {item_ref(it)} {html.escape(it['title'])}",
+                     reply_markup=kb_item(it["id"]), **HTML_MSG)
             sent += 1
     return sent
 
@@ -621,6 +733,7 @@ def current_user(request: Request) -> int:
     uid = session_user(request)
     if not uid:
         raise HTTPException(401, "auth required")
+    track(uid, "web", 0)
     return uid
 
 
@@ -705,6 +818,14 @@ def merge_accounts(keep: int, drop: int):
                 c.execute("delete from projects where id=%s", (p["id"],))
             else:
                 c.execute("update projects set user_id=%s where id=%s", (keep, p["id"]))
+        # Задачи drop получают следующие номера keep — иначе #N двух аккаунтов столкнулись бы.
+        # Сперва уводим в минус: уникальность (user_id, num) проверяется построчно, прямо в процессе
+        c.execute("update items set num = -num where user_id=%s", (drop,))
+        c.execute("update items i set num = k.item_seq + x.rn from users k, (select id, row_number() over "
+                  "(order by id) rn from items where user_id=%s) x where k.id=%s and i.id=x.id",
+                  (drop, keep))
+        c.execute("update users set item_seq = item_seq + (select count(*) from items where user_id=%s) "
+                  "where id=%s", (drop, keep))
         for table in ("items", "sessions", "login_tokens"):
             c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
         c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
@@ -930,10 +1051,59 @@ def auth_tg_poll(nonce: str):
     return set_session(JSONResponse({"status": "ok"}), r["user_id"])
 
 
+UNDO_CHOICES = (5, 10, 30)
+
+
 @app.get("/api/me")
 def me(uid: int = Depends(current_user)):
-    u = row("select name, email, tg_id, google_sub from users where id=%s", (uid,))
-    return {"name": u["name"], "email": u["email"], "tg": bool(u["tg_id"]), "google": bool(u["google_sub"])}
+    u = row("select name, email, tg_id, google_sub, undo_seconds from users where id=%s", (uid,))
+    return {"name": u["name"], "email": u["email"], "tg": bool(u["tg_id"]), "google": bool(u["google_sub"]),
+            "undo_seconds": u["undo_seconds"], "admin": uid in ADMIN_USER_IDS}
+
+
+@app.get("/api/admin/stats")
+def admin_stats(uid: int = Depends(current_user)):
+    """Сколько людей пользуется GTD. Только агрегаты: ни названий задач, ни почт, ни имён, ни id.
+    Не владельцу — 404, будто эндпоинта нет."""
+    if uid not in ADMIN_USER_IDS:
+        raise HTTPException(404)
+    today = datetime.now(TZ).date()
+    one = lambda sql, *a: row(sql, a)["n"]
+    active = lambda days: one("select count(distinct user_id) n from activity where day > %s",
+                              today - timedelta(days=days))
+    since = lambda days: int((datetime.now(TZ) - timedelta(days=days)).timestamp())
+    daily = {r["day"]: r for r in rows(
+        "select day, count(distinct user_id) users, sum(actions) actions from activity where day > %s group by day",
+        (today - timedelta(days=30),))}
+    return {
+        "users": {"total": one("select count(*) n from users"),
+                  "new_7d": one("select count(*) n from users where created >= %s", since(7)),
+                  "new_30d": one("select count(*) n from users where created >= %s", since(30)),
+                  "with_email": one("select count(*) n from users where email is not null"),
+                  "with_google": one("select count(*) n from users where google_sub is not null"),
+                  "with_telegram": one("select count(*) n from users where tg_id is not null and tg_id <> 0")},
+        "active": {"day": active(1), "week": active(7), "month": active(30),
+                   "web_30d": one("select count(distinct user_id) n from activity where day > %s and channel='web'",
+                                  today - timedelta(days=30)),
+                   "telegram_30d": one("select count(distinct user_id) n from activity where day > %s "
+                                       "and channel='telegram'", today - timedelta(days=30))},
+        "tasks": {"total": one("select count(*) n from items"),
+                  "created_7d": one("select count(*) n from items where created >= %s", since(7)),
+                  "created_30d": one("select count(*) n from items where created >= %s", since(30))},
+        "daily": [{"day": str(d), "users": daily[d]["users"] if d in daily else 0,
+                   "actions": int(daily[d]["actions"]) if d in daily else 0}
+                  for d in (today - timedelta(days=i) for i in range(29, -1, -1))],
+    }
+
+
+@app.patch("/api/me")
+def patch_me(body: dict, uid: int = Depends(current_user)):
+    """Настройки пользователя. Пока одна: время на «Отменить» — 5, 10 или 30 секунд."""
+    if "undo_seconds" in body:
+        if body["undo_seconds"] not in UNDO_CHOICES:
+            raise HTTPException(400, "undo_seconds: 5, 10 или 30")
+        run("update users set undo_seconds=%s where id=%s", (body["undo_seconds"], uid))
+    return me(uid)
 
 
 @app.get("/auth")
@@ -978,6 +1148,20 @@ async def cron_reminders(request: Request):
     if not CRON_SECRET or not hmac.compare_digest(got, CRON_SECRET):
         raise HTTPException(403)
     return {"sent": await send_due_reminders()}
+
+
+STARTED = str(time.time())
+
+
+@app.get("/api/dev/version")
+def dev_version():
+    """Только локально (DEV): версия кода для live reload. Меняется, когда сервер перезапустился
+    после правки .py (--reload) или поменялся файл в static/ — страница сама обновится."""
+    if not DEV:
+        raise HTTPException(404)
+    static = os.path.join(os.path.dirname(__file__), "static")
+    newest = max(os.path.getmtime(os.path.join(static, f)) for f in os.listdir(static))
+    return {"v": f"{STARTED}:{newest}"}
 
 
 @app.get("/api/contexts")
@@ -1033,6 +1217,7 @@ def api_capture(body: dict, uid: int = Depends(current_user)):
 def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
     if not item_get(uid, iid):
         raise HTTPException(404)
+    track(uid, "web")
     sets, args = [], []
     for k in ("title", "notes", "status", "project_id", "context", "remind_at"):
         if k not in body:
@@ -1056,6 +1241,7 @@ def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
 
 @app.delete("/api/items/{iid}")
 def delete_item(iid: int, uid: int = Depends(current_user)):
+    track(uid, "web")
     run("delete from items where id=%s and user_id=%s", (iid, uid))
     return {"ok": True}
 
@@ -1118,6 +1304,35 @@ def delete_project(pid: int, items: str = "keep", uid: int = Depends(current_use
     return {"ok": True, "items": items, "affected": n}
 
 
+@app.get("/api/items/n/{num}")
+def get_item_by_num(num: int, uid: int = Depends(current_user)):
+    it = item_by_num(uid, num)  # номера у каждого свои: чужую задачу по ссылке не открыть
+    if not it:
+        raise HTTPException(404, "Задача не найдена")
+    return it
+
+
+GA_SNIPPET = """<script async src="https://www.googletagmanager.com/gtag/js?id={id}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{ dataLayer.push(arguments); }}
+  gtag("js", new Date());
+  // Страницы шлёт фронт сам (gaPage): только раздел вида /inbox и заголовок «GTD — раздел».
+  // Ни названий задач, ни их номеров из /i/N, ни user_id — поэтому свой page_view выключен.
+  gtag("config", "{id}", {{ send_page_view: false }});
+</script>"""
+
+
 @app.get("/")
-def index():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"))
+def index(request: Request):
+    """Страница приложения. GA-сниппет — статично в HTML (чтобы Google видел тег), только на боевом домене."""
+    with open(os.path.join(os.path.dirname(__file__), "static", "index.html"), encoding="utf-8") as f:
+        page = f.read()
+    ga = GA_SNIPPET.format(id=GA_ID) if GA_ID and request.url.hostname == GA_HOST else ""
+    return HTMLResponse(page.replace("<!--GA-->", ga))
+
+
+@app.get("/i/{num}")
+def item_page(num: int, request: Request):
+    """Ссылка на задачу: та же страница, фронт откроет карточку после входа. Данные — только через API."""
+    return index(request)

@@ -45,7 +45,7 @@ put_value() { printf '%s' "$2" | g secrets versions add "$1" --data-file=- >/dev
 
 if ! has_value gtd-database-url; then
   # Пароль берём из локального .env (там он уже в URL-кодировке), иначе спрашиваем
-  pw="$(sed -nE 's#^DATABASE_URL=postgresql://gtd:([^@]*)@.*#\1#p' .env 2>/dev/null || true)"
+  pw="$(sed -nE 's#^DATABASE_URL(_PROD)?=postgresql://gtd:([^@]*)@.*#\2#p' .env 2>/dev/null | head -1 || true)"
   if [[ -z "$pw" ]]; then read -rsp "Пароль пользователя gtd в Cloud SQL: " pw || true; echo; fi
   [[ -n "$pw" ]] || { echo "Без пароля БД деплой невозможен" >&2; exit 1; }
   put_value gtd-database-url "postgresql://gtd:$pw@/gtd?host=/cloudsql/$PROJECT:$REGION:serbitodb"

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GTD</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+<!--GA-->
 <script>
 // Cloudflare Web Analytics (без cookies) — только на проде: токен привязан к gtd.serbito.rs
 if(location.hostname==='gtd.serbito.rs'){
@@ -21,13 +22,16 @@ body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-app
 nav{width:230px;padding:16px 10px;border-right:1px solid var(--bd);background:var(--card);flex-shrink:0}
 nav h1{font-size:17px;margin:0 8px 14px;cursor:pointer;display:inline-block} nav h1:hover{color:var(--ac)}
 button.icon{display:flex;align-items:center;justify-content:center;padding:0 16px} .hero button.icon svg{width:26px;height:26px}
-nav a{display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
+nav a{display:flex;justify-content:space-between;align-items:baseline;padding:8px 10px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
 nav a:hover{background:var(--bg)} nav a.on{background:var(--ac);color:#fff}
-nav a .n{opacity:.7;font-size:13px}
+nav a .n{opacity:.7;font-size:13px;font-variant-numeric:tabular-nums}  /* по базовой линии названия, а не по верху */
 nav .sep{height:1px;background:var(--bd);margin:10px 4px}
 main{flex:1;max-width:820px;margin:0 auto;padding:20px 16px 80px;width:100%}
 h2{margin:0 0 12px;font-size:20px}
-.cap{display:flex;gap:8px;margin-bottom:16px}
+.cap{display:flex;gap:8px;margin-bottom:16px;align-items:center}  /* кнопка — по центру высоты поля */
+.cap textarea{flex:1;padding:12px 14px;white-space:pre-wrap;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);
+  font:inherit;font-size:15px;line-height:22px;resize:none;overflow:hidden;display:block}
+.cap button{height:48px;flex-shrink:0}  /* высота однострочного поля: 12+22+12+2 */
 .cap input{flex:1;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font-size:15px}
 button,select{font:inherit}
 button{padding:8px 14px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);cursor:pointer}
@@ -38,6 +42,8 @@ button.sm:hover{color:var(--tx)}
 .it{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .it input[type=checkbox]{margin-top:4px;width:17px;height:17px}
 .it .b{flex:1;min-width:0}
+.it .num{color:var(--mut);font-size:12.5px;text-decoration:none;margin-top:2px;flex-shrink:0;font-variant-numeric:tabular-nums}
+.it .num:hover{color:var(--ac)}
 .it .t{cursor:pointer;word-break:break-word} .it.done .t{text-decoration:line-through;color:var(--mut)}
 .meta{color:var(--mut);font-size:12.5px;margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
 .meta .due{color:var(--warn)}
@@ -61,25 +67,76 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
 .msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} .msg .rv{color:var(--tx);font-size:14px}
 .rv .cap{margin:8px 0 0}
-.capw{position:relative;flex:1;display:flex} .capw input{width:100%}
+.capw{position:relative;flex:1;display:flex} .capw input,.capw textarea{width:100%}
 .ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;z-index:10;overflow:hidden}
 .hero{padding-top:22vh;text-align:center}
-.hero.solo{min-height:calc(100vh - 140px);padding-top:0;display:flex;flex-direction:column;justify-content:center}
+.hero.solo{padding-top:calc(50vh - 100px)}  /* поле в центре экрана; верх зафиксирован — растёт только вниз */
 .hero h2{font-size:24px;margin-bottom:14px}
 .hero .cap{margin-bottom:10px}
-.hero .cap input{padding:16px 18px;font-size:17px;border-radius:14px}
-.hero .cap button{padding:0 22px;border-radius:14px}
+.hero .cap textarea{padding:16px 18px;font-size:17px;line-height:24px;border-radius:14px}
+.hero .cap button{padding:0 22px;border-radius:14px;height:58px}  /* 16+24+16+2 */
 .hero .hint{margin:0 0 24px}
 .ac{text-align:left}
-@media(max-width:700px){.hero{padding-top:8vh}.hero.solo{min-height:calc(100vh - 170px)}}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+.tile{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+.tile b{display:block;font-size:26px;font-variant-numeric:tabular-nums} .tile span{color:var(--mut);font-size:13px}
+.bars{display:flex;align-items:flex-end;gap:3px;height:120px;margin-top:8px}
+.bars i{flex:1;background:var(--ac);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+[hidden]{display:none !important}  /* hidden сильнее любого display из классов (.toast{display:flex} и т.п.) */
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;
+  width:min(560px,calc(100vw - 24px));background:#1f2733;color:#fff;border-radius:12px;padding:12px 14px 14px;box-shadow:0 8px 30px #0005;overflow:hidden}
+.toast .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast button{background:none;border:1px solid #fff6;color:#fff;font-weight:600;min-height:40px;padding:0 14px}
+.toast .sec{font-variant-numeric:tabular-nums;opacity:.7;min-width:2ch;text-align:right}
+.toast .bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--ac);transform-origin:left;animation:shrink linear forwards}
+@keyframes shrink{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+.seg{display:flex;gap:6px;margin-top:8px} .seg button{min-width:56px} .seg button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+/* Телефон: кнопки на карточке — сеткой под палец (≥44px), корзина отдельно справа */
+@media(max-width:700px){
+  .it .act{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .it .act.has-del{grid-template-columns:1fr 1fr 52px}
+  .it .act button.sm{min-height:44px;font-size:15px;color:var(--tx);padding:0 6px;white-space:nowrap}
+  .it .act .ar{display:none}  /* на узкой кнопке «→» лишняя — слово влезает целиком */
+  .it .act button.del{grid-column:3;grid-row:1 / span 2}
+  .it input[type=checkbox]{width:24px;height:24px}
+  .toast{bottom:12px}
+}
+.it.sel{outline:2px solid var(--ac);outline-offset:-1px}
+nav a.kb{outline:2px solid var(--ac);outline-offset:2px}  /* снаружи с зазором — видна и на синем активном */
+.draftnote{color:var(--warn);font-size:12.5px;margin-top:10px} .draftnote a{color:inherit}
+nav .keys{color:var(--mut);font-size:11.5px;line-height:1.6;margin:18px 10px 0}
+@media(max-width:700px){nav .keys{display:none}}
+.below{margin-top:56px} .below h3{font-size:17px;margin:0 0 4px} .below .hint{margin:0 0 12px}
+@media(max-width:700px){.hero{padding-top:8vh}.hero.solo{padding-top:calc(50vh - 150px)}}
 .aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:#fff}
 .aco small{opacity:.7;margin-left:6px}
-@media(max-width:700px){.app{flex-direction:column}nav{width:100%;display:flex;overflow-x:auto;gap:4px;border-right:0;border-bottom:1px solid var(--bd);padding:8px}nav h1,nav .sep{display:none}nav a{white-space:nowrap;gap:6px}}
+/* Аккаунт: одна кнопка, раскрывает «Аккаунт» и «Выйти» */
+.userbox{position:relative}
+button.user{width:100%;display:flex;align-items:center;gap:6px;border:0;background:none;padding:8px 10px;border-radius:8px;text-align:left;color:var(--tx)}
+button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.umenu a{display:block;padding:8px 10px 8px 28px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
+.umenu a:hover{background:var(--bg)}
+.topbar,.scrim{display:none}
+/* Телефон: сверху ☰ · раздел · 👤, разделы — в выезжающем слева меню */
+@media(max-width:700px){
+  .app{flex-direction:column}
+  .topbar{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--bd);padding:6px 10px}
+  .burger{border:0;background:none;padding:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--tx)}
+  .tb-title{flex:1;font-weight:600;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar .userbox{flex-shrink:0;max-width:45%} .topbar button.user{padding:0 8px;height:36px;line-height:1}
+  .topbar .umenu{position:absolute;right:0;top:100%;margin-top:6px;min-width:180px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;padding:4px}
+  .topbar .umenu a{padding-left:10px}
+  nav{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:40;overflow-y:auto;transform:translateX(-105%);transition:transform .2s;border-right:1px solid var(--bd)}
+  nav.open{transform:none;box-shadow:0 0 40px #0005}
+  nav .navfoot{display:none}
+  .scrim.open{display:block;position:fixed;inset:0;z-index:30;background:#0006}
+}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <dialog id="dlg"></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -103,23 +160,59 @@ async function load(){
   try{
     if(!S.cfgLoaded){
       S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
+      devLiveReload();
       if(!S.cfg.user) return loginScreen();
     }
     S.counts = await api('/counts');
+    if(!S.me) S.me = await api('/me');  // имя для кнопки аккаунта
     S.projects = await api('/projects');
     S.contexts = await api('/contexts');
     if(S.view==='account') S.me = await api('/me');
+    else if(S.view==='stats') S.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) S.items=[];
     else if(S.view==='projects') S.items = await api('/items?status=all&project_id='+S.pid);
     else if(S.view!=='review') S.items = await api('/items?status='+S.view);
     else S.items = await api('/items?status=all');
+    // Пустой Inbox — показываем под ним Next, чтобы было с чем работать дальше
+    S.items = S.items.filter(i => !S.pendingDel.has(i.id));
+    S.nextItems = (S.view==='inbox' && !S.items.length) ? await api('/items?status=next') : [];
+    S.nextItems = S.nextItems.filter(i => !S.pendingDel.has(i.id));
     render();
+    await openDeepLink();
   }catch(e){ if(e.message==='auth') return loginScreen(); console.error(e); }
+}
+
+// Пришли по ссылке /i/N: после входа открываем карточку. Чужой или удалённой задачи просто нет.
+async function openDeepLink(){
+  const m = location.pathname.match(/^\/i\/(\d+)$/); if(!m || S.deepDone) return;
+  S.deepDone = true;
+  const it = await api('/items/n/'+m[1]);
+  if(it && it.id) openEdit(it.id, it);
+  else { history.replaceState(null, '', '/'); const h = $('.hint'); if(h) h.textContent = `Задача #${m[1]} не найдена`; }
+}
+
+// Локально (DEV=1): страница сама обновляется, когда сервер перезапустился после правки .py
+// или поменялся static/. Набранный текст переживает обновление — он в черновиках.
+function devLiveReload(){
+  if(!S.cfg.dev || S.devWatch) return;
+  S.devWatch = true;
+  let v = null;
+  setInterval(async () => {
+    try{
+      const r = await fetch('/api/dev/version'); if(!r.ok) return;
+      const d = await r.json();
+      if(v && d.v !== v && !$('#dlg').open){  // открыта карточка — не рвём редактирование
+        return location.reload();
+      }
+      v = d.v;
+    }catch{}  // сервер перезапускается — подождём следующей попытки
+  }, 1000);
 }
 
 async function loginScreen(){
   S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
   S.view = 'inbox'; S.pid = null;
+  devLiveReload();
   const c = S.cfg, parts = [];
   if(c.google) parts.push('<div class="gbtn"></div>');
   if(c.email) parts.push(emailFormHtml('Войти по коду'));
@@ -129,6 +222,7 @@ async function loginScreen(){
     <div class="msg" id="authmsg"></div>
     ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}</div>`;
   mountGoogle();
+  gaPage();
 }
 
 // ── Вход и привязка: одни и те же кнопки; на экране приложения (есть .app) они привязывают способ к аккаунту
@@ -158,7 +252,7 @@ function mountGoogle(){
   const el = $('.gbtn'); if(!el || !S.cfg.google) return;
   const go = () => {
     google.accounts.id.initialize({client_id:S.cfg.google, callback: async ({credential}) => {
-      try{ await authPost('google', {credential, link:linking()}); load(); }catch(err){ authFail(err); }
+      try{ const lk = linking(); await authPost('google', {credential, link:lk}); ga(lk ? 'link_method' : 'login', {method:'google'}); load(); }catch(err){ authFail(err); }
     }});
     google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:'ru'});
   };
@@ -179,7 +273,8 @@ async function emailSend(){
 }
 
 async function emailVerify(){
-  try{ await authPost('email/verify', {email:S.email, code:$('#code').value.trim(), link:linking()}); load(); }
+  try{ const lk = linking(); await authPost('email/verify', {email:S.email, code:$('#code').value.trim(), link:lk});
+    ga(lk ? 'link_method' : 'login', {method:'email'}); load(); }
   catch(err){ authFail(err); }
 }
 
@@ -195,7 +290,7 @@ async function tgStart(){
 async function tgPoll(nonce){
   clearTimeout(S.tgTimer);
   const r = await fetch('/api/auth/tg/poll?nonce='+encodeURIComponent(nonce)).then(r=>r.json()).catch(()=>({status:'pending'}));
-  if(r.status==='ok') return load();
+  if(r.status==='ok'){ ga(linking() ? 'link_method' : 'login', {method:'telegram'}); return load(); }
   if(r.status==='merge') return mergeOffer(r);
   if(r.status==='expired') return authMsg('Время вышло — нажми кнопку ещё раз');
   S.tgTimer = setTimeout(()=>tgPoll(nonce), 2000);
@@ -209,13 +304,43 @@ function accountHtml(){
     ${c.email?emailFormHtml(m.email?'Сменить':'Привязать'):''}</div>
   <div class="rv"><h3>Telegram</h3>${m.tg?'✅ Привязан — бот принимает задачи и присылает напоминания'
     :c.bot?'<button data-act="tglogin">Привязать Telegram</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>':'Бот выключен'}</div>
+  <div class="rv"><h3>Настройки</h3>Сколько секунд показывать «Отменить» после действия с задачей
+    <div class="seg">${[5,10,30].map(n=>`<button class="${(m.undo_seconds||30)===n?'on':''}" data-act="undosec" data-n="${n}">${n} с</button>`).join('')}</div></div>
   <div class="msg" id="authmsg"></div>`;
 }
 
+// Статистика использования — только агрегаты (сервер не отдаёт ни задач, ни почт, ни имён)
+function statsHtml(){
+  const st = S.stats; if(!st || !st.users) return '<h2>📊 Статистика</h2><div class="empty">Нет доступа</div>';
+  const tile = (n, l) => `<div class="tile"><b>${n}</b><span>${l}</span></div>`;
+  const max = Math.max(1, ...st.daily.map(d => d.users));
+  return `<h2>📊 Статистика</h2><div class="hint">Только числа: названия задач, почты и имена сюда не попадают.</div>
+  <div class="tiles">${tile(st.users.total,'пользователей')}${tile(st.active.day,'активны сегодня')}
+    ${tile(st.active.week,'за 7 дней')}${tile(st.active.month,'за 30 дней')}</div>
+  <div class="rv"><h3>Активные по дням, 30 дней</h3><div class="bars">${st.daily.map(d =>
+    `<i style="height:${Math.round(d.users / max * 100)}%" title="${d.day}: ${d.users} чел., ${d.actions} действий"></i>`).join('')}</div></div>
+  <div class="tiles">${tile(st.users.new_7d,'новых за 7 дней')}${tile(st.users.new_30d,'новых за 30 дней')}
+    ${tile(st.tasks.created_7d,'задач за 7 дней')}${tile(st.tasks.created_30d,'задач за 30 дней')}</div>
+  <div class="rv"><h3>Каналы за 30 дней</h3>Сайт — ${st.active.web_30d} · Telegram-бот — ${st.active.telegram_30d}
+    <h3 style="margin-top:12px">Способы входа</h3>Почта — ${st.users.with_email} · Google — ${st.users.with_google} · Telegram — ${st.users.with_telegram}</div>`;
+}
+
 function navHtml(){
-  return `<nav><h1 data-view="inbox" title="На Inbox">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
+  const me = S.me || {}, who = esc(me.email || me.name || 'Аккаунт');
+  // «Аккаунт» и «Выйти» свёрнуты в одну кнопку; на телефоне она справа в верхней полосе
+  const user = `<div class="userbox"><button class="user" data-act="umenu" aria-haspopup="true">👤 <span>${who}</span> ▾</button>
+    <div class="umenu" hidden><a data-view="account">👤 Аккаунт</a><a data-act="logout">Выйти</a></div></div>`;
+  const cur = S.view==='account' ? '👤 Аккаунт' : S.view==='stats' ? '📊 Статистика' : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
+  // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается»
+  return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="Меню"><svg viewBox="0 0 24 24" width="22" height="22"
+      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <span class="tb-title">${cur}</span>${user}</div>
+    <div class="scrim" data-act="drawer"></div>
+    <nav><h1 data-view="inbox" title="На Inbox">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
-    <div class="sep"></div><a class="${S.view==='account'?'on':''}" data-view="account">👤 Аккаунт</a><a data-act="logout">Выйти</a></nav>`;
+    ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">📊 Статистика</a>`:''}
+    <div class="navfoot"><div class="sep"></div>${user}</div>
+    <div class="keys">↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс</div></nav>`;
 }
 
 function itemHtml(it){
@@ -229,22 +354,36 @@ function itemHtml(it){
     <input type="checkbox" data-act="toggle" ${it.status==='done'?'checked':''}>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?`<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`:''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
-      ${acts.length?`<div class="act">${acts.map(([s,l])=>`<button class="sm" data-act="mv" data-st="${s}">${l}</button>`).join('')}</div>`:''}
-    </div></div>`;
+      ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" data-act="mv" data-st="${s}" ${s==='trash'?'aria-label="В корзину"':''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
+    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="Задача #${it.num}">#${it.num}</a>`:''}</div>`;
 }
 
 // Стрелка, входящая в лоток: «положить во входящие»
 const ICON_INBOX = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/>
   <path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M4 14h4l1.5 2h5l1.5-2h4"/></svg>`;
-const capHtml = () => `<div class="cap"><div class="capw"><input id="cap" autocomplete="off" placeholder="Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»" autofocus>
+// Поле захвата — textarea в одну строку: длинный текст переносится, и поле растёт вниз (capFit)
+// Подсказка — самая длинная из вариантов, что целиком влезает в текущую ширину поля (capHint)
+const CAP_HINTS = ['Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»',
+  'Что сделать? «завтра в 10:00 #дом @телефон»', 'Что нужно сделать? #проект @контекст', 'Что нужно сделать?', 'Задача…'];
+function capHint(el = $('#cap')){
+  if(!el || !el.clientWidth) return;
+  const cs = getComputedStyle(el), ctx = (capHint.ctx ||= document.createElement('canvas').getContext('2d'));
+  ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
+  const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+  el.placeholder = CAP_HINTS.find(h => ctx.measureText(h).width <= room) || CAP_HINTS.at(-1);
+}
+const capHtml = () => `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${CAP_HINTS[0]}" autofocus></textarea>
     <div id="ac" class="ac" role="listbox" hidden></div></div>
   <button class="pri icon" data-act="capture" aria-label="Добавить в Inbox" title="Добавить в Inbox">${ICON_INBOX}</button></div>`;
 
 function render(){
   let body='', hero='';
+  S.items = S.items.filter(i => !S.pendingDel.has(i.id));
+  S.nextItems = (S.nextItems||[]).filter(i => !S.pendingDel.has(i.id));
   if(S.view==='review') body = reviewHtml();
   else if(S.view==='account') body = accountHtml();
+  else if(S.view==='stats') body = statsHtml();
   else if(S.view==='projects' && !S.pid) body = projectsHtml();
   else{
     let items = S.items;
@@ -257,9 +396,12 @@ function render(){
     const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
     if(S.view==='inbox'){
       // Inbox — точка входа: поле захвата по центру экрана, задачи под ним (пустой инбокс — ровно посередине)
-      hero = `<section class="hero ${items.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
+      const next = S.nextItems || [];
+      hero = `<section class="hero ${items.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
         <div class="hint">${items.length?HELP.inbox:'Inbox пуст 🎉 — запиши, что крутится в голове'}</div></section>`;
-      body = items.map(itemHtml).join('');
+      body = items.length ? items.map(itemHtml).join('')
+        : next.length ? `<section class="below"><h3>${VIEWS[1][1]}</h3><div class="hint">${HELP.next}</div>
+            ${next.map(itemHtml).join('')}</section>` : '';
     } else body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ Переименовать</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 Удалить</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2><div class="hint">${HELP[S.view]||''}</div>`}
@@ -267,6 +409,11 @@ function render(){
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
   if(S.view==='account') mountGoogle();
+  const cap = $('#cap'), t = draft.get('cap'); if(cap && t && !cap.value) cap.value = t;  // черновик поля захвата
+  capFit(cap); capHint(cap);
+  gaPage();
+  if(S.sel!=null){ S.sel = Math.min(S.sel, cards().length-1); if(S.sel<0) S.sel = null; }  // выбор переживает перерисовку
+  if(S.sel!=null || S.zone==='nav') selDraw();
 }
 
 function projectsHtml(){
@@ -294,27 +441,111 @@ function reviewHtml(){
   <div class="rv"><h3>6. Someday/Maybe</h3>Идей: <b>${c.someday||0}</b> — <a data-view="someday">просмотреть</a>. Что-то пора активировать?</div>`;
 }
 
-function openEdit(id){
-  const it = S.items.find(i=>i.id===id); if(!it) return;
+// ── Google Analytics: только раздел и обезличенные события. Сниппет сервер кладёт лишь на gtd.serbito.rs,
+// так что локально и на *.run.app ga()/gaPage() молча ничего не делают.
+function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, params); }
+function gaPage(){
+  if(typeof gtag !== 'function') return;
+  const page = S.cfg?.user === false && !$('.app') ? 'login' : (S.view || 'inbox');
+  if(S.gaPage === page) return;
+  S.gaPage = page;
+  const label = page==='login' ? 'Вход' : page==='account' ? 'Аккаунт' : page==='stats' ? 'Статистика'
+    : ((VIEWS.find(v=>v[0]===page)||[])[1] || page).replace(/^\S+\s/, '');
+  gtag('event', 'page_view', {page_location: location.origin + '/' + page, page_title: 'GTD — ' + label});
+}
+
+// ── Undo-тост: после действия с задачей — «Отменить» с обратным отсчётом (5/10/30 с из настроек).
+// Новое действие делает предыдущее окончательным. Удаление отложено до конца таймера.
+const ST_LABEL = {inbox:'Inbox', next:'Next', waiting:'Waiting', someday:'Someday', reference:'Reference', done:'Готово', trash:'Корзину'};
+let TOAST = null;
+function toast(text, {undo, commit} = {}){
+  toastEnd(true);
+  const sec = S.me?.undo_seconds || 30, el = $('#toast');
+  el.innerHTML = `<span class="tx">${esc(text)}</span>${undo?'<button data-act="undo">Отменить</button>':''}
+    <b class="sec">${sec}</b><i class="bar" style="animation-duration:${sec}s"></i>`;
+  el.hidden = false;
+  let left = sec;
+  TOAST = {undo, commit,
+    tick: setInterval(() => { left--; const b = el.querySelector('.sec'); if(b) b.textContent = Math.max(left, 0); }, 1000),
+    end: setTimeout(() => toastEnd(true), sec * 1000)};
+}
+function toastEnd(commit){
+  if(!TOAST) return null;
+  const t = TOAST; TOAST = null;
+  clearInterval(t.tick); clearTimeout(t.end); $('#toast').hidden = true;
+  if(commit) t.commit?.();
+  return t;
+}
+async function toastUndo(){ const t = toastEnd(false); if(t?.undo) await t.undo(); load(); }
+addEventListener('pagehide', () => toastEnd(true));  // закрыли вкладку — отложенное удаление всё равно выполнится
+const findItem = id => S.items.concat(S.nextItems||[]).find(i => i.id===id);
+async function moveItem(id, status){
+  const it = findItem(id); if(!it) return;
+  const prev = it.status;
+  await api('/items/'+id, 'PATCH', {status});
+  load();
+  toast(`«${it.title}» → ${ST_LABEL[status]||status}`, {undo: () => api('/items/'+id, 'PATCH', {status:prev})});
+}
+S.pendingDel = new Set();  // удалённые, но ещё не отправленные на сервер (ждут конца таймера)
+function deleteItem(id){
+  const it = findItem(id) || {title:''};
+  S.pendingDel.add(id); render();
+  toast(`«${it.title}» удалена`, {
+    undo: () => { S.pendingDel.delete(id); },
+    commit: () => { fetch('/api/items/'+id, {method:'DELETE', keepalive:true}); S.pendingDel.delete(id); }});
+}
+
+// ── Черновики: введённый, но не сохранённый текст живёт в localStorage этого браузера —
+// переживает перезагрузку, случайный Esc и закрытие вкладки. Стирается при сохранении или «Отмене».
+const draft = {
+  get(k){ try{ return JSON.parse(localStorage.getItem('gtd-draft:'+k)); }catch{ return null; } },
+  set(k, v){ try{ localStorage.setItem('gtd-draft:'+k, JSON.stringify(v)); }catch{} },
+  del(k){ try{ localStorage.removeItem('gtd-draft:'+k); }catch{} },
+};
+const ITEM_FIELDS = ['title','notes','status','project_id','context','remind'];
+
+// У каждой задачи своя ссылка /i/<номер>: открытая карточка отражается в адресе, закрыли — вернулись на /
+const itemLink = it => `${location.origin}/i/${it.num}`;
+function openEdit(id, found){
+  const it = found || S.items.concat(S.nextItems||[]).find(i=>i.id===id); if(!it) return;
   const d = $('#dlg');
-  d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px">Редактирование</h3>
-    <label>Название</label><input name="title" value="${esc(it.title)}" required>
+  history.replaceState(null, '', `/i/${it.num}`);
+  d.onclose = () => { if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };
+  d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px">Задача #${it.num}
+      <button type="button" class="sm" data-act="copylink" aria-label="Скопировать ссылку" title="Скопировать ссылку: ${esc(itemLink(it))}">🔗</button></h3>
+    <label>Название</label><input name="title" value="${esc(it.title)}" required autofocus>
     <label>Заметки</label><textarea name="notes" rows="3">${esc(it.notes)}</textarea>
     <label>Список</label><select name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option ${s===it.status?'selected':''}>${s}</option>`).join('')}</select>
     <label>Проект</label><select name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
     <label>Контекст (@)</label><input name="context" value="${esc(it.context||'')}" placeholder="работа, дом, телефон…">
     <label>Напомнить</label><input type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
+    <div class="draftnote" hidden>Восстановлен несохранённый черновик · <a href="#" data-act="dropdraft">сбросить</a></div>
     <div class="row"><button type="button" data-act="del" style="color:#d33">Удалить</button><span><button type="button" data-act="cancel">Отмена</button> <button class="pri" value="ok">Сохранить</button></span></div></form>`;
+  const form = $('#ef'), key = 'item:'+it.id, saved = draft.get(key);
+  if(saved){
+    ITEM_FIELDS.forEach(k => { if(k in saved && form.elements[k]) form.elements[k].value = saved[k]; });
+    form.querySelector('.draftnote').hidden = false;
+  }
+  const keep = () => draft.set(key, Object.fromEntries(ITEM_FIELDS.map(k => [k, form.elements[k].value])));
+  form.addEventListener('input', keep); form.addEventListener('change', keep);
+  form.querySelector('[data-act=dropdraft]').onclick = e => { e.preventDefault(); draft.del(key); openEdit(id, it); };
   d.showModal();
   $('#ef').onsubmit = async e => {
+    draft.del(key);
     const f = new FormData(e.target);
     await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
       project_id:f.get('project_id')?+f.get('project_id'):null, context:f.get('context'),
       remind_at:f.get('remind')?Math.floor(new Date(f.get('remind')).getTime()/1000):null});
     load();
   };
-  d.querySelector('[data-act=cancel]').onclick = () => d.close();
-  d.querySelector('[data-act=del]').onclick = async () => { if(confirm('Удалить задачу?')){ await api('/items/'+id,'DELETE'); d.close(); load(); } };
+  d.querySelector('[data-act=cancel]').onclick = () => { draft.del(key); d.close(); };  // «Отмена» — осознанно выбросить
+  d.querySelector('[data-act=copylink]').onclick = async e => {
+    const b = e.currentTarget;
+    try{ await navigator.clipboard.writeText(itemLink(it)); b.textContent = '✓'; setTimeout(() => b.textContent = '🔗', 1200); }
+    catch{ prompt('Ссылка на задачу', itemLink(it)); }
+  };
+  // Без confirm: удаление отменяется из тоста «Отменить»
+  d.querySelector('[data-act=del]').onclick = () => { draft.del(key); d.close(); deleteItem(id); };
 }
 
 // ── Проекты: переименование и удаление (с задачами или только снять проект с задач)
@@ -360,7 +591,8 @@ function openDeleteProject(pid){
 
 async function capture(){
   const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
-  inp.value=''; acClose(); await api('/capture','POST',{text:v});
+  inp.value=''; acClose(); draft.del('cap'); await api('/capture','POST',{text:v});
+  ga('task_capture', {channel:'web'});  // только факт — текст задачи в GA не уходит
   await load(); $('#cap')?.focus();  // записываем подряд, не кликая в поле снова
 }
 
@@ -397,37 +629,120 @@ function acPick(k){
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return;
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
+  if(act==='drawer'){ const open = !$('nav').classList.contains('open');
+    $('nav').classList.toggle('open', open); $('.scrim').classList.toggle('open', open); return; }
+  if(act==='umenu'){ const m = el.parentElement.querySelector('.umenu'); m.hidden = !m.hidden; return; }
   if(act==='capture') return capture();
   if(act==='emailsend') return emailSend();
   if(act==='emailverify') return emailVerify();
   if(act==='tglogin') return tgStart();
   if(act==='merge') return mergeApply(el.dataset.token);
   if(act==='nomerge') return authMsg('');
-  if(act==='edit') return openEdit(id);
-  if(act==='mv'){ await api('/items/'+id,'PATCH',{status:el.dataset.st}); return load(); }
-  if(act==='logout'){ await api('/logout','POST'); return loginScreen(); }
+  if(act==='edit'){ e.preventDefault(); return openEdit(id); }  // номер — ссылка /i/N: ⌘-клик откроет вкладку
+  if(act==='mv') return moveItem(id, el.dataset.st);
+  if(act==='undo') return toastUndo();
+  if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
+  if(act==='logout'){ await api('/logout','POST'); S.me = null; return loginScreen(); }
   if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
   if(act==='back'){ e.preventDefault(); S.pid=null; return load(); }
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
-  if(el.dataset.view){ S.view=el.dataset.view; S.ctx=null; S.pid=el.dataset.pid?+el.dataset.pid:null; return load(); }
+  if(el.dataset.view){ S.view=el.dataset.view; S.ctx=null; S.sel=null; S.zone='main'; S.pid=el.dataset.pid?+el.dataset.pid:null; return load(); }
   if(el.dataset.pid && el.classList.contains('pj')){ S.pid=+el.dataset.pid; return load(); }
 });
 document.addEventListener('change', async e => {
   if(e.target.dataset.act==='toggle'){
     const id = +e.target.closest('.it').dataset.id;
-    await api('/items/'+id,'PATCH',{status:e.target.checked?'done':'next'}); load();
+    await moveItem(id, e.target.checked ? 'done' : 'next');
   }
 });
-document.addEventListener('input', e => { if(e.target.id==='cap') acUpdate(e.target); });
+// Высота поля захвата по содержимому; переносы строк (вставка) → пробелы: задача — одна строка
+function capFit(el = $('#cap')){
+  if(!el) return;
+  if(/[\r\n]/.test(el.value)){ const p = el.selectionStart; el.value = el.value.replace(/[\r\n]+/g, ' '); el.setSelectionRange(p, p); }
+  if(!el.value){ el.style.height = ''; return; }  // пустое — одна строка (иначе браузер меряет перенос подсказки)
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 2 + 'px';  // +2 — рамка (box-sizing: border-box)
+}
+addEventListener('resize', () => { capFit(); capHint(); });
+document.addEventListener('input', e => {
+  if(e.target.id!=='cap') return;
+  capFit(e.target);
+  acUpdate(e.target);
+  e.target.value ? draft.set('cap', e.target.value) : draft.del('cap');  // недописанная задача не потеряется
+});
+// Ушли в поле или кликнули мышью мимо меню — выходим из режима меню
+const leaveMenu = () => { if(S.zone==='nav'){ S.zone = 'main'; selDraw(); } };
+document.addEventListener('focusin', e => { if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) leaveMenu(); });
+document.addEventListener('mousedown', e => {
+  if(!e.target.closest('nav')) leaveMenu();
+  if(!e.target.closest('.userbox')) document.querySelectorAll('.umenu').forEach(m => m.hidden = true);
+});
+const closeDrawer = () => { $('nav')?.classList.remove('open'); $('.scrim')?.classList.remove('open'); };
 // mousedown, а не click: клик по подсказке не должен уводить фокус из поля
 document.addEventListener('mousedown', e => {
   const o = e.target.closest('[data-ac]');
   if(o){ e.preventDefault(); acPick(+o.dataset.ac); }
   else if(!e.target.closest('.capw')) acClose();
 });
+// ── Навигация с клавиатуры. Список: ↑↓ — карточки, Enter — открыть, ← — в меню, Esc — снять выбор.
+// Меню: ↑↓ — пункты, Enter — открыть раздел, → / Esc — обратно к списку.
+// Пока печатаешь в поле, открыта карточка или подсказки @/# — стрелки не трогаем.
+const cards = () => [...document.querySelectorAll('main .it')];
+const menu = () => [...document.querySelectorAll('nav > a[data-view]')];  // без «Выйти»: случайный Enter не разлогинит
+function selDraw(){
+  const list = cards();
+  list.forEach((c, i) => c.classList.toggle('sel', S.zone!=='nav' && i===S.sel));
+  if(S.zone!=='nav') list[S.sel]?.scrollIntoView({block:'nearest'});
+  menu().forEach((a, i) => a.classList.toggle('kb', S.zone==='nav' && i===S.navSel));
+}
+function toMenu(){
+  S.zone = 'nav';
+  const i = menu().findIndex(a => a.dataset.view===S.view && !a.dataset.pid);
+  S.navSel = i < 0 ? 0 : i;
+}
+function navKey(e){
+  if($('#dlg').open || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return false;
+  const list = cards();
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){
+    if(e.target.id!=='cap' || AC.items.length) return false;
+    const atEnd = e.target.selectionStart === e.target.value.length;  // иначе ↓ ходит по строкам поля
+    if(e.key==='ArrowDown' && list.length && atEnd){ e.preventDefault(); e.target.blur(); S.zone = 'main'; S.sel = 0; selDraw(); return true; }
+    if(e.key==='ArrowLeft' && !e.target.value){ e.preventDefault(); e.target.blur(); toMenu(); selDraw(); return true; }
+    return false;
+  }
+  if(S.zone==='nav'){
+    const items = menu();
+    if(e.key==='ArrowDown') S.navSel = Math.min(S.navSel+1, items.length-1);
+    else if(e.key==='ArrowUp') S.navSel = Math.max(S.navSel-1, 0);
+    else if(e.key==='Enter' && items[S.navSel]){
+      const i = S.navSel; e.preventDefault(); S.sel = null;
+      items[i].click(); S.zone = 'nav'; S.navSel = i; selDraw(); return true;  // открыть раздел, остаться в меню
+    }
+    else if(e.key==='ArrowRight'){  // в основное окно — на первую карточку, а если их нет — в поле захвата
+      S.zone = 'main';
+      if(cards().length) S.sel = 0; else { S.sel = null; $('#cap')?.focus(); }
+    }
+    else if(e.key==='Escape') S.zone = 'main';  // Esc — вернуться к прежнему выбору
+    else return false;
+    e.preventDefault(); selDraw(); return true;
+  }
+  if(e.key==='ArrowDown' && list.length) S.sel = S.sel==null ? 0 : Math.min(S.sel+1, list.length-1);
+  else if(e.key==='ArrowUp' && S.sel!=null){
+    if(S.sel===0){ S.sel = null; $('#cap')?.focus(); } else S.sel--;
+  }
+  else if(e.key==='Enter' && S.sel!=null && list[S.sel]){
+    const c = list[S.sel]; e.preventDefault();
+    return c.dataset.id ? (openEdit(+c.dataset.id), true) : (c.click(), true);  // задача или проект
+  }
+  else if(e.key==='ArrowLeft') toMenu();
+  else if(e.key==='Escape' && S.sel!=null) S.sel = null;
+  else return false;
+  e.preventDefault(); selDraw(); return true;
+}
+
 document.addEventListener('keydown', e => {
   if(e.target.id==='cap' && AC.items.length){
     if(e.key==='ArrowDown' || e.key==='ArrowUp'){
@@ -436,8 +751,10 @@ document.addEventListener('keydown', e => {
     if(e.key==='Enter' || e.key==='Tab'){ e.preventDefault(); return acPick(AC.i); }
     if(e.key==='Escape') return acClose();
   }
+  if(e.key==='Escape' && $('nav.open')) return closeDrawer();
+  if(navKey(e)) return;
   if(e.key!=='Enter') return;
-  if(e.target.id==='cap') capture();
+  if(e.target.id==='cap'){ e.preventDefault(); capture(); }  // Enter — добавить, а не перенос строки
   if(e.target.id==='np') document.querySelector('[data-act=newproj]').click();
   if(e.target.id==='em') emailSend();
   if(e.target.id==='code') emailVerify();

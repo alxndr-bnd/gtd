@@ -22,7 +22,8 @@ def test_capture_from_telegram(tg):
     it = A.row("select * from items")
     assert (it["title"], it["status"], it["context"], it["source"]) == ("позвонить маме", "next", "телефон", "telegram")
     method, p = tg[-1]
-    assert p["text"].startswith(f"✓ Next #{it['id']}: позвонить маме")
+    assert p["text"].startswith(f'✓ Next <a href="http://localhost:8000/i/{it["num"]}">#{it["num"]}</a>: позвонить маме')
+    assert p["parse_mode"] == "HTML" and p["link_preview_options"] == {"is_disabled": True}
     assert [b["callback_data"] for b in p["reply_markup"]["inline_keyboard"][0]] == \
            [f"done:{it['id']}", f"snz:{it['id']}", f"next:{it['id']}"]
 
@@ -44,15 +45,21 @@ def test_inbox_and_next_lists(tg):
     assert texts(tg)[-1] == "INBOX:\nПусто 🎉"
 
 
-def test_done_command(tg):
+def test_done_command_names_the_task(tg):
     bot_message("задача")
-    iid = A.row("select id from items")["id"]
+    num = A.row("select num from items")["num"]
     bot_message("/done abc")
     assert texts(tg)[-1] == "Использование: /done 12"
-    bot_message(f"/done #{iid + 100}")
+    bot_message(f"/done #{num + 100}")
     assert texts(tg)[-1] == "Не нашёл такую задачу"
-    bot_message(f"/done {iid}")
-    assert texts(tg)[-1] == "✅ Готово" and A.row("select status from items")["status"] == "done"
+    bot_message(f"/done {num}")
+    assert texts(tg)[-1] == f'✅ Готово: <a href="http://localhost:8000/i/{num}">#{num}</a> задача'
+    assert A.row("select status from items")["status"] == "done"
+
+
+def test_bot_escapes_html_in_titles(tg):
+    bot_message("сравнить <b>a</b> & b")
+    assert "сравнить &lt;b&gt;a&lt;/b&gt; &amp; b" in texts(tg)[-1]
 
 
 def test_unknown_command_shows_help(tg):
@@ -106,7 +113,8 @@ def test_reminders_sent_once(tg):
     A.run("update items set status='done' where title='уже сделано'")
     tg.clear()
     asyncio.run(A.send_due_reminders())
-    assert texts(tg) == ["⏰ полить цветы"]
+    num = A.row("select num from items where title='полить цветы'")["num"]
+    assert texts(tg) == [f'⏰ <a href="http://localhost:8000/i/{num}">#{num}</a> полить цветы']
     asyncio.run(A.send_due_reminders())
     assert len(texts(tg)) == 1
 
@@ -129,29 +137,39 @@ def test_email_command_without_address_asks_for_it(tg, mail):
     assert mail[-1][0] == "tom@example.com"
 
 
-def test_start_shows_buttons(tg):
+def test_start_shows_inline_buttons(tg):
     bot_message("/start")
-    kb = tg[-1][1]["reply_markup"]["keyboard"]
-    assert [b["text"] for b in kb[0]] == [A.BTN_START, A.BTN_EMAIL]
-    bot_message(A.BTN_START)
-    assert "GTD-бот готов" in texts(tg)[-1] and A.row("select count(*) n from items")["n"] == 0
+    markup = tg[-1][1]["reply_markup"]
+    assert "keyboard" not in markup  # никакой постоянной клавиатуры под полем ввода
+    assert [(b["text"], b["callback_data"]) for b in markup["inline_keyboard"][0]] == \
+           [(A.BTN_START, "help"), (A.BTN_EMAIL, "addemail")]
+    bot_callback("help")
+    assert "/inbox" in texts(tg)[-1] and A.row("select count(*) n from items")["n"] == 0
 
 
 def test_add_email_button_flow(tg, mail):
-    bot_message(A.BTN_EMAIL)
+    bot_callback("addemail")
     assert "Пришли адрес почты" in texts(tg)[-1]
     bot_message("tom@example.com")
     assert "Код отправлен на tom@example.com" in texts(tg)[-1]
     bot_message(last_code(mail))
     assert "привязана" in texts(tg)[-1]
     assert A.row("select email from users where tg_id=777")["email"] == "tom@example.com"
-    bot_message(A.BTN_EMAIL)  # уже привязана — предлагаем сменить
+    bot_callback("addemail")  # уже привязана — предлагаем сменить
     assert "Сейчас привязана tom@example.com" in texts(tg)[-1]
-    assert A.row("select count(*) n from items")["n"] == 0  # кнопки не превращаются в задачи
+    assert A.row("select count(*) n from items")["n"] == 0
+
+
+def test_old_keyboard_buttons_answer_and_remove_keyboard(tg):
+    bot_message(A.BTN_START)  # у старых пользователей клавиатура ещё на экране
+    assert tg[-1][1]["reply_markup"] == {"remove_keyboard": True} and "GTD-бот готов" in texts(tg)[-1]
+    bot_message(A.BTN_EMAIL)
+    assert tg[-1][1]["reply_markup"] == {"remove_keyboard": True} and "Пришли адрес почты" in texts(tg)[-1]
+    assert A.row("select count(*) n from items")["n"] == 0  # нажатия не стали задачами
 
 
 def test_waiting_for_email_but_got_a_task(tg, mail):
-    bot_message(A.BTN_EMAIL)
+    bot_callback("addemail")
     bot_message("купить хлеб")  # передумал — это обычная задача
     assert A.row("select title from items")["title"] == "купить хлеб" and mail == []
     assert A.row("select count(*) n from tg_email_links")["n"] == 0

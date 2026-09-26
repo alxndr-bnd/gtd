@@ -4,20 +4,26 @@
 
 ## Локальный запуск
 Один раз: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`,
-`cp .env.example .env` (пароль в `DATABASE_URL` — только для запуска на боевой базе), `createdb gtd`.
-
-Для быстрых итераций — локальная база, автоперезагрузка на каждую правку:
+`cp .env.example .env`, `createdb gtd`. Дальше — локальная база, автоперезагрузка на каждую правку:
 ```bash
-DATABASE_URL=postgresql://localhost/gtd .venv/bin/uvicorn app:app --reload --reload-exclude .venv --env-file .env
+.venv/bin/uvicorn app:app --reload --reload-exclude .venv --env-file .env
 ```
-На **боевой** базе — та же команда без `DATABASE_URL=…`: берётся из `.env`, напрямую по публичному IP
-`serbitodb`. Работает, пока твой IP в Authorized networks инстанса (сейчас там `home`). Сменился IP —
-добавить новый (`gcloud sql instances patch` перезаписывает весь список!) или поднять
+`.env` по умолчанию смотрит в **локальную** базу: локальный сервер накатывает схему при старте, и
+неопубликованный код не должен менять прод (так 2026-09-25 в боевую базу уехали колонки до релиза
+и уронили запрос у работающей ревизии — Sentry GTD-1). На боевую — только явно:
+```bash
+DATABASE_URL="$(sed -n 's/^DATABASE_URL_PROD=//p' .env)" .venv/bin/uvicorn app:app --env-file .env
+```
+Работает, пока твой IP в Authorized networks `serbitodb` (сейчас там `home`). Сменился IP — добавить
+новый (`gcloud sql instances patch` перезаписывает весь список!) или поднять
 `cloud-sql-proxy serbito:europe-west1:serbitodb --port 5433 --gcloud-auth` и ходить на `127.0.0.1:5433`.
 
 С `DEV=1` на экране входа есть кнопка Dev login (первый пользователь), а без `SMTP_PASSWORD`
 код входа по почте пишется в лог сервера вместо письма.
 `--reload-exclude .venv` обязателен: без него watcher видит `.venv` и сервер перезапускается по кругу.
+С `DEV=1` работает live reload: правка `.py` перезапускает сервер, правка `static/` — нет, но в обоих
+случаях открытая страница сама обновляется за ~1 с (опрашивает `/api/dev/version`); набранный в поле
+захвата текст сохраняется, открытая карточка задачи обновление откладывает.
 
 ## Тесты
 ```bash
@@ -92,6 +98,17 @@ Inbox · Next (фильтр по @контексту) · Waiting · Календ
 
 ## Дальше (идеи)
 Голосовые → текст, повторяющиеся задачи, вебхук вместо long polling, экспорт/импорт.
+
+## Аналитика
+Никакого содержимого наружу: ни названий задач, ни текстов, ни почт, ни `user_id`.
+- **«📊 Статистика»** в приложении — только владельцу (`ADMIN_USER_IDS` в `.github/deploy.env.yaml`,
+  id аккаунта, не почта): пользователи, DAU/WAU/MAU, каналы (сайт/бот), способы входа, задачи — всё
+  агрегатами из таблицы `activity` (пользователь × день × канал → число действий).
+- **Google Analytics 4** — аккаунт Serbito → ресурс `gtd.serbito.rs` (`G-CP9WBRWGD6`, `GA_MEASUREMENT_ID`).
+  Тег только на боевом домене; enhanced measurement выключен; страницы — только раздел (`/inbox`,
+  `/next`…, ссылка `/i/N` уходит как `/inbox`), события `login`/`link_method` (method) и `task_capture`.
+- **Cloudflare Web Analytics** — визиты, без cookies.
+- **Sentry** — без локальных переменных, тел запросов и `httpx`-крошек; токен бота вычищается.
 
 ## Лицензия
 [MIT](LICENSE) © 2026 Alexander Bondarchuk: права у автора, использовать, менять и распространять —
