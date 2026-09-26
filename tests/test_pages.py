@@ -1,4 +1,4 @@
-"""Публичные страницы: лендинг, «Как это работает», SEO-теги, robots.txt, sitemap.xml, noindex для /i/N."""
+"""Публичные страницы: лендинг, «Как это работает», политика конфиденциальности, SEO-теги, robots.txt, sitemap.xml, noindex для /i/N."""
 import json
 import os
 import re
@@ -10,7 +10,7 @@ import app as A
 import pages as P
 
 BASE = "http://localhost:8000"
-PUBLIC = {"/": "ru", "/about": "ru", "/en/": "en", "/en/about": "en"}
+PUBLIC = {"/": "ru", "/about": "ru", "/en/": "en", "/en/about": "en", "/privacy": "ru", "/en/privacy": "en"}
 TM = {"ru": "GTD® и Getting Things Done® — товарные знаки David Allen Company. Сервис независимый и не связан с автором метода",
       "en": "GTD® and Getting Things Done® are trademarks of the David Allen Company"}
 
@@ -27,14 +27,15 @@ def test_public_page_seo_tags(client, path, lang):
     h = r.text
     assert f'<html lang="{lang}">' in h and h.count("<title>") == 1
     title = re.search(r"<title>([^<]+)</title>", h).group(1)
-    assert "Getting Things Done" in title and title == meta(h, "og:title")
+    assert title == meta(h, "og:title") and ("Getting Things Done" in title or "privacy" in path)
     assert meta(h, "description") and meta(h, "og:description") == meta(h, "description")
     assert f'<link rel="canonical" href="{BASE}{path}">' in h and meta(h, "og:url") == BASE + path
     assert meta(h, "og:site_name") and meta(h, "og:locale") == ("ru_RU" if lang == "ru" else "en_US")
     assert meta(h, "og:image") == BASE + ("/og.png" if lang == "ru" else "/og-en.png")
     assert meta(h, "twitter:card") == "summary_large_image"
     # hreflang — пары ru/en и x-default на русскую версию
-    pair = {"/": ("/", "/en/"), "/en/": ("/", "/en/"), "/about": ("/about", "/en/about"), "/en/about": ("/about", "/en/about")}[path]
+    pair = {"/": ("/", "/en/"), "/en/": ("/", "/en/"), "/about": ("/about", "/en/about"), "/en/about": ("/about", "/en/about"),
+            "/privacy": ("/privacy", "/en/privacy"), "/en/privacy": ("/privacy", "/en/privacy")}[path]
     for hl, p in (("ru", pair[0]), ("en", pair[1]), ("x-default", pair[0])):
         assert f'<link rel="alternate" hreflang="{hl}" href="{BASE}{p}">' in h
     ld = json.loads(re.search(r'<script type="application/ld\+json">(.+?)</script>', h).group(1))
@@ -48,6 +49,10 @@ def test_public_page_seo_tags(client, path, lang):
         assert (ru if lang == "ru" else en) in h
     assert 'href="https://www.linkedin.com/company/nohandoff/">No Handoff</a>' in h
     assert ("Сделано" if lang == "ru" else "Made by") in h
+    # и ссылка на политику конфиденциальности своего языка
+    priv = "/privacy" if lang == "ru" else "/en/privacy"
+    foot = h[h.index("<footer>"):h.index("</footer>")]
+    assert f'<a href="{priv}">{"Конфиденциальность" if lang == "ru" else "Privacy"}</a>' in foot
 
 
 def test_seo_search_words(client):
@@ -94,6 +99,39 @@ def test_about_content(client):
     assert "function loginScreen" not in ru  # лёгкая страница, без JS приложения
 
 
+@pytest.mark.parametrize("path, words", [
+    ("/privacy", ["Политика конфиденциальности", "Что мы храним", "Аналитика", "Кто обрабатывает данные",
+                  "Сколько храним", "Удаление аккаунта", "Контакты", "No Handoff", "Google Analytics 4",
+                  "Cloudflare Web Analytics", "Brevo", "Sentry", "europe-west1", "в течение 30 дней", "<code>sid</code>"]),
+    ("/en/privacy", ["Privacy policy", "What we store", "Analytics", "Who processes data", "How long we keep data",
+                     "Deleting your account", "Contact", "No Handoff", "Google Analytics 4", "Cloudflare Web Analytics",
+                     "Brevo", "Sentry", "europe-west1", "within 30 days", "<code>sid</code>"]),
+])
+def test_privacy_content(client, path, words):
+    h = client.get(path).text
+    for w in words:
+        assert w in h, w
+    # почта для запросов о данных — ссылкой mailto на самой политике, и больше ни на одной странице
+    assert f'<a href="mailto:{P.PRIVACY_EMAIL}">{P.PRIVACY_EMAIL}</a>' in h
+    for other in ("/", "/en/", "/about", "/en/about"):
+        assert P.PRIVACY_EMAIL not in client.get(other).text, other
+    assert "function loginScreen" not in h and "{email}" not in h and "{date}" not in h
+
+
+@pytest.mark.parametrize("path, link", [("/", "/privacy"), ("/en/", "/en/privacy")])
+def test_landing_links_privacy_near_signin(client, path, link):
+    h = client.get(path).text
+    card = h[h.index('<div class="card signin">'):h.index("<footer>")]
+    assert f'href="{link}"' in card
+
+
+def test_privacy_ga_only_on_prod(client, monkeypatch):
+    monkeypatch.setattr(A, "GA_ID", "G-TEST123")
+    assert "googletagmanager" not in client.get("/privacy").text
+    prod = client.get("/en/privacy", headers={"host": "gtd.serbito.rs"}).text
+    assert "gtag/js?id=G-TEST123" in prod and "location.origin + '/en/privacy'" in prod
+
+
 def test_about_ga_event_only_on_prod(client, monkeypatch):
     monkeypatch.setattr(A, "GA_ID", "G-TEST123")
     assert "googletagmanager" not in client.get("/about").text
@@ -110,11 +148,11 @@ def test_open_source_links(client, path, lang):
     foot = h[h.index("<footer>"):h.index("</footer>")]
     assert f'{P.T[lang]["oss"]} · <a href="{P.REPO_URL}">GitHub</a>' in foot
     assert ("Открытый код (MIT)" if lang == "ru" else "Open source (MIT)") in foot
-    assert "mailto:" not in h  # контактной почты нет, пока владелец не выбрал адрес
+    assert "mailto:" not in foot  # контактной почты в подвале нет; адрес для запросов о данных — только на /privacy
     if path in ("/", "/en/"):
         root = h[h.index('<div id="root">'):h.index("<footer>")]
         assert f'<p class="note">{P.T[lang]["oss_note"]} · <a href="{P.REPO_URL}">GitHub</a></p>' in root
-    else:
+    elif path.endswith("/about"):
         body = h[:h.index("<footer>")]
         assert ("<h2>Открытый код</h2>" if lang == "ru" else "<h2>Open source</h2>") in body
         assert f'href="{P.REPO_URL}"' in body and f'href="{P.SELF_HOST_URL}"' in body
@@ -138,7 +176,7 @@ def test_robots(client):
     r = client.get("/robots.txt")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
     lines = r.text.splitlines()
-    for p in ("/", "/about", "/en/"):
+    for p in ("/", "/about", "/privacy", "/en/"):
         assert f"Allow: {p}" in lines
     for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/", "/i/"):
         assert f"Disallow: {p}" in lines
