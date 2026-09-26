@@ -49,11 +49,14 @@ Or with Docker: `DEV=1 docker compose up --build` — see [self-hosting](docs/se
 ## Tests
 
 ```bash
+.venv/bin/playwright install chromium   # once: the browser for the SPA smoke test
 .venv/bin/python -m pytest
 ```
 
 A temporary database in the local Postgres (`brew services start postgresql@17`, or `TEST_PG_URL`) is created
-and dropped automatically; Telegram, Google and email are stubbed. The release script runs them before tagging.
+and dropped automatically; Telegram, Google and email are stubbed. `tests/test_browser_smoke.py` opens every
+section of the app and the public pages in headless Chromium and fails on any JS error. The release script runs
+the tests before tagging.
 
 ## Deploy
 
