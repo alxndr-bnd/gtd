@@ -1,5 +1,6 @@
 """Публичные страницы: лендинг, «Как это работает», SEO-теги, robots.txt, sitemap.xml, noindex для /i/N."""
 import json
+import os
 import re
 import xml.etree.ElementTree as ET
 
@@ -99,6 +100,31 @@ def test_about_ga_event_only_on_prod(client, monkeypatch):
     prod = client.get("/about", headers={"host": "gtd.serbito.rs"}).text
     assert "gtag/js?id=G-TEST123" in prod and "ga('about_view'" in prod
     assert "ga('about_view', {language: 'en'})" in client.get("/en/about", headers={"host": "gtd.serbito.rs"}).text
+
+
+@pytest.mark.parametrize("path, lang", PUBLIC.items())
+def test_open_source_links(client, path, lang):
+    """SERBITO-291: код открыт — ссылка на репозиторий в подвале каждой публичной страницы,
+    на лендинге — строка под текстом, на /about — раздел со ссылкой на инструкцию по self-hosting."""
+    h = client.get(path).text
+    foot = h[h.index("<footer>"):h.index("</footer>")]
+    assert f'{P.T[lang]["oss"]} · <a href="{P.REPO_URL}">GitHub</a>' in foot
+    assert ("Открытый код (MIT)" if lang == "ru" else "Open source (MIT)") in foot
+    assert "mailto:" not in h  # контактной почты нет, пока владелец не выбрал адрес
+    if path in ("/", "/en/"):
+        root = h[h.index('<div id="root">'):h.index("<footer>")]
+        assert f'<p class="note">{P.T[lang]["oss_note"]} · <a href="{P.REPO_URL}">GitHub</a></p>' in root
+    else:
+        body = h[:h.index("<footer>")]
+        assert ("<h2>Открытый код</h2>" if lang == "ru" else "<h2>Open source</h2>") in body
+        assert f'href="{P.REPO_URL}"' in body and f'href="{P.SELF_HOST_URL}"' in body
+    assert P.REPO_URL == "https://github.com/alxndr-bnd/gtd"
+    assert P.SELF_HOST_URL == P.REPO_URL + "/blob/main/docs/self-host.md"
+
+
+def test_self_host_doc_exists():
+    """Ссылка с /about ведёт на файл, который лежит в репозитории."""
+    assert os.path.isfile(os.path.join(os.path.dirname(P.__file__), "docs", "self-host.md"))
 
 
 def test_app_menu_links_to_about():

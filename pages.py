@@ -6,6 +6,11 @@ import json
 BOT_URL = "https://t.me/gtdsrbot"
 GTD_SITE = "https://gettingthingsdone.com"
 NOHANDOFF_URL = "https://www.linkedin.com/company/nohandoff/"
+# Код открыт под MIT (SERBITO-291): ссылка — в подвале, на лендинге и на /about
+REPO_URL = "https://github.com/alxndr-bnd/gtd"
+SELF_HOST_URL = REPO_URL + "/blob/main/docs/self-host.md"
+# Контактная почта в подвале. Пусто — строки нет: владелец ещё не выбрал адрес
+CONTACT_EMAIL = ""
 SITE_NAME = "GTD"
 BRAND = "#0F766E"  # бирюзовый из логотипа «Входящие»; он же --ac светлой темы в index.html
 
@@ -61,6 +66,7 @@ T = {
         "og_alt": "GTD — Записал → Разобрал → Сделал. Бесплатно, на сайте и в Telegram",
         "locale": "ru_RU", "how": "Как это работает", "other_lang": "English", "open": "Открыть GTD",
         "other": "Другие проекты", "made": "Сделано",
+        "oss": "Открытый код (MIT)", "oss_note": "Бесплатно и с открытым кодом (MIT)",
         "tm": "GTD® и Getting Things Done® — товарные знаки David Allen Company. "
               "Сервис независимый и не связан с автором метода.",
     },
@@ -74,6 +80,7 @@ T = {
         "og_alt": "GTD — Capture → Clarify → Do. Free, on the web and in Telegram",
         "locale": "en_US", "how": "How it works", "other_lang": "Русский", "open": "Open GTD",
         "other": "Other projects", "made": "Made by",
+        "oss": "Open source (MIT)", "oss_note": "Free and open source (MIT)",
         "tm": "GTD® and Getting Things Done® are trademarks of the David Allen Company. "
               "This service is independent and not affiliated with the author of the method.",
     },
@@ -170,10 +177,12 @@ def topbar(lang: str, page: str) -> str:
 
 
 def footer(lang: str) -> str:
-    """Другие проекты No Handoff, подпись и оговорка о товарном знаке — на всех публичных страницах."""
+    """Другие проекты No Handoff, открытый код, подпись и оговорка о товарном знаке — на всех публичных страницах."""
     t, i = T[lang], 2 if lang == "ru" else 3
     items = "".join(f'<li><a href="{p[1]}{FOOTER_UTM}">{p[0]}</a> — {p[i]}</li>' for p in PRODUCTS)
+    contact = f' · <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>' if CONTACT_EMAIL else ""
     return (f'<footer><b>{t["other"]}</b><ul>{items}</ul>'
+            f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{contact}</p>'
             f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a></p>'
             f'<p>{t["tm"]} <a href="{GTD_SITE}">gettingthingsdone.com</a></p></footer>')
 
@@ -223,7 +232,8 @@ sign in on the site with Telegram or link the bot under “Account”.</p>
 def landing(lang: str) -> str:
     """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin."""
     h, hint = LANDING_SIGNIN[lang]
-    return (f'<div class="pub">{topbar(lang, "home")}<div class="intro"><div>{LANDING[lang]}</div>'
+    oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
+    return (f'<div class="pub">{topbar(lang, "home")}<div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
             f'<div id="signin"></div></div></div>{LANDING_STEPS[lang]}{footer(lang)}</div>')
 
@@ -313,6 +323,17 @@ INSTALL = {
 on Android, the ⋮ menu → Install app.</p>""",
 }
 
+# Раздел /about про открытый код; инструкция по self-hosting — только на английском
+OSS = {
+    "ru": f"""<h2>Открытый код</h2>
+<p>GTD — открытый проект под лицензией MIT: код и история изменений — на <a href="{REPO_URL}">GitHub</a>.
+Можно посмотреть, как всё устроено, предложить правку или поднять свою копию —
+<a href="{SELF_HOST_URL}">инструкция по self-hosting</a> (на английском).</p>""",
+    "en": f"""<h2>Open source</h2>
+<p>GTD is open source under the MIT license: the code and its history are on <a href="{REPO_URL}">GitHub</a>.
+Read how it works, suggest a fix, or run your own copy — see the <a href="{SELF_HOST_URL}">self-hosting guide</a>.</p>""",
+}
+
 
 def about(base: str, lang: str, ga: str) -> str:
     """Страница «Как это работает». ga — GA-сниппет (только на боевом домене) или пусто."""
@@ -333,7 +354,7 @@ def about(base: str, lang: str, ga: str) -> str:
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "about")}{ABOUT[lang]}{INSTALL[lang]}{footer(lang)}</div>
+<div class="pub">{topbar(lang, "about")}{ABOUT[lang]}{OSS[lang]}{INSTALL[lang]}{footer(lang)}</div>
 {track}
 </body>
 </html>"""
