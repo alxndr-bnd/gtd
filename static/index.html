@@ -613,7 +613,7 @@ function render(){
     } else body = `${pj?`<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2>#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}`}
-      ${chips}${items.map(itemHtml).join('') || emptyHtml(pj ? 'project' : S.view, pj && pj.title)}`;
+      ${chips}${items.map(itemHtml).join('') || emptyHtml(pj ? 'project' : S.view, pj ? pj.title : '')}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
   if(S.view==='account') mountGoogle();
