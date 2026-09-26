@@ -39,7 +39,7 @@
 | Установка на телефон: web manifest, iOS-мета | [SERBITO-281](https://serbito.atlassian.net/browse/SERBITO-281) | 6 | Closed — gtd v0.9.0 |
 | Политика конфиденциальности `/privacy` и `/en/privacy` | [SERBITO-282](https://serbito.atlassian.net/browse/SERBITO-282) | 6 | To Do |
 | HTML-страница 404 вместо JSON | [SERBITO-283](https://serbito.atlassian.net/browse/SERBITO-283) | 6 | Closed — gtd v0.9.0 |
-| Заголовок вкладки: раздел и число во Входящих | [SERBITO-284](https://serbito.atlassian.net/browse/SERBITO-284) | 6 | In Progress |
+| Заголовок вкладки: раздел и число во Входящих | [SERBITO-284](https://serbito.atlassian.net/browse/SERBITO-284) | 6 | Closed — gtd v0.11.0 |
 | Открытый код на виду: ссылка на GitHub с сайта, README на английском, инструкция self-host, GitHub Release | [SERBITO-291](https://serbito.atlassian.net/browse/SERBITO-291) | 4 | In Progress |
 | Нативная кнопка «Войти через Telegram» (Login Widget) вместо своей, deep link — запасной путь | [SERBITO-292](https://serbito.atlassian.net/browse/SERBITO-292) | 2 | To Do |
 
