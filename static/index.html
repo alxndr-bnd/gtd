@@ -418,7 +418,7 @@ async function loginScreen(){
   const c = S.cfg, parts = [];
   if(c.google) parts.push('<div class="gbtn"></div>');
   if(c.email) parts.push(emailFormHtml(t('get_code')));
-  if(c.bot) parts.push(`<button data-act="tglogin">✈️ ${t('tg_signin')}</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>`);
+  if(c.bot) parts.push(tgHtml(`✈️ ${t('tg_signin')}`));
   const buttons = `${parts.join(`<div class="or">${t('or')}</div>`) || `<p>${t('no_methods')}</p>`}
     <div class="msg" id="authmsg"></div>
     ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}`;
@@ -426,7 +426,7 @@ async function loginScreen(){
   if($('#signin')) $('#signin').innerHTML = buttons;
   else { document.title = 'GTD'; $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">${t('login_hint')}</p>
     ${buttons}</div>`; }
-  mountGoogle();
+  mountGoogle(); mountTelegram();
   gaPage();
 }
 
@@ -483,6 +483,33 @@ async function emailVerify(){
   catch(err){ authFail(err); }
 }
 
+// ── Telegram (SERBITO-292): на проде с компьютера — официальный Login Widget, вход в один клик.
+// Запасной путь — ссылка в бота (Start → «Подтвердить» → страница ждёт): виджет работает только на домене,
+// заданном в BotFather (локально и на *.run.app — нет), а на телефоне и во встроенных браузерах он хуже ссылки:
+// открывает oauth.telegram.org во всплывающем окне и просит номер телефона вместо того, чтобы открыть приложение.
+const TG_WIDGET_WAIT = 5000;  // мс: столько ждём iframe виджета, потом показываем запасную кнопку
+const tgWidgetOk = () => location.hostname === 'gtd.serbito.rs' && !matchMedia('(pointer: coarse)').matches;
+const tgHtml = label => `<div class="tgw"></div><button data-act="tglogin" class="tgfb">${label}</button>
+  <div id="tgst" class="hint" style="margin:10px 0 0"></div>`;
+
+function mountTelegram(){
+  const box = $('.tgw'), fb = $('.tgfb'); if(!box || !S.cfg.bot || !tgWidgetOk()) return;
+  fb.hidden = true;
+  const fallback = () => { clearTimeout(timer); box.remove(); fb.hidden = false; };
+  window.onTelegramAuth = tgWidgetAuth;
+  const s = document.createElement('script');  // виджет встаёт iframe'ом на место своего <script>
+  s.async = true; s.src = 'https://telegram.org/js/telegram-widget.js?22'; s.onerror = fallback;
+  Object.assign(s.dataset, {telegramLogin:S.cfg.bot, size:'large', userpic:'false', lang:LANG,
+    requestAccess:'write', onauth:'onTelegramAuth(user)'});  // write — бот сможет писать напоминания без Start
+  box.appendChild(s);
+  const timer = setTimeout(() => { if(!box.querySelector('iframe')) fallback(); }, TG_WIDGET_WAIT);
+}
+
+async function tgWidgetAuth(user){
+  try{ const lk = linking(); await authPost('tg/widget', {auth:user, link:lk}); ga(lk ? 'link_method' : 'login', {method:'telegram'}); load(); }
+  catch(err){ authFail(err); }
+}
+
 async function tgStart(){
   try{
     const d = await authPost('tg/start', {link:linking()});
@@ -509,7 +536,7 @@ function accountHtml(){
   <div class="rv"><h3>${t('email')}</h3>${m.email?t('email_linked', {email:esc(m.email)}):t('email_none')}
     ${c.email?emailFormHtml(t(m.email ? 'change' : 'link')):''}</div>
   <div class="rv"><h3>Telegram</h3>${m.tg?t('tg_linked')
-    :c.bot?`<button data-act="tglogin">${t('tg_link')}</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>`:t('bot_off')}</div>
+    :c.bot?tgHtml(t('tg_link')):t('bot_off')}</div>
   <div class="rv"><h3>${t('settings')}</h3>${t('undo_label')}
     <div class="seg">${[5,10,30].map(n=>`<button class="${(m.undo_seconds||30)===n?'on':''}" data-act="undosec" data-n="${n}">${t('sec', {n})}</button>`).join('')}</div>
     <div style="margin-top:14px">${t('lang_label')}</div>
@@ -625,7 +652,7 @@ function render(){
       ${chips}${items.map(itemHtml).join('') || emptyHtml(pj ? 'project' : S.view, pj ? pj.title : '')}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
-  if(S.view==='account') mountGoogle();
+  if(S.view==='account'){ mountGoogle(); mountTelegram(); }
   const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
   capFit(cap); capHint(cap);
   docTitle();  // и длинный SEO-заголовок лендинга после входа сменится

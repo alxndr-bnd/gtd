@@ -289,6 +289,8 @@ TEXTS = {
         "google_off": "Вход через Google не настроен",
         "google_fail": "Google не подтвердил вход — попробуй ещё раз",
         "tg_off": "Telegram-бот выключен",
+        "tg_widget_fail": "Telegram не подтвердил вход — попробуй ещё раз",
+        "tg_widget_stale": "Вход через Telegram устарел — нажми кнопку ещё раз",
         "project_empty": "Название не может быть пустым",
         "project_exists": "Проект «{title}» уже есть",
         "task_missing": "Задача не найдена",
@@ -361,6 +363,8 @@ TEXTS = {
         "google_off": "Google sign-in isn't set up",
         "google_fail": "Google didn't confirm the sign-in — try again",
         "tg_off": "The Telegram bot is off",
+        "tg_widget_fail": "Telegram didn't confirm the sign-in — try again",
+        "tg_widget_stale": "The Telegram sign-in has expired — press the button again",
         "project_empty": "The name can't be empty",
         "project_exists": "Project “{title}” already exists",
         "task_missing": "Task not found",
@@ -1351,6 +1355,52 @@ def auth_tg_start(body: dict, request: Request):
     link_uid = session_user(request) if body.get("link") else None
     run("insert into tg_logins(nonce,link_user_id,expires) values(%s,%s,%s)", (nonce, link_uid, now + 600))
     return {"nonce": nonce, "url": f"https://t.me/{BOT_USERNAME}?start={nonce}"}
+
+
+# ── Telegram Login Widget (SERBITO-292): вход в один клик на сайте. Данные приходят от браузера, поэтому верим
+# им только после проверки подписи: https://core.telegram.org/widgets/login#checking-authorization
+TG_WIDGET_MAX_AGE = 24 * 60 * 60  # подпись виджета старше суток не принимаем: перехваченный payload быстро сгорает
+TG_WIDGET_SKEW = 5 * 60  # часы Telegram могут чуть убегать вперёд наших
+
+
+def tg_widget_verify(data) -> dict:
+    """Проверяет payload виджета: data-check-string — отсортированные строки key=value без hash, подпись —
+    HMAC-SHA256 с ключом SHA256(токена бота). Возвращает {"id", "first_name"}; иначе AuthError."""
+    if not TOKEN or not isinstance(data, dict):
+        raise AuthError(400, "tg_widget_fail")
+    got = data.get("hash")
+    fields = {k: v for k, v in data.items() if k != "hash"}
+    # Виджет присылает строки и числа; прочее (null, списки, bool) в его ответе не бывает
+    if not isinstance(got, str) or not got or any(
+            isinstance(v, bool) or not isinstance(v, (str, int)) for v in fields.values()):
+        raise AuthError(400, "tg_widget_fail")
+    check = "\n".join(f"{k}={fields[k]}" for k in sorted(fields))
+    want = hmac.new(hashlib.sha256(TOKEN.encode()).digest(), check.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(want.encode(), got.encode()):
+        raise AuthError(400, "tg_widget_fail")
+    try:
+        tg_id, auth_date = int(fields["id"]), int(fields["auth_date"])
+    except (KeyError, ValueError):
+        raise AuthError(400, "tg_widget_fail")
+    now = time.time()
+    if not now - TG_WIDGET_MAX_AGE <= auth_date <= now + TG_WIDGET_SKEW:
+        raise AuthError(400, "tg_widget_stale")
+    return {"id": tg_id, "first_name": str(fields.get("first_name", ""))}
+
+
+@app.post("/api/auth/tg/widget")
+def auth_tg_widget(body: dict, request: Request):
+    """Вход или привязка через виджет — те же пути, что у подтверждения в боте (tg_login_confirm)."""
+    if not TOKEN:
+        raise auth_fail(AuthError(400, "tg_off"), request)
+    try:
+        d = tg_widget_verify(body.get("auth"))
+    except AuthError as e:
+        raise auth_fail(e, request)
+    uid = session_user(request) if body.get("link") else None
+    if uid:
+        return link_response(link_identity(uid, "tg_id", d["id"]), "what_tg", req_lang(request))
+    return set_session(JSONResponse({"ok": True}), tg_user(d["id"], d["first_name"])["id"])
 
 
 @app.get("/api/auth/tg/poll")
