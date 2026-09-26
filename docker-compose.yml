@@ -1,0 +1,65 @@
+# Self-hosting: приложение + Postgres. Инструкция — docs/self-host.md.
+#   docker compose up -d --build          → http://localhost:8000
+#   DEV=1 docker compose up --build       → вход без почты/Google/Telegram (только для локальной пробы!)
+# Переменные подставляются из окружения или из .env рядом с этим файлом.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gtd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gtd}
+      POSTGRES_DB: gtd
+    volumes:
+      - db:/var/lib/postgresql/data
+    # Приложение открывает пул и накатывает схему при импорте — стартуем его, только когда база готова
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gtd -d gtd"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8000}:8080"
+    environment:
+      # Не из .env: локальный .env разработчика может смотреть в чужую базу
+      DATABASE_URL: postgresql://gtd:${POSTGRES_PASSWORD:-gtd}@db:5432/gtd
+      # http → бот на long polling, напоминания — фоновым циклом; https → вебхук + внешний будильник
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      TZ: ${TZ:-Europe/Belgrade}
+      DEV: ${DEV:-}
+      # Способы входа: хоть один нужен (или DEV=1 для пробы)
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp-relay.brevo.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-"GTD" <gtd@localhost>}
+      # Необязательное
+      CRON_SECRET: ${CRON_SECRET:-}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+
+  # Только при https BASE_URL (вебхук): в этом режиме напоминания будит внешний будильник.
+  # Включается так: CRON_SECRET=… docker compose --profile https up -d
+  reminders:
+    image: curlimages/curl:8.16.0
+    profiles: [https]
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-}
+    entrypoint:
+      - sh
+      - -c
+      - 'while sleep 60; do curl -fsS -m 30 -X POST -H "X-Cron-Secret: $$CRON_SECRET" http://app:8080/tasks/reminders; echo; done'
+
+volumes:
+  db:

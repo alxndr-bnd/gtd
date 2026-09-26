@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Релиз gtd (по образцу serbito): гейт → коммит → следующий минорный тег vX.Y.0 → push.
+# Релиз gtd (по образцу serbito): гейт → коммит → следующий минорный тег vX.Y.0 → push → GitHub Release.
 # Пуш тега запускает .github/workflows/deploy.yml — сборку и деплой в Cloud Run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -48,3 +48,11 @@ git push
 git push origin "$next_tag"
 
 echo "Released $next_tag — деплой: https://github.com/alxndr-bnd/gtd/actions"
+
+# --- GitHub Release: заметки из коммитов/PR с прошлого тега. Не фатально: тег и деплой уже ушли ---
+if ! command -v gh >/dev/null 2>&1; then
+  echo "WARNING: gh не найден — GitHub Release для $next_tag не создан (gh release create $next_tag --generate-notes)" >&2
+elif ! gh release create "$next_tag" --verify-tag --title "$next_tag" --generate-notes; then
+  echo "WARNING: GitHub Release для $next_tag не создан — повторить: gh release create $next_tag --verify-tag --generate-notes" >&2
+fi
+exit 0
