@@ -184,6 +184,19 @@ def test_foreign_project_untouchable(new_client, login):
     assert A.row("select title from projects")["title"] == "Личное" and A.row("select count(*) n from items")["n"] == 1
 
 
+
+def test_cannot_attach_foreign_project(new_client, login):
+    alice, bob = new_client(), new_client()
+    uid = login(alice, "alice@example.com")
+    login(bob, "bob@example.com")
+    pid = A.capture(uid, "секрет #Личное")["project_id"]
+    iid = bob.post("/api/capture", json={"text": "моё"}).json()["id"]
+    assert bob.patch(f"/api/items/{iid}", json={"project_id": pid}).status_code == 404
+    it = bob.get("/api/items?status=all").json()[0]
+    assert it["project_id"] is None and it["project"] is None
+    A.run("update items set project_id=%s where id=%s", (pid, iid))  # даже если id попал в базу — названия не видно
+    assert bob.get("/api/items?status=all").json()[0]["project"] is None
+
 # ── Номера задач и ссылки /i/N ──
 
 def test_numbers_are_per_user_and_never_reused(client, login):

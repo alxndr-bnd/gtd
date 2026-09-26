@@ -436,6 +436,17 @@ def test_bot_setup_when_telegram_is_down(monkeypatch, caplog):
     assert A.BOT_USERNAME == "" and "setMyDescription failed" in caplog.text and "test-token" not in caplog.text
 
 
+
+def test_tg_error_log_hides_token(monkeypatch, caplog):
+    token = "123456:" + "A" * 35
+    class Broken:  # ошибка httpx с URL запроса в тексте — как у HTTPStatusError/InvalidURL
+        async def post(self, url, **kw):
+            raise httpx.InvalidURL(f"bad url {url}")
+    monkeypatch.setattr(A, "_client", Broken())
+    monkeypatch.setattr(A, "TOKEN", token)
+    assert asyncio.run(A.tg("getMe")) is None
+    assert "getMe failed" in caplog.text and token not in caplog.text
+
 def test_bot_setup_garbage_answers(monkeypatch):
     calls = profile_tg(monkeypatch, {"getMe": None, "getMyCommands": None, "getMyDescription": "??",
                                      "getMyShortDescription": [1]})

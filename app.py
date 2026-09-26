@@ -326,7 +326,9 @@ def project_by_title(uid: int, title: str) -> int:
     return run("insert into projects(user_id,title,created) values(%s,%s,%s) returning id", (uid, title, int(time.time())))
 
 
-ITEM_SQL = "select i.*, p.title as project from items i left join projects p on p.id=i.project_id "
+# Проект — только свой: user_id в join, чтобы чужой project_id не раскрыл чужое название
+ITEM_SQL = ("select i.*, p.title as project from items i "
+            "left join projects p on p.id=i.project_id and p.user_id=i.user_id ")
 
 
 def item_get(uid, iid):
@@ -366,7 +368,8 @@ async def tg(method, **params):
             log.warning("tg %s: %s", method, data)
         return data.get("result")
     except Exception as e:  # noqa: BLE001
-        log.warning("tg %s failed: %s", method, e)
+        # Текст ошибок httpx содержит URL запроса, а в нём токен — в логи только без него
+        log.warning("tg %s failed: %s", method, BOT_TOKEN_RE.sub("bot<redacted>", str(e)))
         return None
 
 
@@ -1328,6 +1331,8 @@ def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
             sets.append("reminded=0")
         if k == "context" and v:
             v = str(v).lstrip("@").lower()
+        if k == "project_id" and v and not row("select 1 from projects where id=%s and user_id=%s", (v, uid)):
+            raise HTTPException(404, "project not found")
         sets.append(f"{k}=%s")
         args.append(v or None if k in ("context", "project_id", "remind_at") else v)
     if sets:
