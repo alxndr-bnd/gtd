@@ -108,9 +108,9 @@ def test_merge_offer_in_english(new_client, login, mail):
 
 def test_auth_link_page_language(client, tg):
     r = client.get("/auth", params={"t": "nope"}, headers=EN)
-    assert r.status_code == 400 and r.json()["error"] == "This link has expired. Send /login to the bot again."
-    assert client.get("/auth", params={"t": "nope"}).json()["error"].startswith("Ссылка устарела")
-    assert client.get("/auth", params={"t": "nope", "lang": "en"}).json()["error"].startswith("This link")
+    assert r.status_code == 400 and '<html lang="en">' in r.text and "This link has expired" in r.text
+    assert "Ссылка устарела" in client.get("/auth", params={"t": "nope"}).text
+    assert "This link has expired" in client.get("/auth", params={"t": "nope", "lang": "en"}).text
 
 
 def test_bot_login_link_opens_english_app(client, tg, new_client):

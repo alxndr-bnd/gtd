@@ -289,7 +289,6 @@ TEXTS = {
         "google_off": "Вход через Google не настроен",
         "google_fail": "Google не подтвердил вход — попробуй ещё раз",
         "tg_off": "Telegram-бот выключен",
-        "auth_stale": "Ссылка устарела. Отправь /login боту ещё раз.",
         "project_empty": "Название не может быть пустым",
         "project_exists": "Проект «{title}» уже есть",
         "task_missing": "Задача не найдена",
@@ -362,7 +361,6 @@ TEXTS = {
         "google_off": "Google sign-in isn't set up",
         "google_fail": "Google didn't confirm the sign-in — try again",
         "tg_off": "The Telegram bot is off",
-        "auth_stale": "This link has expired. Send /login to the bot again.",
         "project_empty": "The name can't be empty",
         "project_exists": "Project “{title}” already exists",
         "task_missing": "Task not found",
@@ -787,6 +785,8 @@ def login_url(uid: int, lang: str) -> str:
 async def handle_message(msg):
     chat = msg["chat"]["id"]
     frm = msg.get("from", {})
+    if not frm.get("id"):  # посты каналов, анонимные админы групп: не от человека — аккаунт не заводим
+        return
     text = (msg.get("text") or msg.get("caption") or "").strip()
     cmd, _, arg = text.partition(" ")
     cmd = cmd.split("@")[0].lower()
@@ -865,8 +865,13 @@ def mark_done(uid, iid=None, num=None):
     return it
 
 
+CB_ITEM_ACTS = ("done", "snz", "next")  # кнопки под задачей: «act:<id задачи>»
+
+
 async def handle_callback(cb):
-    act, _, sid = cb["data"].partition(":")
+    """Кнопки бота. На любое нажатие отвечаем answerCallbackQuery — иначе у пользователя крутится часики;
+    кнопки прежних версий и испорченные данные — просто «Не найдено», без исключения."""
+    act, _, sid = (cb.get("data") or "").partition(":")
     if act == "tgok":
         await tg_login_confirm(cb, sid)
         return
@@ -886,15 +891,13 @@ async def handle_callback(cb):
             await tg_email_ask(chat, tg_user(frm["id"], frm.get("first_name", ""), frm.get("language_code")), lang)
         return
     u, lang = tg_known(frm)
-    if not u:
-        return
-    track(u["id"], "telegram")
-    iid = int(sid)
-    it = item_get(u["id"], iid)
-    msg = cb.get("message", {})
+    it = u and act in CB_ITEM_ACTS and sid.isdigit() and item_get(u["id"], int(sid))
     if not it:
         await tg("answerCallbackQuery", callback_query_id=cb["id"], text=tr(lang, "cb_missing"))
         return
+    track(u["id"], "telegram")
+    iid = it["id"]
+    msg = cb.get("message", {})
     if act == "done":
         mark_done(u["id"], iid)
         note = tr(lang, "cb_done")
@@ -904,8 +907,6 @@ async def handle_callback(cb):
     elif act == "next":
         run("update items set status='next' where id=%s", (iid,))
         note = tr(lang, "cb_next")
-    else:
-        return
     await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
     if msg:
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"],
@@ -1441,9 +1442,9 @@ def auth(t: str, request: Request, lang: str = ""):
     """Ссылка входа из /login в боте. lang=en — бот говорил с пользователем по-английски: ведём в /en/,
     если язык не выбран явно в «Аккаунте»."""
     r = row("select * from login_tokens where token=%s and expires>%s", (t, int(time.time())))
-    if not r:
-        msg = tr(lang if lang in LANGS else req_lang(request), "auth_stale")
-        return JSONResponse({"error": msg}, status_code=400)
+    if not r:  # ссылку открывают в браузере из Telegram — страница с выходом, а не сырой JSON
+        page = pages.auth_stale(lang if lang in LANGS else req_lang(request), BOT_USERNAME)
+        return HTMLResponse(page, status_code=400, headers={"X-Robots-Tag": "noindex"})
     run("delete from login_tokens where token=%s", (t,))
     chosen = row("select lang from users where id=%s", (r["user_id"],))["lang"] or lang
     return set_session(RedirectResponse("/en/" if chosen == "en" else "/", status_code=303), r["user_id"])
