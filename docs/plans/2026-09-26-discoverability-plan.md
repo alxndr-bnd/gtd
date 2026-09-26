@@ -36,9 +36,9 @@
 | · в Serbito | [SERBITO-266](https://serbito.atlassian.net/browse/SERBITO-266) | 5 | Closed — serbito v1.385.0 |
 | README на GitHub: раздел «Other projects» и «Made by No Handoff» (публичные gtd, poker, javi; serbito приватный — вне охвата) | [SERBITO-267](https://serbito.atlassian.net/browse/SERBITO-267) | 5 | Closed — gtd v0.7.0, poker v0.46.0, javi v0.54.0 |
 | Лого «Входящие» (бирюзовый #0F766E, он же цвет сайта), набор favicon, единое название GTD | [SERBITO-280](https://serbito.atlassian.net/browse/SERBITO-280) | 6 | Closed — gtd v0.8.0 |
-| Установка на телефон: web manifest, iOS-мета | [SERBITO-281](https://serbito.atlassian.net/browse/SERBITO-281) | 6 | In Progress |
+| Установка на телефон: web manifest, iOS-мета | [SERBITO-281](https://serbito.atlassian.net/browse/SERBITO-281) | 6 | Closed — gtd v0.9.0 |
 | Политика конфиденциальности `/privacy` и `/en/privacy` | [SERBITO-282](https://serbito.atlassian.net/browse/SERBITO-282) | 6 | To Do |
-| HTML-страница 404 вместо JSON | [SERBITO-283](https://serbito.atlassian.net/browse/SERBITO-283) | 6 | In Progress |
+| HTML-страница 404 вместо JSON | [SERBITO-283](https://serbito.atlassian.net/browse/SERBITO-283) | 6 | Closed — gtd v0.9.0 |
 | Заголовок вкладки: раздел и число во Входящих | [SERBITO-284](https://serbito.atlassian.net/browse/SERBITO-284) | 6 | To Do |
 
 Замер через 6 недель — [SERBITO-262](https://serbito.atlassian.net/browse/SERBITO-262). Найденные по ходу недоработки заводятся в Jira багами с меткой `finding`: SERBITO-268…279 (268 и 269 — утечка названия чужого проекта и токен бота в логах — исправлены в gtd v0.7.0), 283. Этап 6 (280–284) — аудит стандартных мета-тегов и иконок от 2026-09-26: нет файла favicon, manifest, политики конфиденциальности, HTML-404.
