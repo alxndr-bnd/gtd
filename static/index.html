@@ -52,6 +52,12 @@ button.sm:hover{color:var(--tx)}
 .chip{padding:3px 10px;border:1px solid var(--bd);border-radius:99px;font-size:13px;cursor:pointer;color:var(--mut)}
 .chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
 .empty{text-align:center;color:var(--mut);padding:40px 0}
+.empty .ex{margin-top:6px;font-size:13px}
+/* Чек-лист первого запуска — карточка над Inbox; с ней поле захвата не по центру экрана, а сразу под ней */
+.onb{position:relative;margin:4px 0 0} .onb h3{margin:0 0 8px;padding-right:32px}
+.onb .onbx{position:absolute;top:6px;right:6px;border:0;background:none;font-size:14px}
+.onbi{padding:3px 0} .onbi span{color:var(--mut);font-size:13px} .onbi.ok b{text-decoration:line-through;color:var(--mut)}
+.hero.onbh{padding-top:32px}
 .pj{cursor:pointer} .pj .warn{color:var(--warn)}
 .rv{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .rv h3{margin:0 0 6px;font-size:15px} .rv a{color:var(--ac);cursor:pointer}
@@ -146,6 +152,24 @@ const VIEWS = [
 const HELP = {inbox:'Всё, что ещё не осмыслено. Разбери: что это и что делать дальше?',
   next:'Конкретные следующие физические действия.', waiting:'Жду ответа/результата от других.',
   scheduled:'Задачи с напоминанием — по времени.', someday:'Когда-нибудь / может быть.', reference:'Материалы без действия.', done:'Выполнено.'};
+// Пустой раздел: что сюда попадает и как + пример. Строки онбординга вместе — отсюда их заберёт перевод
+const EMPTY = {
+  inbox:['Inbox пуст 🎉 Запиши всё, что крутится в голове, — разберёшь потом', 'позвонить маме завтра в 10:00'],
+  next:['Шаги, которые можно сделать сразу. Из Inbox — кнопкой «→ Next» или сразу с @контекстом', 'купить батарейки @магазин'],
+  waiting:['Что ждёшь от других: ответ, посылку, решение. Из Inbox — кнопкой «→ Waiting»', 'Марко пришлёт смету на ремонт'],
+  scheduled:['Задачи со временем — бот напомнит о них в Telegram. Время пиши прямо в тексте', 'отчёт в пятницу в 15:00'],
+  projects:['Всё, что больше одного шага. Создай проект выше или допиши #проект к задаче', 'выбрать плитку #Ремонт_кухни'],
+  someday:['Идеи на потом: не сейчас, но жалко потерять. Из Inbox — кнопкой «→ Someday»', 'выучить испанский'],
+  reference:['Полезное без действия: инструкции, адреса, номера. Из Inbox — кнопкой «→ Ref»', 'размер фильтра для пылесоса'],
+  done:['Отметь задачу галочкой — она окажется здесь', ''],
+  project:['В проекте пока нет задач — допиши к задаче его #название', 'заказать образцы #{p}'],
+};
+const EX = 'Например: ';
+// Чек-лист первого запуска над Inbox: [поле из /api/counts → onboarding, пункт, пояснение]; отмечается сам по данным
+const ONB = [['capture','Запиши 3 мысли','в поле ниже или боту, не разбирая'],
+  ['process','Разбери Inbox','реши, что делать с задачей: → Next, → Waiting, → Someday…'],
+  ['telegram','Подключи Telegram-бота','записывать с телефона и получать напоминания — в <a data-view="account">Аккаунте</a>']];
+const ONB_TITLE = 'Первые шаги в GTD', ONB_CLOSE = 'Скрыть';
 let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, pid:null, cfg:{}};
 
 async function api(path, method='GET', body){
@@ -164,6 +188,7 @@ async function load(){
       if(!S.cfg.user) return loginScreen();
     }
     S.counts = await api('/counts');
+    onbTrack(S.counts.onboarding);
     if(!S.me) S.me = await api('/me');  // имя для кнопки аккаунта
     S.projects = await api('/projects');
     S.contexts = await api('/contexts');
@@ -211,7 +236,7 @@ function devLiveReload(){
 
 async function loginScreen(){
   S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
-  S.view = 'inbox'; S.pid = null;
+  S.view = 'inbox'; S.pid = null; S.onb = null;  // следующий вход может быть в другой аккаунт
   devLiveReload();
   const c = S.cfg, parts = [];
   if(c.google) parts.push('<div class="gbtn"></div>');
@@ -396,16 +421,16 @@ function render(){
     const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
     if(S.view==='inbox'){
       // Inbox — точка входа: поле захвата по центру экрана, задачи под ним (пустой инбокс — ровно посередине)
-      const next = S.nextItems || [];
-      hero = `<section class="hero ${items.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
-        <div class="hint">${items.length?HELP.inbox:'Inbox пуст 🎉 — запиши, что крутится в голове'}</div></section>`;
+      const next = S.nextItems || [], onb = onbHtml();
+      hero = `${onb}<section class="hero ${onb?'onbh':items.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
+        <div class="hint">${items.length?HELP.inbox:`${EMPTY.inbox[0]}<br>${EX}«${EMPTY.inbox[1]}»`}</div></section>`;
       body = items.length ? items.map(itemHtml).join('')
         : next.length ? `<section class="below"><h3>${VIEWS[1][1]}</h3><div class="hint">${HELP.next}</div>
             ${next.map(itemHtml).join('')}</section>` : '';
     } else body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ Переименовать</button>
-      <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 Удалить</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2><div class="hint">${HELP[S.view]||''}</div>`}
-      ${chips}${items.map(itemHtml).join('') || '<div class="empty">Пусто 🎉</div>'}`;
+      <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 Удалить</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}`}
+      ${chips}${items.map(itemHtml).join('') || emptyHtml(pj ? 'project' : S.view, pj && pj.title)}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
   if(S.view==='account') mountGoogle();
@@ -423,7 +448,30 @@ function projectsHtml(){
     <div class="meta"><span>${p.open_count} открыто</span>${p.next_count?'':'<span class="warn">⚠ нет следующего действия</span>'}</div></div>
     <button class="sm" data-act="renameproj" data-pid="${p.id}" title="Переименовать">✏️</button>
     <button class="sm" data-act="delproj" data-pid="${p.id}" title="Удалить">🗑</button>
-    <button class="sm" data-act="closeproj" data-pid="${p.id}">Завершить</button></div>`).join('') || '<div class="empty">Проектов нет</div>'}`;
+    <button class="sm" data-act="closeproj" data-pid="${p.id}">Завершить</button></div>`).join('') || emptyHtml('projects')}`;
+}
+
+// p — название проекта для примера: пробелы → «_», как их разбирает захват
+function emptyHtml(k, p = ''){
+  const [what, ex] = EMPTY[k] || ['Пусто 🎉', ''];
+  return `<div class="empty"><div>${what}</div>${ex?`<div class="ex">${EX}«${esc(ex.replace('{p}', p.trim().replace(/\s+/g,'_')))}»</div>`:''}</div>`;
+}
+
+// Карточка скрыта навсегда (сервер: закрыл или выполнил всё) или выполнены все видимые пункты — не рисуем.
+// Без бота на сервере пункт про Telegram не выполнить — его не показываем.
+const onbSteps = () => ONB.filter(([k]) => k!=='telegram' || S.cfg.bot);
+function onbHtml(){
+  const o = S.counts.onboarding, steps = onbSteps();
+  if(!o || o.hidden || steps.every(([k]) => o[k])) return '';
+  return `<section class="rv onb"><button class="onbx" data-act="onbclose" aria-label="${ONB_CLOSE}" title="${ONB_CLOSE}">✕</button>
+    <h3>${ONB_TITLE}</h3>${steps.map(([k,t,d]) => `<div class="onbi ${o[k]?'ok':''}">${o[k]?'✅':'⬜'} <b>${t}</b> <span>— ${d}</span></div>`).join('')}</section>`;
+}
+// GA onboarding_step: пункт стал выполнен у нас на глазах (между двумя загрузками) — шлём только его номер.
+// Выполненные к первой загрузке страницы не шлём: не отличить новое от давнего (например, сделанного в боте).
+function onbTrack(o){
+  const prev = S.onb; S.onb = o;
+  if(!prev || !o || prev.hidden) return;
+  ONB.forEach(([k], i) => { if(o[k] && !prev[k]) ga('onboarding_step', {step:i+1}); });
 }
 
 function reviewHtml(){
@@ -641,6 +689,7 @@ document.addEventListener('click', async e => {
   if(act==='edit'){ e.preventDefault(); return openEdit(id); }  // номер — ссылка /i/N: ⌘-клик откроет вкладку
   if(act==='mv') return moveItem(id, el.dataset.st);
   if(act==='undo') return toastUndo();
+  if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
   if(act==='logout'){ await api('/logout','POST'); S.me = null; return loginScreen(); }
   if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }

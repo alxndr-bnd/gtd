@@ -3,6 +3,8 @@ import asyncio
 import re
 import time
 
+import httpx
+
 import app as A
 from conftest import bot_callback, bot_message, last_code
 
@@ -13,7 +15,7 @@ def texts(sent):
 
 def test_anyone_gets_an_account(tg):
     bot_message("/start", tg_id=999, name="Stranger")
-    assert "GTD-бот готов" in texts(tg)[-1]
+    assert texts(tg)[-1] == A.START
     assert A.row("select name from users where tg_id=999")["name"] == "Stranger"
 
 
@@ -21,7 +23,7 @@ def test_capture_from_telegram(tg):
     bot_message("позвонить маме завтра в 10:00 @телефон")
     it = A.row("select * from items")
     assert (it["title"], it["status"], it["context"], it["source"]) == ("позвонить маме", "next", "телефон", "telegram")
-    method, p = tg[-1]
+    method, p = tg[-2]  # последнее — подсказка после первой задачи аккаунта
     assert p["text"].startswith(f'✓ Next <a href="http://localhost:8000/i/{it["num"]}">#{it["num"]}</a>: позвонить маме')
     assert p["parse_mode"] == "HTML" and p["link_preview_options"] == {"is_disabled": True}
     assert [b["callback_data"] for b in p["reply_markup"]["inline_keyboard"][0]] == \
@@ -59,7 +61,7 @@ def test_done_command_names_the_task(tg):
 
 def test_bot_escapes_html_in_titles(tg):
     bot_message("сравнить <b>a</b> & b")
-    assert "сравнить &lt;b&gt;a&lt;/b&gt; &amp; b" in texts(tg)[-1]
+    assert "сравнить &lt;b&gt;a&lt;/b&gt; &amp; b" in texts(tg)[-2]  # последнее — подсказка после первой задачи
 
 
 def test_unknown_command_shows_help(tg):
@@ -141,10 +143,63 @@ def test_start_shows_inline_buttons(tg):
     bot_message("/start")
     markup = tg[-1][1]["reply_markup"]
     assert "keyboard" not in markup  # никакой постоянной клавиатуры под полем ввода
-    assert [(b["text"], b["callback_data"]) for b in markup["inline_keyboard"][0]] == \
-           [(A.BTN_START, "help"), (A.BTN_EMAIL, "addemail")]
-    bot_callback("help")
+    # локально (http) без «Открыть сайт»: ссылку на localhost Telegram не примет и не отправит всё сообщение
+    assert [[(b["text"], b["callback_data"]) for b in r] for r in markup["inline_keyboard"]] == \
+           [[(A.BTN_ABOUT, "about"), (A.BTN_EMAIL, "addemail")]]
+    bot_callback("help")  # кнопка «🚀 Начать» под приветствиями прежних версий по-прежнему работает
     assert "/inbox" in texts(tg)[-1] and A.row("select count(*) n from items")["n"] == 0
+
+
+def test_start_greeting_explains_inbox_with_examples(tg, monkeypatch):
+    monkeypatch.setattr(A, "BASE_URL", "https://gtd.serbito.rs")
+    bot_message("/start")
+    text, markup = tg[-1][1]["text"], tg[-1][1]["reply_markup"]
+    assert "попадёт во Входящие" in text
+    assert "«позвонить маме завтра в 10:00» → напомню" in text
+    assert "«отчёт #Работа @комп» → сразу в проект и контекст" in text
+    assert markup["inline_keyboard"][1] == [{"text": A.BTN_SITE, "url": "https://gtd.serbito.rs"}]
+    assert A.row("select count(*) n from items")["n"] == 0  # /start — не задача
+
+
+def test_about_command_and_button(tg):
+    bot_message("/about")
+    about = texts(tg)[-1]
+    assert "Дэвида Аллена" in about and "«Getting Things Done»" in about
+    assert about.endswith("http://localhost:8000/about")
+    assert tg[-1][1]["link_preview_options"] == {"is_disabled": True}
+    bot_callback("about")  # «Как это работает» под приветствием — тот же текст
+    assert texts(tg)[-1] == about and ("answerCallbackQuery", {"callback_query_id": "cb"}) in tg
+    bot_message("/help")
+    assert "/about" in texts(tg)[-1]
+    assert A.row("select count(*) n from items")["n"] == 0
+
+
+def test_first_task_hint_once_per_account(tg):
+    bot_message("/start")
+    bot_message("первая мысль")
+    assert texts(tg)[-1] == "Готово! Можно добавить срок — «завтра в 10:00», — а разобрать всё удобнее на сайте: " \
+                            "http://localhost:8000"
+    assert texts(tg)[-2].startswith("✓ Inbox")  # подсказка — после подтверждения, отдельным сообщением
+    bot_message("вторая мысль")
+    A.run("delete from items")  # даже если всё удалить — счётчик задач аккаунта не сбрасывается
+    bot_message("третья мысль")
+    assert sum("Готово! Можно добавить срок" in t for t in texts(tg)) == 1
+
+
+def test_no_first_task_hint_for_existing_users(tg, client, login):
+    uid = login(client, "alice@example.com")
+    client.post("/api/capture", json={"text": "с сайта"})
+    A.run("update users set tg_id=777 where id=%s", (uid,))  # тот же человек пишет боту
+    bot_message("из бота")
+    assert texts(tg)[-1].startswith("✓ Inbox") and not any("Можно добавить срок" in t for t in texts(tg))
+
+
+def test_bot_profile_texts_fit_telegram_limits():
+    assert set(A.BOT_PROFILE) == {"", "en"}
+    for desc, short in A.BOT_PROFILE.values():
+        assert 0 < len(desc) <= 512 and 0 < len(short) <= 120 and "gtd.serbito.rs" in short
+    assert A.BOT_PROFILE[""][0].startswith("Записывай задачи и мысли в один тап")
+    assert "about" in [c["command"] for c in A.BOT_COMMANDS]
 
 
 def test_add_email_button_flow(tg, mail):
@@ -292,3 +347,97 @@ def test_local_polling_leaves_prod_webhook_alone(monkeypatch):
     calls = fake_tg(monkeypatch, {"getWebhookInfo": {"url": "https://gtd.serbito.rs/tg/webhook"}})
     asyncio.run(A.poll_loop())  # вернулся сразу, а не завис в getUpdates
     assert [m for m, _ in calls] == ["getWebhookInfo"]
+
+
+# ── профиль бота: описания и меню команд ставит bot_setup, только когда они разошлись с кодом ──
+
+def current_profile():
+    """Ответы Telegram, когда профиль уже совпадает с кодом."""
+    return {"getMe": {"username": "gtdsrbot"}, "getMyCommands": A.BOT_COMMANDS,
+            "getMyDescription": lambda p: {"description": A.BOT_PROFILE[p["language_code"]][0]},
+            "getMyShortDescription": lambda p: {"short_description": A.BOT_PROFILE[p["language_code"]][1]}}
+
+
+def profile_tg(monkeypatch, answers):
+    calls = []
+
+    async def fake(method, **params):
+        calls.append((method, params))
+        a = answers.get(method, True)
+        return a(params) if callable(a) else a
+    monkeypatch.setattr(A, "tg", fake)
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "WEBHOOK", True)
+    return calls
+
+
+def profile_sets(calls):
+    return [(m, p) for m, p in calls if m.startswith("setMy")]
+
+
+def test_bot_setup_sets_profile_when_it_differs(monkeypatch):
+    calls = profile_tg(monkeypatch, {"getMe": {"username": "gtdsrbot"},
+                                     "getMyDescription": {"description": ""}})  # у нового бота описания нет
+    asyncio.run(A.bot_setup())
+    sets = profile_sets(calls)
+    assert ("setMyCommands", {"commands": A.BOT_COMMANDS}) in sets
+    for lang, (desc, short) in A.BOT_PROFILE.items():
+        assert ("setMyDescription", {"description": desc, "language_code": lang}) in sets
+        assert ("setMyShortDescription", {"short_description": short, "language_code": lang}) in sets
+    assert len(sets) == 1 + 2 * len(A.BOT_PROFILE)
+
+
+def test_bot_setup_skips_unchanged_profile(monkeypatch):
+    calls = profile_tg(monkeypatch, current_profile())
+    asyncio.run(A.bot_setup())
+    assert profile_sets(calls) == []  # холодный старт без изменений — только чтение
+    assert "setWebhook" in dict(calls)
+
+
+def test_bot_setup_updates_only_changed_text(monkeypatch):
+    answers = current_profile()
+    answers["getMyShortDescription"] = lambda p: {"short_description": "старое" if p["language_code"] == "en"
+                                                  else A.BOT_PROFILE[""][1]}
+    calls = profile_tg(monkeypatch, answers)
+    asyncio.run(A.bot_setup())
+    assert profile_sets(calls) == \
+           [("setMyShortDescription", {"short_description": A.BOT_PROFILE["en"][1], "language_code": "en"})]
+
+
+def test_bot_setup_local_leaves_profile_alone(monkeypatch):
+    calls = profile_tg(monkeypatch, current_profile())
+    monkeypatch.setattr(A, "WEBHOOK", False)  # локальный сервер ходит в того же бота, что и прод
+    asyncio.run(A.bot_setup())
+    assert [m for m, _ in calls] == ["getMe"] and A.BOT_USERNAME == "gtdsrbot"
+
+
+def test_bot_setup_survives_exceptions(monkeypatch, caplog):
+    calls = profile_tg(monkeypatch, {})
+
+    async def broken(method, **params):
+        calls.append((method, params))
+        if method != "setWebhook":
+            raise RuntimeError("https://api.telegram.org/bottest-token/getMe: boom")
+        return True
+    monkeypatch.setattr(A, "tg", broken)
+    asyncio.run(A.bot_setup())  # не падает: шаги независимы, ошибки — в лог
+    assert A.BOT_USERNAME == "" and "setWebhook" in dict(calls)
+    assert "RuntimeError" in caplog.text and "test-token" not in caplog.text
+
+
+def test_bot_setup_when_telegram_is_down(monkeypatch, caplog):
+    class Down:  # настоящий tg(), а сеть лежит
+        async def post(self, url, **kw):
+            raise httpx.ConnectError("connection refused")
+    monkeypatch.setattr(A, "_client", Down())
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "WEBHOOK", True)
+    asyncio.run(A.bot_setup())
+    assert A.BOT_USERNAME == "" and "setMyDescription failed" in caplog.text and "test-token" not in caplog.text
+
+
+def test_bot_setup_garbage_answers(monkeypatch):
+    calls = profile_tg(monkeypatch, {"getMe": None, "getMyCommands": None, "getMyDescription": "??",
+                                     "getMyShortDescription": [1]})
+    asyncio.run(A.bot_setup())  # непонятный ответ — считаем, что текста нет, и ставим заново
+    assert A.BOT_USERNAME == "" and len(profile_sets(calls)) == 1 + 2 * len(A.BOT_PROFILE)
