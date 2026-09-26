@@ -31,6 +31,11 @@ ICONS = "\n".join([
     '<meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)">',
     f'<meta name="application-name" content="{SITE_NAME}">',
     f'<meta name="apple-mobile-web-app-title" content="{SITE_NAME}">',
+    # Установка на экран телефона: манифест + режим без адресной строки на iOS (service worker не нужен)
+    '<link rel="manifest" href="/manifest.webmanifest">',
+    '<meta name="mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-status-bar-style" content="default">',
 ])
 LANGS = ("ru", "en")
 PATHS = {("ru", "home"): "/", ("ru", "about"): "/about", ("en", "home"): "/en/", ("en", "about"): "/en/about"}
@@ -299,6 +304,17 @@ or link the bot under “Account”.</p>
 }
 
 
+# Последний раздел /about: как поставить сайт на экран телефона (манифест — /manifest.webmanifest)
+INSTALL = {
+    "ru": """<h2>GTD на экране телефона</h2>
+<p>Сайт ставится как приложение, без магазина: на iPhone — «Поделиться» → «На экран «Домой»»,
+на Android — меню ⋮ → «Установить приложение».</p>""",
+    "en": """<h2>GTD on your home screen</h2>
+<p>Install the site like an app, no store needed: on iPhone, Share → Add to Home Screen;
+on Android, the ⋮ menu → Install app.</p>""",
+}
+
+
 def about(base: str, lang: str, ga: str) -> str:
     """Страница «Как это работает». ga — GA-сниппет (только на боевом домене) или пусто."""
     path = PATHS[(lang, "about")]
@@ -318,7 +334,7 @@ def about(base: str, lang: str, ga: str) -> str:
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "about")}{ABOUT[lang]}{footer(lang)}</div>
+<div class="pub">{topbar(lang, "about")}{ABOUT[lang]}{INSTALL[lang]}{footer(lang)}</div>
 {track}
 </body>
 </html>"""
@@ -340,3 +356,68 @@ def sitemap(base: str) -> str:
                    + "".join(f'<xhtml:link rel="alternate" hreflang="{h}" href="{u}"/>' for h, u in alts) + "</url>")
     out.append("</urlset>")
     return "\n".join(out)
+
+
+def pick_lang(accept: str | None) -> str:
+    """Язык по Accept-Language: en, если английский в нём выше русского; иначе ru (язык по умолчанию)."""
+    found = []
+    for i, part in enumerate((accept or "").split(",")):
+        tag, *params = part.split(";")
+        q = next((p.split("=", 1)[1] for p in params if p.strip().startswith("q=")), "1")
+        try:
+            q = float(q)
+        except ValueError:
+            continue
+        lg = tag.strip().split("-")[0].lower()
+        if lg in LANGS and q > 0:
+            found.append((-q, i, lg))  # выше q, при равных — раньше в списке
+    return min(found)[2] if found else "ru"
+
+
+# Манифест для установки на экран телефона. Файл один на сайт, поэтому язык описания — по Accept-Language
+MANIFEST_DESC = {
+    "ru": "Бесплатное приложение по методу Getting Things Done: Inbox, следующие действия, проекты и напоминания — "
+          "на сайте и в Telegram.",
+    "en": "A free Getting Things Done app: Inbox, next actions, projects and reminders — on the web and in Telegram.",
+}
+
+
+def manifest(lang: str) -> dict:
+    return {"id": "/", "name": SITE_NAME, "short_name": SITE_NAME, "description": MANIFEST_DESC[lang], "lang": lang,
+            "dir": "ltr", "start_url": "/", "scope": "/", "display": "standalone",
+            "background_color": "#f6f7f9", "theme_color": BRAND,  # фон — --bg светлой темы, как у страниц
+            "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                      {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
+                      {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}
+
+
+# Страница 404 для браузера (неизвестный адрес вне /api/): заголовок, пояснение, «на главную», «как это работает»
+NOT_FOUND = {
+    "ru": ("Страница не найдена", "Такой страницы нет — возможно, ссылка устарела или в ней опечатка.",
+           "Открыть GTD", "Как это работает"),
+    "en": ("Page not found", "There is no page at this address — the link may be outdated or mistyped.",
+           "Open GTD", "How it works"),
+}
+
+
+def not_found(lang: str) -> str:
+    h, text, go, how = NOT_FOUND[lang]
+    home, about_ = PATHS[(lang, "home")], PATHS[(lang, "about")]
+    return f"""<!doctype html>
+<html lang="{lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{h} — {SITE_NAME}</title>
+{ICONS}
+{BASE_CSS}
+{PUBLIC_CSS}
+</head>
+<body>
+<div class="pub"><div class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></div>
+<h1>{h}</h1>
+<p class="lead">{text}</p>
+<p><a class="btn" href="{home}">{go}</a>&emsp;<a href="{about_}">{how}</a></p></div>
+</body>
+</html>"""
