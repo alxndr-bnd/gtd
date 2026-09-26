@@ -39,8 +39,8 @@
 | Установка на телефон: web manifest, iOS-мета | [SERBITO-281](https://serbito.atlassian.net/browse/SERBITO-281) | 6 | Closed — gtd v0.9.0 |
 | Политика конфиденциальности `/privacy` и `/en/privacy` | [SERBITO-282](https://serbito.atlassian.net/browse/SERBITO-282) | 6 | To Do |
 | HTML-страница 404 вместо JSON | [SERBITO-283](https://serbito.atlassian.net/browse/SERBITO-283) | 6 | Closed — gtd v0.9.0 |
-| Заголовок вкладки: раздел и число во Входящих | [SERBITO-284](https://serbito.atlassian.net/browse/SERBITO-284) | 6 | To Do |
-| Открытый код на виду: ссылка на GitHub с сайта, README на английском, инструкция self-host, GitHub Release | [SERBITO-291](https://serbito.atlassian.net/browse/SERBITO-291) | 4 | To Do |
+| Заголовок вкладки: раздел и число во Входящих | [SERBITO-284](https://serbito.atlassian.net/browse/SERBITO-284) | 6 | In Progress |
+| Открытый код на виду: ссылка на GitHub с сайта, README на английском, инструкция self-host, GitHub Release | [SERBITO-291](https://serbito.atlassian.net/browse/SERBITO-291) | 4 | In Progress |
 
 Замер через 6 недель — [SERBITO-262](https://serbito.atlassian.net/browse/SERBITO-262). Найденные по ходу недоработки заводятся в Jira багами с меткой `finding`: SERBITO-268…279 (268 и 269 — утечка названия чужого проекта и токен бота в логах — исправлены в gtd v0.7.0), 283. Этап 6 (280–284) — аудит стандартных мета-тегов и иконок от 2026-09-26: нет файла favicon, manifest, политики конфиденциальности, HTML-404.
 
