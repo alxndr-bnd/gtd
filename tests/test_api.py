@@ -252,3 +252,85 @@ def test_google_analytics_only_on_prod_domain(client, monkeypatch):
         page = client.get("/", headers={"host": host}).text
         assert "googletagmanager" not in page and "<!--GA-->" not in page, host
     assert "gtag/js?id=G-TEST123" in client.get("/i/5", headers={"host": "gtd.serbito.rs"}).text
+
+
+# ── чек-лист первого запуска: пункты отмечаются сами по данным, скрытие хранится на сервере ──
+
+def checklist(c):
+    return c.get("/api/counts").json()["onboarding"]
+
+
+def test_checklist_ticks_from_data(client, login):
+    uid = login(client)
+    assert checklist(client) == {"capture": False, "process": False, "telegram": False, "hidden": False}
+    ids = [client.post("/api/capture", json={"text": t}).json()["id"] for t in ("раз", "два")]
+    assert checklist(client)["capture"] is False
+    client.post("/api/capture", json={"text": "три"})
+    assert checklist(client)["capture"] is True
+    client.delete(f"/api/items/{ids[0]}")  # «записал 3» — за всё время: удаление галочку не снимает
+    assert checklist(client)["capture"] is True and checklist(client)["process"] is False
+    client.patch(f"/api/items/{ids[1]}", json={"status": "someday"})  # разобрал задачу из Inbox
+    assert checklist(client)["process"] is True
+    A.run("update users set tg_id=777 where id=%s", (uid,))
+    assert checklist(client) == {"capture": True, "process": True, "telegram": True, "hidden": True}
+    # всё выполнено — карточка скрыта навсегда, даже если пункт потом «откатится»
+    client.patch(f"/api/items/{ids[1]}", json={"status": "inbox"})
+    assert checklist(client) == {"capture": True, "process": False, "telegram": True, "hidden": True}
+
+
+def test_checklist_process_rule(client, login):
+    login(client)
+    client.post("/api/capture", json={"text": "сразу в дело @дом"})  # с @контекстом — мимо Inbox, в Next
+    assert checklist(client)["process"] is True
+    A.run("update items set status='trash'")  # выбросить из Inbox — тоже разобрать
+    assert checklist(client)["process"] is True
+    A.run("update items set status='inbox'")
+    assert checklist(client)["process"] is False
+
+
+def test_checklist_telegram_and_dev_user(client):
+    client.get("/dev-login")  # dev-пользователь заводится с tg_id=0 — это не Telegram
+    assert checklist(client)["telegram"] is False
+
+
+def test_checklist_dismiss_persists(new_client, login):
+    laptop, phone = new_client(), new_client()
+    login(laptop)
+    login(phone)
+    assert client_patch_ok(laptop, {"checklist_hidden": True})
+    assert checklist(phone)["hidden"] is True  # закрыл на одном устройстве — не вернётся на другом
+    for bad in ("yes", 1, None):
+        assert laptop.patch("/api/me", json={"checklist_hidden": bad}).status_code == 400
+    assert checklist(laptop)["hidden"] is True
+
+
+def client_patch_ok(c, body):
+    return c.patch("/api/me", json=body).status_code == 200
+
+
+def test_existing_user_who_did_everything_never_sees_checklist(client, login):
+    uid = login(client)
+    for t in ("a", "b @x", "c"):
+        A.capture(uid, t)
+    A.run("update users set tg_id=777 where id=%s", (uid,))
+    assert checklist(client)["hidden"] is True  # с первого же запроса
+
+
+def test_checklist_is_per_user(new_client, login):
+    alice, bob = new_client(), new_client()
+    a = login(alice, "alice@example.com")
+    login(bob, "bob@example.com")
+    for t in ("раз", "два", "три @дом"):
+        alice.post("/api/capture", json={"text": t})
+    A.run("update users set tg_id=777 where id=%s", (a,))
+    alice.patch("/api/me", json={"checklist_hidden": True})
+    assert checklist(alice)["hidden"] is True
+    assert checklist(bob) == {"capture": False, "process": False, "telegram": False, "hidden": False}
+    assert bob.patch("/api/me", json={"checklist_hidden": False}).status_code == 200
+    assert checklist(alice)["hidden"] is True  # свой флаг Боб меняет только у себя
+
+
+def test_index_has_checklist_and_empty_states(client):
+    page = client.get("/").text
+    for s in ("onboarding_step", "Запиши 3 мысли", "Разбери Inbox", "Подключи Telegram-бота", "checklist_hidden"):
+        assert s in page, s

@@ -150,6 +150,8 @@ where item_seq < coalesce((select max(num) from items i where i.user_id = u.id),
 create unique index if not exists items_user_num on items(user_id, num);
 -- Настройки пользователя: сколько секунд живёт «Отменить» после действия с задачей
 alter table users add column if not exists undo_seconds integer not null default 30;
+-- Чек-лист первого запуска на сайте больше не показывать: закрыл крестиком или выполнил все пункты
+alter table users add column if not exists checklist_hidden boolean not null default false;
 -- Аналитика использования: только факт активности (кто/день/канал/сколько действий) — без содержимого
 create table if not exists activity(
   user_id bigint not null, day date not null, channel text not null, actions integer not null default 0,
@@ -384,14 +386,50 @@ HELP = (
     "• «в пятницу отчёт #Клиент_X @работа» → сразу в Next, проект и контекст\n\n"
     "/inbox — что в инбоксе\n/next — следующие действия\n/done 12 — закрыть задачу №12\n"
     "/login — ссылка для входа в веб-интерфейс\n"
-    "/email you@example.com — привязать почту: входить на сайте по коду или через Google"
+    "/email you@example.com — привязать почту: входить на сайте по коду или через Google\n"
+    "/about — что такое GTD"
 )
 
+# ── Онбординг в боте (SERBITO-257): все тексты рядом — отсюда их заберёт перевод
+# Описание до Start и короткое (профиль, репосты): язык → (описание ≤512, короткое ≤120); "" — для всех прочих
+BOT_PROFILE = {
+    "": ("Записывай задачи и мысли в один тап — разберёшь потом. Работает по методу GTD Дэвида Аллена: "
+         "Входящие, следующие действия, проекты, напоминания. Всё синхронизируется с сайтом gtd.serbito.rs. "
+         "Бесплатно.",
+         "GTD в Telegram: записывай задачи в один тап, напоминания и проекты. gtd.serbito.rs"),
+    "en": ("Capture tasks and ideas in one tap — sort them out later. Built on David Allen's GTD method: "
+           "Inbox, next actions, projects, reminders. Everything syncs with the website gtd.serbito.rs. Free.",
+           "GTD in Telegram: capture tasks in one tap, reminders and projects. gtd.serbito.rs"),
+}
+BOT_COMMANDS = [
+    {"command": "inbox", "description": "Инбокс"}, {"command": "next", "description": "Следующие действия"},
+    {"command": "done", "description": "Закрыть задачу: /done 12"},
+    {"command": "login", "description": "Ссылка для входа в веб"},
+    {"command": "email", "description": "Привязать почту"},
+    {"command": "about", "description": "Что такое GTD"},
+    {"command": "help", "description": "Помощь"}]
+START = ("Пришли любую мысль — она попадёт во Входящие, а разберёшь потом.\n\n"
+         "• «позвонить маме завтра в 10:00» → напомню\n"
+         "• «отчёт #Работа @комп» → сразу в проект и контекст\n\n"
+         "Все команды — /help")
+ABOUT = ("GTD (Getting Things Done) — метод Дэвида Аллена из его книги «Getting Things Done» "
+         "(по-русски — «Как привести дела в порядок»). Голова — для идей, а не для хранения: всё, что требует "
+         "внимания, сразу записываешь во Входящие, а потом решаешь, что это и какой следующий конкретный шаг. "
+         "Шаги ложатся в списки — Next, Waiting, проекты, Someday, — и раз в неделю ты их пересматриваешь, "
+         "так что ничего не теряется.\n\nПодробнее: {url}/about")
+FIRST_TASK_HINT = "Готово! Можно добавить срок — «завтра в 10:00», — а разобрать всё удобнее на сайте: {url}"
 
-BTN_START, BTN_EMAIL = "🚀 Начать", "📧 Добавить email"
-# Кнопки — под приветствием (inline), а не постоянной клавиатурой: поле ввода остаётся свободным
-KB_START = {"inline_keyboard": [[{"text": BTN_START, "callback_data": "help"},
-                                 {"text": BTN_EMAIL, "callback_data": "addemail"}]]}
+BTN_START, BTN_EMAIL, BTN_ABOUT, BTN_SITE = "🚀 Начать", "📧 Добавить email", "ℹ️ Как это работает", "🌐 Открыть сайт"
+NO_PREVIEW = {"link_preview_options": {"is_disabled": True}}
+
+
+def kb_start():
+    """Кнопки — под приветствием (inline), а не постоянной клавиатурой: поле ввода остаётся свободным.
+    «Открыть сайт» — только с https: ссылку на http://localhost Telegram отвергнет вместе с сообщением."""
+    kb = [[{"text": BTN_ABOUT, "callback_data": "about"}, {"text": BTN_EMAIL, "callback_data": "addemail"}]]
+    if BASE_URL.startswith("https://"):
+        kb.append([{"text": BTN_SITE, "url": BASE_URL}])
+    return {"inline_keyboard": kb}
 # Постоянную клавиатуру прежних версий Telegram убирает только ответом с remove_keyboard
 KB_REMOVE = {"remove_keyboard": True}
 
@@ -543,8 +581,12 @@ async def handle_message(msg):
         await tg_email_ask(chat, u, KB_REMOVE)
     elif text == BTN_START:
         await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=KB_REMOVE)
-    elif cmd in ("/start", "/help"):
-        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=KB_START)
+    elif cmd == "/start":
+        await tg("sendMessage", chat_id=chat, text=START, reply_markup=kb_start())
+    elif cmd == "/help":
+        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=kb_start())
+    elif cmd == "/about":
+        await tg("sendMessage", chat_id=chat, text=ABOUT.format(url=BASE_URL), **NO_PREVIEW)
     elif cmd == "/login":
         tok = secrets.token_urlsafe(24)
         run("insert into login_tokens(token,user_id,expires) values(%s,%s,%s)", (tok, u["id"], int(time.time()) + 600))
@@ -576,6 +618,11 @@ async def handle_message(msg):
         await tg("sendMessage", chat_id=chat,
                  text=f"✓ {where} {item_ref(it)}: {html.escape(it['title'])}\n{html.escape(describe(it))}".strip(),
                  reply_markup=kb_item(it["id"]), **HTML_MSG)
+        # Подсказка — один раз на аккаунт: только к самой первой его задаче. Номер 1 выдаёт счётчик
+        # users.item_seq, который не убывает (и при объединении аккаунтов тоже), — поэтому повтора не будет,
+        # а у кого задачи уже были (с сайта или раньше в боте), подсказки нет
+        if it["num"] == 1:
+            await tg("sendMessage", chat_id=chat, text=FIRST_TASK_HINT.format(url=BASE_URL), **NO_PREVIEW)
 
 
 def mark_done(uid, iid=None, num=None):
@@ -595,10 +642,12 @@ async def handle_callback(cb):
     if act in ("merge", "nomerge"):
         await tg_merge_answer(cb, sid, act == "merge")
         return
-    if act in ("help", "addemail"):  # кнопки под приветствием
+    if act in ("about", "help", "addemail"):  # кнопки под приветствием («help» — у приветствий прежних версий)
         chat = (cb.get("message") or {}).get("chat", {}).get("id", cb["from"]["id"])
         await tg("answerCallbackQuery", callback_query_id=cb["id"])
-        if act == "help":
+        if act == "about":
+            await tg("sendMessage", chat_id=chat, text=ABOUT.format(url=BASE_URL), **NO_PREVIEW)
+        elif act == "help":
             await tg("sendMessage", chat_id=chat, text=HELP)
         else:
             await tg_email_ask(chat, tg_user(cb["from"]["id"], cb["from"].get("first_name", "")))
@@ -641,19 +690,44 @@ async def dispatch(up: dict):
 
 
 async def bot_setup():
-    """На старте: имя бота, меню команд и (в проде) вебхук. Идемпотентно — на каждом холодном старте."""
+    """На старте: имя бота, профиль (описания и меню команд) и (в проде) вебхук. Идемпотентно — на каждом
+    холодном старте; шаги независимы и идут параллельно, ошибка любого только пишется в лог — старт не падает."""
+    steps = [bot_username()]
+    if WEBHOOK:  # локальный сервер ходит в того же бота: неопубликованные тексты не должны попасть в прод
+        steps += [bot_profile(), tg("setWebhook", url=f"{BASE_URL}/tg/webhook", secret_token=webhook_secret(),
+                                    allowed_updates=["message", "callback_query"])]
+    for r in await asyncio.gather(*steps, return_exceptions=True):
+        if isinstance(r, BaseException):  # только тип: в тексте ошибки httpx бывает URL с токеном
+            log.warning("bot setup step failed: %s", type(r).__name__)
+
+
+async def bot_username():
     global BOT_USERNAME
     me = await tg("getMe")
-    BOT_USERNAME = (me or {}).get("username", "")
-    await tg("setMyCommands", commands=[
-        {"command": "inbox", "description": "Инбокс"}, {"command": "next", "description": "Следующие действия"},
-        {"command": "done", "description": "Закрыть задачу: /done 12"},
-        {"command": "login", "description": "Ссылка для входа в веб"},
-        {"command": "email", "description": "Привязать почту"},
-        {"command": "help", "description": "Помощь"}])
-    if WEBHOOK:
-        await tg("setWebhook", url=f"{BASE_URL}/tg/webhook", secret_token=webhook_secret(),
-                 allowed_updates=["message", "callback_query"])
+    BOT_USERNAME = me.get("username", "") if isinstance(me, dict) else ""
+
+
+def _field(r, key):
+    return r.get(key) if isinstance(r, dict) else None
+
+
+async def bot_profile():
+    """Описание до Start, короткое описание и меню команд живут в коде, а не руками в @BotFather.
+    Холодных стартов много (Cloud Run спит без трафика), поэтому сначала читаем текущее — параллельно —
+    и ставим только то, что разошлось. Не прочиталось (None) — просто ставим: вызовы идемпотентны."""
+    langs = list(BOT_PROFILE)
+    cmds, *cur = await asyncio.gather(
+        tg("getMyCommands"),
+        *(tg("getMyDescription", language_code=lang) for lang in langs),
+        *(tg("getMyShortDescription", language_code=lang) for lang in langs))
+    sets = [] if cmds == BOT_COMMANDS else [tg("setMyCommands", commands=BOT_COMMANDS)]
+    for i, lang in enumerate(langs):
+        desc, short = BOT_PROFILE[lang]
+        if _field(cur[i], "description") != desc:
+            sets.append(tg("setMyDescription", description=desc, language_code=lang))
+        if _field(cur[len(langs) + i], "short_description") != short:
+            sets.append(tg("setMyShortDescription", short_description=short, language_code=lang))
+    await asyncio.gather(*sets)
 
 
 async def poll_loop():
@@ -1100,11 +1174,15 @@ def admin_stats(uid: int = Depends(current_user)):
 
 @app.patch("/api/me")
 def patch_me(body: dict, uid: int = Depends(current_user)):
-    """Настройки пользователя. Пока одна: время на «Отменить» — 5, 10 или 30 секунд."""
+    """Настройки пользователя: время на «Отменить» — 5, 10 или 30 секунд; скрыть чек-лист первого запуска."""
     if "undo_seconds" in body:
         if body["undo_seconds"] not in UNDO_CHOICES:
             raise HTTPException(400, "undo_seconds: 5, 10 или 30")
         run("update users set undo_seconds=%s where id=%s", (body["undo_seconds"], uid))
+    if "checklist_hidden" in body:
+        if not isinstance(body["checklist_hidden"], bool):
+            raise HTTPException(400, "checklist_hidden: true или false")
+        run("update users set checklist_hidden=%s where id=%s", (body["checklist_hidden"], uid))
     return me(uid)
 
 
@@ -1184,10 +1262,26 @@ def logout(request: Request):
 def counts(uid: int = Depends(current_user)):
     c = {r["status"]: r["n"] for r in rows(
         "select status, count(*) n from items where user_id=%s group by status", (uid,))}
+    checklist = onboarding(uid, c)
     c["scheduled"] = row("select count(*) n from items where user_id=%s and remind_at is not null "
                          "and status not in ('done','trash')", (uid,))["n"]
     c["projects"] = row("select count(*) n from projects where user_id=%s and status='active'", (uid,))["n"]
+    c["onboarding"] = checklist
     return c
+
+
+def onboarding(uid: int, by_status: dict) -> dict:
+    """Чек-лист первого запуска (SERBITO-258): пункты отмечаются сами по данным.
+    capture — записано ≥3 задач за всё время (счётчик item_seq: удаление галочку не снимает);
+    process — хотя бы одна задача не во Входящих (любой другой список, Готово и корзина тоже);
+    telegram — к аккаунту привязан Telegram. hidden — карточку больше не показывать: закрыл
+    крестиком или выполнил всё; запоминаем навсегда, чтобы она не вернулась, если пункт «откатится»."""
+    u = row("select item_seq, tg_id, checklist_hidden from users where id=%s", (uid,))
+    steps = {"capture": u["item_seq"] >= 3, "process": any(n for s, n in by_status.items() if s != "inbox"),
+             "telegram": bool(u["tg_id"])}
+    if all(steps.values()) and not u["checklist_hidden"]:
+        run("update users set checklist_hidden=true where id=%s", (uid,))
+    return {**steps, "hidden": u["checklist_hidden"] or all(steps.values())}
 
 
 @app.get("/api/items")
