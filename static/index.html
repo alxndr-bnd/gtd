@@ -134,7 +134,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><!--LANDING--></div>
 <dialog id="dlg"></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <script>
@@ -209,18 +209,23 @@ function devLiveReload(){
   }, 1000);
 }
 
+// Лендинг /en/ — английский; само приложение пока только на русском (SERBITO-259)
+const EN = document.documentElement.lang === 'en', tr = (ru, en) => EN ? en : ru;
 async function loginScreen(){
   S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
   S.view = 'inbox'; S.pid = null;
   devLiveReload();
   const c = S.cfg, parts = [];
   if(c.google) parts.push('<div class="gbtn"></div>');
-  if(c.email) parts.push(emailFormHtml('Войти по коду'));
-  if(c.bot) parts.push('<button data-act="tglogin">✈️ Войти через Telegram</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>');
-  $('#root').innerHTML = `<div class="login"><h1>GTD</h1><p class="hint" style="margin:0 0 20px">Вход или регистрация — аккаунт создастся сам</p>
-    ${parts.join('<div class="or">или</div>') || '<p>Способы входа не настроены.</p>'}
+  if(c.email) parts.push(emailFormHtml(tr('Войти по коду', 'Get a code')));
+  if(c.bot) parts.push(`<button data-act="tglogin">✈️ ${tr('Войти через Telegram', 'Sign in with Telegram')}</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>`);
+  const buttons = `${parts.join(`<div class="or">${tr('или', 'or')}</div>`) || '<p>Способы входа не настроены.</p>'}
     <div class="msg" id="authmsg"></div>
-    ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}</div>`;
+    ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}`;
+  // Гостю сервер отдал лендинг (текст — в HTML для поисковиков): кнопки встают в его блок входа
+  if($('#signin')) $('#signin').innerHTML = buttons;
+  else $('#root').innerHTML = `<div class="login"><h1>GTD</h1><p class="hint" style="margin:0 0 20px">Вход или регистрация — аккаунт создастся сам</p>
+    ${buttons}</div>`;
   mountGoogle();
   gaPage();
 }
@@ -245,7 +250,7 @@ function mergeOffer(d){
 async function mergeApply(token){
   try{ await authPost('merge', {token}); load(); }catch(err){ authMsg(err.message); }
 }
-const emailFormHtml = label => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="Почта">
+const emailFormHtml = label => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="${tr('Почта', 'Email')}">
   <button data-act="emailsend">${label}</button></div><div id="emcode"></div>`;
 
 function mountGoogle(){
@@ -254,7 +259,7 @@ function mountGoogle(){
     google.accounts.id.initialize({client_id:S.cfg.google, callback: async ({credential}) => {
       try{ const lk = linking(); await authPost('google', {credential, link:lk}); ga(lk ? 'link_method' : 'login', {method:'google'}); load(); }catch(err){ authFail(err); }
     }});
-    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:'ru'});
+    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:tr('ru', 'en')});
   };
   if(window.google?.accounts) return go();
   const s = document.createElement('script');
@@ -266,9 +271,9 @@ async function emailSend(){
   const email = $('#em').value.trim(); if(!email) return;
   try{
     await authPost('email/start', {email}); S.email = email;
-    $('#emcode').innerHTML = `<div class="cap" style="margin-top:8px"><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из письма">
-      <button class="pri" data-act="emailverify">${linking()?'Подтвердить':'Войти'}</button></div>`;
-    $('#code').focus(); authMsg(`Код отправлен на ${email}, действует 10 минут`);
+    $('#emcode').innerHTML = `<div class="cap" style="margin-top:8px"><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="${tr('Код из письма', 'Code from the email')}">
+      <button class="pri" data-act="emailverify">${linking()?'Подтвердить':tr('Войти', 'Sign in')}</button></div>`;
+    $('#code').focus(); authMsg(tr(`Код отправлен на ${email}, действует 10 минут`, `Code sent to ${email}, valid for 10 minutes`));
   }catch(err){ authMsg(err.message); }
 }
 
@@ -281,8 +286,8 @@ async function emailVerify(){
 async function tgStart(){
   try{
     const d = await authPost('tg/start', {link:linking()});
-    $('#tgst').innerHTML = `<p><a href="${esc(d.url)}" target="_blank" rel="noopener"><button class="pri">Открыть Telegram</button></a></p>
-      В боте нажми «Start», затем «Подтвердить» — страница обновится сама.`;
+    $('#tgst').innerHTML = `<p><a href="${esc(d.url)}" target="_blank" rel="noopener"><button class="pri">${tr('Открыть Telegram', 'Open Telegram')}</button></a></p>
+      ${tr('В боте нажми «Start», затем «Подтвердить» — страница обновится сама.', 'In the bot, tap “Start”, then “Подтвердить” (Confirm) — this page updates by itself.')}`;
     tgPoll(d.nonce);
   }catch(err){ authMsg(err.message); }
 }
@@ -339,6 +344,7 @@ function navHtml(){
     <nav><h1 data-view="inbox" title="На Inbox">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
     ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">📊 Статистика</a>`:''}
+    <a href="/about" title="Как это работает: метод GTD и разделы приложения">📖 О GTD</a>
     <div class="navfoot"><div class="sep"></div>${user}</div>
     <div class="keys">C / N — новая задача<br>↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс</div></nav>`;
 }
@@ -642,7 +648,7 @@ document.addEventListener('click', async e => {
   if(act==='mv') return moveItem(id, el.dataset.st);
   if(act==='undo') return toastUndo();
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
-  if(act==='logout'){ await api('/logout','POST'); S.me = null; return loginScreen(); }
+  if(act==='logout'){ await api('/logout','POST'); S.me = null; return location.assign(EN ? '/en/' : '/'); }  // на лендинг: его текст — с сервера
   if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }

@@ -20,7 +20,9 @@ import sentry_sdk
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+
+import pages
 
 log = logging.getLogger("gtd")
 logging.basicConfig(level=logging.INFO)
@@ -1323,16 +1325,68 @@ GA_SNIPPET = """<script async src="https://www.googletagmanager.com/gtag/js?id={
 </script>"""
 
 
+STATIC = os.path.join(os.path.dirname(__file__), "static")
+
+
+def ga_snippet(request: Request) -> str:
+    return GA_SNIPPET.format(id=GA_ID) if GA_ID and request.url.hostname == GA_HOST else ""
+
+
+def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLResponse:
+    """Страница приложения. GA-сниппет — статично в HTML (чтобы Google видел тег), только на боевом домене.
+    landing — гостю вместо пустого экрана входа: SEO-теги и текст лендинга прямо в HTML (pages.py)."""
+    with open(os.path.join(STATIC, "index.html"), encoding="utf-8") as f:
+        page = f.read().replace("<!--GA-->", ga_snippet(request))
+    if landing:
+        page = (page.replace('<html lang="ru">', f'<html lang="{lang}">')
+                .replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
+                .replace("<!--LANDING-->", pages.landing(lang)))
+    return HTMLResponse(page)
+
+
 @app.get("/")
 def index(request: Request):
-    """Страница приложения. GA-сниппет — статично в HTML (чтобы Google видел тег), только на боевом домене."""
-    with open(os.path.join(os.path.dirname(__file__), "static", "index.html"), encoding="utf-8") as f:
-        page = f.read()
-    ga = GA_SNIPPET.format(id=GA_ID) if GA_ID and request.url.hostname == GA_HOST else ""
-    return HTMLResponse(page.replace("<!--GA-->", ga))
+    # Вошёл — сразу приложение, как раньше; гость и поисковик видят лендинг
+    return app_page(request, landing=not session_user(request))
+
+
+@app.get("/en/")
+def index_en(request: Request):
+    return app_page(request, "en", landing=not session_user(request))
+
+
+@app.get("/about")
+def about_page(request: Request):
+    return HTMLResponse(pages.about(BASE_URL, "ru", ga_snippet(request)))
+
+
+@app.get("/en/about")
+def about_page_en(request: Request):
+    return HTMLResponse(pages.about(BASE_URL, "en", ga_snippet(request)))
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    return PlainTextResponse(pages.robots(BASE_URL))
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    return Response(pages.sitemap(BASE_URL), media_type="application/xml")
+
+
+@app.get("/og.png")
+@app.get("/og-en.png")
+def og_image(request: Request):
+    """Картинка превью ссылки (1200×630): og.png — русская, og-en.png — английская."""
+    return FileResponse(os.path.join(STATIC, request.url.path.lstrip("/")), media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/i/{num}")
 def item_page(num: int, request: Request):
-    """Ссылка на задачу: та же страница, фронт откроет карточку после входа. Данные — только через API."""
-    return index(request)
+    """Ссылка на задачу: та же страница, фронт откроет карточку после входа. Данные — только через API.
+    Страница личная и без входа пустая — поисковикам не индексировать."""
+    r = app_page(request)
+    r.headers["X-Robots-Tag"] = "noindex"
+    return r

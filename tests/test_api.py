@@ -16,9 +16,12 @@ def test_config_reports_session(client, login):
     assert client.get("/api/config").json()["user"] is True
 
 
-def test_index_served(client):
-    r = client.get("/")
-    assert r.status_code == 200 and "<title>GTD</title>" in r.text
+def test_index_served(client, login):
+    r = client.get("/")  # гостю — лендинг с SEO-заголовком и то же приложение
+    assert r.status_code == 200 and "<title>GTD онлайн бесплатно" in r.text and "function load()" in r.text
+    login(client)
+    r = client.get("/")  # вошёл — приложение, как раньше
+    assert r.status_code == 200 and "<title>GTD</title>" in r.text and "function load()" in r.text
 
 
 def test_capture_and_list(client, login):

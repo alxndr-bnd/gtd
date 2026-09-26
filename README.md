@@ -96,6 +96,10 @@ PostgreSQL 17 на Cloud SQL (`serbitodb`), отдельная база `gtd`. �
 ## UI
 Inbox · Next (фильтр по @контексту) · Waiting · Календарь/напоминания · Проекты (⚠ без next action) · Someday · Reference · Готово · Weekly Review.
 
+Публичные страницы — `pages.py`, текст отдаёт сервер (для поисковиков): лендинг гостю на `/` и `/en/`,
+«Как это работает» `/about` и `/en/about`, `robots.txt`, `sitemap.xml`. Картинки превью `static/og*.png` —
+`scripts/og_image.py`.
+
 ## Дальше (идеи)
 Голосовые → текст, повторяющиеся задачи, вебхук вместо long polling, экспорт/импорт.
 
@@ -106,10 +110,23 @@ Inbox · Next (фильтр по @контексту) · Waiting · Календ
   агрегатами из таблицы `activity` (пользователь × день × канал → число действий).
 - **Google Analytics 4** — аккаунт Serbito → ресурс `gtd.serbito.rs` (`G-CP9WBRWGD6`, `GA_MEASUREMENT_ID`).
   Тег только на боевом домене; enhanced measurement выключен; страницы — только раздел (`/inbox`,
-  `/next`…, ссылка `/i/N` уходит как `/inbox`), события `login`/`link_method` (method) и `task_capture`.
+  `/next`…, ссылка `/i/N` уходит как `/inbox`), события `login`/`link_method` (method), `task_capture` и `about_view` (язык).
 - **Cloudflare Web Analytics** — визиты, без cookies.
 - **Sentry** — без локальных переменных, тел запросов и `httpx`-крошек; токен бота вычищается.
 
 ## Лицензия
 [MIT](LICENSE) © 2026 Alexander Bondarchuk: права у автора, использовать, менять и распространять —
 бесплатно и свободно, в том числе в коммерческих целях, при сохранении копирайта и текста лицензии.
+
+## Other projects
+Also by No Handoff:
+- **Planning Poker** — free planning poker for scrum teams, no sign-up:
+  [poker.serbito.rs](https://poker.serbito.rs/?utm_source=github&utm_medium=crosspromo&utm_campaign=readme) ·
+  [GitHub](https://github.com/alxndr-bnd/planning-poker)
+- **Javi** — delivery notifications for small businesses in Serbia:
+  [javi.serbito.rs](https://javi.serbito.rs/?utm_source=github&utm_medium=crosspromo&utm_campaign=readme) ·
+  [GitHub](https://github.com/alxndr-bnd/javi)
+- **Serbito** — classifieds in Serbia:
+  [serbito.rs](https://serbito.rs/?utm_source=github&utm_medium=crosspromo&utm_campaign=readme)
+
+Made by [No Handoff](https://www.linkedin.com/company/nohandoff/)
