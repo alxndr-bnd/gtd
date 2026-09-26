@@ -10,7 +10,10 @@ data/
 *.db-shm
 
 # Python
+.venv
 .venv/
+.venv.nosync/
+.venv.icloud-old/
 venv/
 __pycache__/
 *.py[cod]
