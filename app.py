@@ -393,7 +393,13 @@ ON = r"(?:\bon\s+)?"  # «pay rent on 24 oct», «on 2026-10-24»: предло�
 def parse_when(text: str, now: datetime):
     """Возвращает (очищенный_текст, epoch|None). Понимает рус/англ: «через 2 часа» / «in 2 hours»,
     «завтра в 10:00» / «tomorrow 10am», «в пятницу» / «on friday», «next monday», «24.10 12:00» / «24 oct 12:00»,
-    «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow»."""
+    «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow».
+
+    Дата через точку — всегда с месяцем из двух цифр. С двузначным днём («24.10», «01.09») или годом
+    («5.10.2026») — всегда дата. С однозначным днём («1.10») — только если рядом признак даты: начало
+    текста («1.02 оплата»), предлог перед ней («к», «до», «на», «в», «с», «по», «by», «on», «until»,
+    «till») или время сразу после («1.10 12:00», «1.10 в 12:00»). Иначе это число: «версия 1.05»,
+    «курс 1.10» напоминаний не ставят."""
     found = False
 
     def cut(m):
@@ -416,16 +422,19 @@ def parse_when(text: str, now: datetime):
         cut(m)
         return _clean(text), int((now + d).timestamp())
 
-    hm = None
+    hm = tm = None
     # 12-часовое время: «10am», «at 3 pm», «9:30pm»; 12am — полночь, 12pm — полдень
     m = re.search(r"(?:\bat\s+)?\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?", text, re.I)
     if m and 1 <= int(m.group(1)) <= 12 and int(m.group(2) or 0) < 60:
-        hm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0))
-        cut(m)
-    m = None if hm else re.search(r"(?:\b(?:в|at|к)\s+)?\b(\d{1,2}):(\d{2})\b", text)
+        hm, tm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0)), m
+    m = None if hm else re.search(r"(?:\b(?:в|at|к)\s+)?\b(\d{1,2}):(\d{2})\b", text, re.I)
     if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
-        hm = (int(m.group(1)), int(m.group(2)))
-        cut(m)
+        hm, tm = (int(m.group(1)), int(m.group(2))), m
+    timed_dm = None  # позиция «1.10» прямо перед временем: текст до вырезанного времени не сдвигается
+    if tm:
+        p = re.search(r"\b\d\.\d{2}\s+$", text[: tm.start()])
+        timed_dm = p and p.start()
+        cut(tm)
 
     base, explicit_dm = None, False
     m = re.search(ON + r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
@@ -436,8 +445,11 @@ def parse_when(text: str, now: datetime):
         except ValueError:
             pass
     if base is None:
-        # Месяц — две цифры: «24.10», «1.02»; иначе «версия 1.2» становится 1 февраля
-        m = re.search(r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b", text)
+        # Месяц — две цифры, однозначный день — только с признаком даты (правило — в docstring)
+        m = next((m for m in re.finditer(r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b", text)
+                  if len(m.group(1)) == 2 or m.group(3) or m.start() == timed_dm
+                  or re.fullmatch(r"(?s)\s*|.*\b(?:к|до|на|в|с|по|by|on|until|till)\s+", text[: m.start()], re.I)),
+                 None)
         if m:
             try:
                 y = int(m.group(3)) if m.group(3) else now.year
