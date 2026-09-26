@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest>=8
+# Браузерный смоук SPA (tests/test_browser_smoke.py); браузер ставится отдельно: .venv/bin/playwright install chromium
+playwright>=1.63

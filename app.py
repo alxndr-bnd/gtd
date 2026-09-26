@@ -1768,6 +1768,16 @@ def about_page_en(request: Request):
     return HTMLResponse(pages.about(BASE_URL, "en", ga_snippet(request)))
 
 
+@app.get("/privacy")
+def privacy_page(request: Request):
+    return HTMLResponse(pages.privacy(BASE_URL, "ru", ga_snippet(request)))
+
+
+@app.get("/en/privacy")
+def privacy_page_en(request: Request):
+    return HTMLResponse(pages.privacy(BASE_URL, "en", ga_snippet(request)))
+
+
 @app.get("/robots.txt")
 def robots_txt():
     return PlainTextResponse(pages.robots(BASE_URL))

@@ -1,5 +1,5 @@
 """Публичные страницы для гостей и поисковиков: лендинг на входе (/, /en/), «Как это работает»
-(/about, /en/about), SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
+(/about, /en/about), политика конфиденциальности (/privacy, /en/privacy), SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
 Google индексирует его без JS. Маршруты — в app.py, здесь только содержимое; base — BASE_URL."""
 import json
 
@@ -43,7 +43,8 @@ ICONS = "\n".join([
     '<meta name="apple-mobile-web-app-status-bar-style" content="default">',
 ])
 LANGS = ("ru", "en")
-PATHS = {("ru", "home"): "/", ("ru", "about"): "/about", ("en", "home"): "/en/", ("en", "about"): "/en/about"}
+PATHS = {("ru", "home"): "/", ("ru", "about"): "/about", ("en", "home"): "/en/", ("en", "about"): "/en/about",
+         ("ru", "privacy"): "/privacy", ("en", "privacy"): "/en/privacy"}
 
 # Другие проекты No Handoff: один список на оба языка (в README — тот же, с UTM для GitHub)
 PRODUCTS = [
@@ -183,7 +184,8 @@ def footer(lang: str) -> str:
     contact = f' · <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>' if CONTACT_EMAIL else ""
     return (f'<footer><b>{t["other"]}</b><ul>{items}</ul>'
             f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{contact}</p>'
-            f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a></p>'
+            f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a> · '
+            f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a></p>'
             f'<p>{t["tm"]} <a href="{GTD_SITE}">gettingthingsdone.com</a></p></footer>')
 
 
@@ -235,7 +237,7 @@ def landing(lang: str) -> str:
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
     return (f'<div class="pub">{topbar(lang, "home")}<div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin"></div></div></div>{LANDING_STEPS[lang]}{footer(lang)}</div>')
+            f'<div id="signin"></div>{PRIVACY_NOTE[lang]}</div></div>{LANDING_STEPS[lang]}{footer(lang)}</div>')
 
 
 ABOUT = {
@@ -360,14 +362,141 @@ def about(base: str, lang: str, ga: str) -> str:
 </html>"""
 
 
+# Политика конфиденциальности (SERBITO-282). Каждое утверждение сверено с app.py и index.html — меняешь, что
+# хранится или куда уходит, правь и этот текст. Адрес для запросов о данных — только здесь, больше нигде
+PRIVACY_EMAIL = "alexander.bondarchuk@gmail.com"
+PRIVACY_DATE = {"ru": "26 сентября 2026", "en": "26 September 2026"}
+T["ru"].update(privacy="Конфиденциальность", privacy_title="Политика конфиденциальности — GTD онлайн",
+               privacy_desc="Какие данные хранит GTD онлайн, что получает аналитика, кто обрабатывает данные "
+                            "и как удалить аккаунт.")
+T["en"].update(privacy="Privacy", privacy_title="Privacy policy — GTD online",
+               privacy_desc="What data GTD online stores, what analytics receive, who processes it "
+                            "and how to delete your account.")
+# Ссылка на политику под кнопками входа на лендинге
+PRIVACY_NOTE = {
+    "ru": '<p class="note" style="margin:14px 0 0">Что мы храним — <a href="/privacy">политика конфиденциальности</a></p>',
+    "en": '<p class="note" style="margin:14px 0 0">What we store — <a href="/en/privacy">privacy policy</a></p>',
+}
+PRIVACY = {
+    "ru": """<h1>Политика конфиденциальности</h1>
+<p class="lead">GTD — бесплатный менеджер задач от No Handoff. Храним только то, без чего приложение не работает;
+данные не продаём, рекламы нет.</p>
+<p class="note">Обновлено {date}</p>
+<h2>Что мы храним</h2>
+<ul class="ex">
+<li><b>Аккаунт</b> — смотря как входишь: id, имя и язык из Telegram; адрес почты; id Google-аккаунта, почта
+и имя из Google. И настройки: язык интерфейса, время на «Отменить», показывать ли чек-лист.</li>
+<li><b>Задачи и проекты</b>: название, заметки, список, контекст, проект, время напоминания и откуда пришла
+задача — с сайта или от бота.</li>
+<li><b>Счётчик активности</b>: за каждый день и канал (сайт или бот) — сколько было действий. Без текста задач
+и без IP-адресов.</li>
+<li><b>Вход</b>: cookie <code>sid</code> (httpOnly, 90 дней) держит тебя в аккаунте, выход удаляет сессию.
+Ссылки и коды входа живут 10 минут, коды из писем хранятся только в виде хеша.</li>
+<li><b>Только в браузере</b> (localStorage): выбранный язык и ещё не сохранённые черновики.</li>
+</ul>
+<h2>Аналитика</h2>
+<ul class="ex">
+<li><b>Google Analytics 4</b> — только на gtd.serbito.rs: какой раздел открыт (Inbox, Next…) и события — вход
+и привязка (каким способом), факт записи задачи, шаги чек-листа, просмотр «Как это работает», язык интерфейса.
+Текст задач, их номера, почта и id пользователя туда не уходят. GA ставит свои cookie, а Google получает
+обычные технические данные браузера (устройство, примерное местоположение).</li>
+<li><b>Cloudflare Web Analytics</b> — общее число посещений, без cookie.</li>
+</ul>
+<h2>Кто обрабатывает данные</h2>
+<ul class="ex">
+<li><b>Google Cloud</b> (Cloud Run и Cloud SQL, регион europe-west1, Бельгия) — сервер и база данных.</li>
+<li><b>Brevo</b> — отправляет письма с кодом входа.</li>
+<li><b>Sentry</b> — отчёты об ошибках: без тел запросов, локальных переменных и персональных данных.</li>
+<li><b>Google Analytics</b> и <b>Cloudflare</b> — аналитика, см. выше.</li>
+<li><b>Telegram</b> — если пользуешься ботом, сообщения и напоминания идут через Telegram.</li>
+<li><b>Google</b> — если входишь через Google, он подтверждает нам твой аккаунт.</li>
+</ul>
+<h2>Сколько храним</h2>
+<p>Пока есть аккаунт. Удалённая задача или проект стирается из базы сразу (Корзина — это просто список,
+оттуда можно вернуть). В резервных копиях базы удалённое может оставаться, пока копии не сменятся.</p>
+<h2>Удаление аккаунта</h2>
+<p>Кнопки удаления в приложении пока нет — напиши на почту ниже и укажи, как входишь (почта, Google
+или Telegram). Удалим аккаунт и все его данные в течение 30 дней после запроса.</p>
+<h2>Контакты</h2>
+<p>Оператор — No Handoff. Вопросы о данных и запросы на удаление:
+<a href="mailto:{email}">{email}</a>.</p>""",
+    "en": """<h1>Privacy policy</h1>
+<p class="lead">GTD is a free task manager by No Handoff. We keep only what the app needs to work;
+we don't sell data, and there are no ads.</p>
+<p class="note">Updated {date}</p>
+<h2>What we store</h2>
+<ul class="ex">
+<li><b>Account</b> — depending on how you sign in: ID, first name and language from Telegram; email address;
+Google account ID, email and name from Google. Plus settings: interface language, undo time, checklist on or off.</li>
+<li><b>Tasks and projects</b>: title, notes, list, context, project, reminder time and where the task came from —
+the site or the bot.</li>
+<li><b>Activity counter</b>: per day and channel (site or bot) — how many actions you made. No task text,
+no IP addresses.</li>
+<li><b>Sign-in</b>: the <code>sid</code> cookie (httpOnly, 90 days) keeps you signed in; signing out deletes
+the session. Sign-in links and codes last 10 minutes; email codes are stored only as a hash.</li>
+<li><b>In your browser only</b> (localStorage): your language choice and unsaved drafts.</li>
+</ul>
+<h2>Analytics</h2>
+<ul class="ex">
+<li><b>Google Analytics 4</b> — only on gtd.serbito.rs: which section is open (Inbox, Next…) and events — sign-in
+and account linking (which method), the fact a task was captured, checklist steps, “How it works” views,
+interface language. Task text, task numbers, email and user ID are never sent. GA sets its own cookies, and
+Google receives standard technical data from your browser (device, approximate location).</li>
+<li><b>Cloudflare Web Analytics</b> — total visits, no cookies.</li>
+</ul>
+<h2>Who processes data</h2>
+<ul class="ex">
+<li><b>Google Cloud</b> (Cloud Run and Cloud SQL, region europe-west1, Belgium) — server and database.</li>
+<li><b>Brevo</b> — sends emails with sign-in codes.</li>
+<li><b>Sentry</b> — error reports, without request bodies, local variables or personal data.</li>
+<li><b>Google Analytics</b> and <b>Cloudflare</b> — analytics, see above.</li>
+<li><b>Telegram</b> — if you use the bot, messages and reminders pass through Telegram.</li>
+<li><b>Google</b> — if you sign in with Google, it confirms your account to us.</li>
+</ul>
+<h2>How long we keep data</h2>
+<p>As long as your account exists. A deleted task or project is erased from the database right away (Trash is
+just a list you can restore from). Deleted data may remain in database backups until they are replaced.</p>
+<h2>Deleting your account</h2>
+<p>There is no delete button in the app yet — email us at the address below and say how you sign in (email,
+Google or Telegram). We delete the account and all its data within 30 days of the request.</p>
+<h2>Contact</h2>
+<p>Operator: No Handoff. Questions about your data and deletion requests:
+<a href="mailto:{email}">{email}</a>.</p>""",
+}
+
+
+def privacy(base: str, lang: str, ga: str) -> str:
+    """Политика конфиденциальности — такая же лёгкая страница, как /about. ga — GA-сниппет или пусто."""
+    path = PATHS[(lang, "privacy")]
+    body = PRIVACY[lang].format(date=PRIVACY_DATE[lang], email=PRIVACY_EMAIL)
+    track = ("<script>if(typeof gtag === 'function') gtag('event', 'page_view', "
+             f"{{page_location: location.origin + '{path}', page_title: 'GTD — {T[lang]['privacy']}'}});</script>")
+    return f"""<!doctype html>
+<html lang="{lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+{head(base, lang, "privacy")}
+{ICONS}
+{ga}
+{CF_BEACON}
+{BASE_CSS}
+</head>
+<body>
+<div class="pub">{topbar(lang, "privacy")}{body}{footer(lang)}</div>
+{track}
+</body>
+</html>"""
+
+
 def robots(base: str) -> str:
-    return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /en/",
+    return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /en/",
                       *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/", "/i/")),
                       "", f"Sitemap: {base}/sitemap.xml", ""])
 
 
 def sitemap(base: str) -> str:
-    """4 публичных адреса, у каждого — альтернативы ru/en/x-default."""
+    """Публичные адреса из PATHS, у каждого — альтернативы ru/en/x-default."""
     out = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">']
     for (lang, page) in PATHS:
