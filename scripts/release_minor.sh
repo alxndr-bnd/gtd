@@ -19,7 +19,8 @@ if [[ "$branch" != "main" ]]; then
   exit 1
 fi
 
-# --- гейт: тесты (локальный Postgres, временная база) ---
+# --- гейт: тесты (локальный Postgres, временная база) и браузерный смоук SPA в Chromium.
+# Нет Chromium — тест падает с подсказкой: .venv/bin/playwright install chromium ---
 echo "==> pytest"
 .venv/bin/python -m pytest
 
