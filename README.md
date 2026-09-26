@@ -1,144 +1,75 @@
-# GTD for free — gtd.serbito.rs
+# GTD — free Getting Things Done app
 
-Веб-UI + Telegram-бот. FastAPI + PostgreSQL, один контейнер.
+A free task manager built around David Allen's GTD method: capture everything in a second, clarify it
+later, do the next action. On the web and in Telegram, one account for both. Hosted at
+**[gtd.serbito.rs](https://gtd.serbito.rs)** · bot [@gtdsrbot](https://t.me/gtdsrbot).
 
-## Локальный запуск
-Один раз: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`,
-`cp .env.example .env`, `createdb gtd`. Дальше — локальная база, автоперезагрузка на каждую правку:
+FastAPI + PostgreSQL, one container. English and Russian.
+
+![Landing page](docs/img/landing.png)
+
+![Inbox](docs/img/app-inbox.png)
+
+![Next actions filtered by context](docs/img/app-next.png)
+
+## Features
+
+- **Quick capture** with natural dates: `call mom tomorrow at 10am #Family @phone` → task, reminder, project, context.
+- **GTD lists:** Inbox · Next (filter by @context) · Waiting · Calendar/reminders · Projects (⚠ without a next
+  action) · Someday · Reference · Done · Weekly Review.
+- **Telegram bot:** send a message — it lands in the Inbox; reminders come with ✅ Done / 💤 +1h / ⏭ Next buttons.
+- **Sign-in** by email code, Google or Telegram; methods link into one account, accounts can be merged.
+- **Keyboard-first** web app, installable to the phone home screen.
+- **Privacy:** analytics never include task content, emails or user ids.
+
+Details for contributors: [docs/internals.md](docs/internals.md).
+
+## Run locally
+
+Once: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`, `cp .env.example .env`,
+`createdb gtd`. Then — local database, auto-reload on every change:
+
 ```bash
 .venv/bin/uvicorn app:app --reload --reload-exclude .venv --env-file .env
 ```
-`.env` по умолчанию смотрит в **локальную** базу: локальный сервер накатывает схему при старте, и
-неопубликованный код не должен менять прод (так 2026-09-25 в боевую базу уехали колонки до релиза
-и уронили запрос у работающей ревизии — Sentry GTD-1). На боевую — только явно:
-```bash
-DATABASE_URL="$(sed -n 's/^DATABASE_URL_PROD=//p' .env)" .venv/bin/uvicorn app:app --env-file .env
-```
-Работает, пока твой IP в Authorized networks `serbitodb` (сейчас там `home`). Сменился IP — добавить
-новый (`gcloud sql instances patch` перезаписывает весь список!) или поднять
-`cloud-sql-proxy serbito:europe-west1:serbitodb --port 5433 --gcloud-auth` и ходить на `127.0.0.1:5433`.
 
-С `DEV=1` на экране входа есть кнопка Dev login (первый пользователь), а без `SMTP_PASSWORD`
-код входа по почте пишется в лог сервера вместо письма.
-`--reload-exclude .venv` обязателен: без него watcher видит `.venv` и сервер перезапускается по кругу.
-С `DEV=1` работает live reload: правка `.py` перезапускает сервер, правка `static/` — нет, но в обоих
-случаях открытая страница сама обновляется за ~1 с (опрашивает `/api/dev/version`); набранный в поле
-захвата текст сохраняется, открытая карточка задачи обновление откладывает.
+- `.env` points to the **local** database by default. The server applies the schema on startup, and
+  unreleased code must not change production. Connecting to production is explicit only — see
+  [docs/deploy-gcp.md](docs/deploy-gcp.md#database).
+- `--reload-exclude .venv` is required: without it the watcher sees `.venv` and restarts the server in a loop.
+- With `DEV=1` the sign-in screen has a **Dev login** button (first user), and without `SMTP_PASSWORD` the email
+  sign-in code goes to the server log instead of an email.
+- With `DEV=1` live reload works: editing `.py` restarts the server, editing `static/` doesn't, but either way
+  the open page refreshes itself within ~1 s (it polls `/api/dev/version`). Text typed in the capture field is
+  kept; an open task card postpones the refresh.
+- Locally (http `BASE_URL`) the bot uses long polling and won't start if the bot has a production webhook.
 
-## Тесты
+Or with Docker: `DEV=1 docker compose up --build` — see [self-hosting](docs/self-host.md).
+
+## Tests
+
 ```bash
 .venv/bin/python -m pytest
 ```
-Временная база в локальном Postgres (`brew services start postgresql@17`), создаётся и удаляется сама;
-Telegram, Google и почта — заглушки. Гоняются в `release_minor.sh` перед тегом.
 
-## Релиз
-```bash
-scripts/release_minor.sh "Что поменялось" [новый_файл …]
-```
-Как в serbito: тесты → `git add -u` (новые файлы — только явно) → коммит → следующий тег `vX.Y.0` → push.
-Тег запускает `.github/workflows/deploy.yml`: сборка образа → Trivy (HIGH/CRITICAL с фиксом
-блокируют) → новая ревизия без трафика → прогрев до 200 на `/api/config` → переключение трафика.
-Не ответила — работает прежняя ревизия. Авторизация в GCP keyless (WIF), ключей нигде нет.
+A temporary database in the local Postgres (`brew services start postgresql@17`, or `TEST_PG_URL`) is created
+and dropped automatically; Telegram, Google and email are stubbed. The release script runs them before tagging.
 
-Ошибки — в Sentry (`nohandoff/gtd`, DSN в секрете `gtd-sentry-dsn`, релиз `gtd@X.Y.Z` из тега).
-Зависимости обновляет Dependabot (`.github/dependabot.yml`: pip, docker, actions — раз в неделю).
+## Deploy
 
-Бот в проде — на **вебхуке** (`/tg/webhook`, секретный заголовок выводится из токена), напоминания
-будит **Cloud Scheduler** `gtd-reminders` раз в минуту (`POST /tasks/reminders` с `X-Cron-Secret`).
-Фоновых циклов нет, поэтому `min-instances=0` и CPU только на время запросов: без трафика сервис спит.
-Локально (http `BASE_URL`) бот работает long polling'ом и сам отказывается, если у бота уже стоит
-вебхук прода — чтобы не увести апдейты.
+- **Your own server:** [docs/self-host.md](docs/self-host.md) — Docker Compose, app + Postgres, bot optional.
+- **Reference instance** (Google Cloud Run, release by tag): [docs/deploy-gcp.md](docs/deploy-gcp.md).
 
-### Разовая настройка
-1. @BotFather → `/newbot` → токен.
-2. `scripts/setup_gcp.sh` — Artifact Registry `gtd`, сервисные аккаунты `gtd-deployer` / `gtd-run`,
-   роли, секреты `gtd-database-url` и `gtd-telegram-bot-token` (спросит токен; пароль БД возьмёт
-   из `.env`), доступ к общим `GOOGLE_CLIENT_ID` / `EMAIL_HOST_PASSWORD`, репо в условие WIF.
-3. Google Cloud Console → APIs & Services → Credentials → OAuth-клиент serbito (тот, чей ID в секрете
-   `GOOGLE_CLIENT_ID`) → Authorized JavaScript origins: `https://gtd.serbito.rs`,
-   `http://localhost:8000`, `http://localhost`.
-4. Первый релиз, затем домен:
-   `gcloud beta run domain-mappings create --service gtd --domain gtd.serbito.rs --region europe-west1`
-   и DNS `CNAME gtd → ghs.googlehosted.com.` (если DNS на Cloudflare — без прокси, иначе Google не выпустит сертификат).
+## License
 
-## Аккаунты
-Регистрация открыта: первый вход любым способом создаёт аккаунт.
-- **Google** — Sign in with Google; ID-токен проверяется через `oauth2.googleapis.com/tokeninfo`.
-- **Почта** — 6-значный код через Brevo SMTP (аккаунт serbito, отправитель `info@serbito.rs`).
-  10 минут, 5 попыток, повторно — через минуту, не больше 5 писем за 10 минут с одного IP.
-- **Telegram** — кнопка на сайте → бот → «Подтвердить»; страница ловит подтверждение сама.
-  `/login` в боте тоже работает.
+[MIT](LICENSE) © 2026 Alexander Bondarchuk — free to use, modify and distribute, including commercially,
+as long as the copyright and license text are kept.
 
-Google и код на один адрес — один аккаунт. Остальное привязывается в «👤 Аккаунт» или в боте:
-`/email you@example.com` → код на почту → прислать код боту.
-
-Если способ входа уже у другого аккаунта: пустой — забираем молча (и сами переезжаем в аккаунт
-с данными, если свой пустой и ничего не теряется); с задачами — предлагаем **объединить** (в вебе —
-кнопкой, в боте — «🔗 Объединить»). Подтверждает только тот, кто начал; объединение одной транзакцией:
-задачи, проекты (одноимённые склеиваются), сессии и недостающие способы входа переезжают в один аккаунт.
-Письма идут с общего Brevo serbito: если тариф бесплатный, лимит 300 писем/день — на оба проекта.
-
-## База данных
-PostgreSQL 17 на Cloud SQL (`serbitodb`), отдельная база `gtd`. Подключение одной
-переменной `DATABASE_URL`: локально через прокси на `127.0.0.1:5433`, в Cloud Run —
-через unix-сокет `/cloudsql/...`. Схема создаётся сама при старте.
-
-## Захват в Telegram
-- `Позвонить в банк завтра в 10:00` → Inbox + напоминание
-- `через 2 часа проверить деплой`, `в пятницу`, `24.10 12:00`, `2026-10-24`
-- По-английски: `call mom tomorrow at 10:00`, `tomorrow 10am`, `at 3pm`, `on friday`, `next monday`,
-  `24 oct 12:00` / `oct 24`, `in 2 hours`, `day after tomorrow`, `remind me to …` (на сайте — так же)
-- `отчёт #Клиент_X @работа` → сразу Next, проект и контекст
-- Кнопки под сообщением: ✅ Готово / 💤 +1ч / ⏭ Next
-- `/start` — приветствие с примерами и кнопками «Как это работает», «Добавить email», «Открыть сайт»
-- `/inbox`, `/next`, `/done 12`, `/login`, `/email`, `/about`
-- Любой, кто напишет боту, получает свой аккаунт; к самой первой задаче аккаунта — одна подсказка про сайт
-- Описание бота, короткое описание и меню команд — в коде (`BOT_PROFILE`, `BOT_COMMANDS`): прод при старте
-  сверяет их с Telegram и ставит только разошедшееся; локальный сервер профиль бота не трогает.
-  Профиль и меню — по `language_code`: `""` (все прочие) — английские, `ru`/`uk`/`be`/`sr` — русские
-
-## Язык (RU / EN)
-Одно правило на сайт, бот, письма, 404 и манифест — `pages.lang_of` / `pages.pick_lang`: русский для `ru`, `uk`,
-`be` и сербского кириллицей (`sr`, `sr-RS`, `sr-Cyrl`), английский — для всех остальных (`sr-Latn` тоже);
-языка нет вовсе — русский.
-- **Сайт:** настройка в «Аккаунте» (Авто / Русский / English, `users.lang`, null — авто) > вход на `/en/`
-  (запоминается в браузере) > язык браузера (Accept-Language → `/api/config` → `lang`). SPA шлёт выбранный язык
-  в `Accept-Language` — на нём сервер пишет ошибки и письмо с кодом.
-- **Бот:** настройка в «Аккаунте» > `language_code` апдейта Telegram > русский. Последний `language_code`
-  хранится в `users.tg_lang` — на нём приходят напоминания. Ссылка `/login` английскому пользователю ведёт на `/en/`.
-- Тексты: SPA — словарь `#i18n` в `static/index.html`, бот и сервер — `TEXTS` в `app.py`; ключи ru/en совпадают,
-  в английском нет кириллицы (тесты `tests/test_i18n.py`).
-
-## UI
-Inbox · Next (фильтр по @контексту) · Waiting · Календарь/напоминания · Проекты (⚠ без next action) · Someday · Reference · Готово · Weekly Review. Интерфейс — на русском и английском (см. «Язык»).
-
-Публичные страницы — `pages.py`, текст отдаёт сервер (для поисковиков): лендинг гостю на `/` и `/en/`,
-«Как это работает» `/about` и `/en/about`, `robots.txt`, `sitemap.xml`. Картинки превью `static/og*.png` —
-`scripts/og_image.py`. Логотип — знак «Входящие» (`pages.mark()`, цвет `#0F766E` — он же акцент сайта);
-favicon и иконки для телефона в `static/` собирает `scripts/icons.py`.
-Установка на экран телефона — `/manifest.webmanifest` (`pages.manifest()`, описание на языке браузера), без service
-worker. Неизвестный адрес в браузере — страница 404 (`pages.not_found()`); `/api/*` и запросы без `text/html` — JSON.
-
-## Дальше (идеи)
-Голосовые → текст, повторяющиеся задачи, вебхук вместо long polling, экспорт/импорт.
-
-## Аналитика
-Никакого содержимого наружу: ни названий задач, ни текстов, ни почт, ни `user_id`.
-- **«📊 Статистика»** в приложении — только владельцу (`ADMIN_USER_IDS` в `.github/deploy.env.yaml`,
-  id аккаунта, не почта): пользователи, DAU/WAU/MAU, каналы (сайт/бот), способы входа, задачи — всё
-  агрегатами из таблицы `activity` (пользователь × день × канал → число действий).
-- **Google Analytics 4** — аккаунт Serbito → ресурс `gtd.serbito.rs` (`G-CP9WBRWGD6`, `GA_MEASUREMENT_ID`).
-  Тег только на боевом домене; enhanced measurement выключен; страницы — только раздел (`/inbox`,
-  `/next`…, ссылка `/i/N` уходит как `/inbox`), события `login`/`link_method` (method), `task_capture` и `about_view` (язык); у всех событий приложения — параметр `language` (ru/en), заголовки страниц — всегда русские.
-- **Cloudflare Web Analytics** — визиты, без cookies.
-- **Sentry** — без локальных переменных, тел запросов и `httpx`-крошек; токен бота вычищается.
-
-## Лицензия
-[MIT](LICENSE) © 2026 Alexander Bondarchuk: права у автора, использовать, менять и распространять —
-бесплатно и свободно, в том числе в коммерческих целях, при сохранении копирайта и текста лицензии.
+GTD® and Getting Things Done® are trademarks of the David Allen Company. This project is independent and not
+affiliated with the author of the method.
 
 ## Other projects
+
 Also by No Handoff:
 - **Planning Poker** — free planning poker for scrum teams, no sign-up:
   [poker.serbito.rs](https://poker.serbito.rs/?utm_source=github&utm_medium=crosspromo&utm_campaign=readme) ·
