@@ -1,5 +1,6 @@
 """Английская версия (SERBITO-259): выбор языка, настройка в /api/me, ответы бота и сервера, письмо с кодом."""
 import asyncio
+import json
 import re
 import string
 import time
@@ -272,6 +273,69 @@ def test_no_russian_in_english_bot_and_server_texts():
     assert not CYR.search(str(A.BOT_PROFILE["en"]) + str(A.BOT_COMMANDS["en"]))
     for lang in ("ru", "en"):
         assert [c["command"] for c in A.BOT_COMMANDS[lang]] == [c["command"] for c in A.BOT_COMMANDS["ru"]]
+
+
+# ── веб-приложение: словарь в static/index.html ──
+
+INDEX = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+UI = json.loads(re.search(r'<script type="application/json" id="i18n">(.+?)</script>', INDEX, re.S).group(1))
+
+
+def shape(v):
+    """Структура словаря без самих строк: ключи, длины списков, подстановки {имя}."""
+    if isinstance(v, dict):
+        return {k: shape(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [shape(x) for x in v]
+    return sorted(set(re.findall(r"\{(\w+)\}", v)))
+
+
+def strings(v):
+    if isinstance(v, dict):
+        v = list(v.values())
+    if isinstance(v, list):
+        return [s for x in v for s in strings(x)]
+    return [v]
+
+
+def test_ui_dictionaries_have_same_keys():
+    assert set(UI) == {"ru", "en"}
+    assert shape(UI["ru"]) == shape(UI["en"])  # те же ключи, пункты и подстановки
+    # пункты чек-листа и ключи разделов — те же, что ждёт код
+    assert [o[0] for o in UI["en"]["onb"]] == [o[0] for o in UI["ru"]["onb"]] == ["capture", "process", "telegram"]
+    assert set(UI["en"]["views"]) == {"inbox", "next", "waiting", "scheduled", "projects", "someday", "reference",
+                                     "done", "review"}
+
+
+def test_no_russian_in_english_ui():
+    leftovers = [s for s in strings(UI["en"]) if CYR.search(s) or re.search("[«»]", s)]  # и русских кавычек
+    assert leftovers == []
+    assert UI["en"]["about_url"] == "/en/about" and UI["ru"]["about_url"] == "/about"
+
+
+def test_no_user_visible_russian_outside_the_dictionary():
+    """Весь текст интерфейса — через словарь: в коде SPA кириллица только в комментариях и в названии «Русский»."""
+    code = INDEX.split('<script type="application/json" id="i18n">')[1].split("</script>", 1)[1]
+    code = re.sub(r"/\*.*?\*/|<!--.*?-->", "", code, flags=re.S)  # комментарии CSS и HTML
+    code = re.sub(r"(^|\s)//.*", "", code)  # комментарии JS (не трогая «https://»)
+    code = code.replace("ru:'Русский'", "")
+    assert CYR.findall(code) == [] and re.findall("[«»]", code) == []  # кавычки — тоже из словаря
+    head = INDEX.split('<script type="application/json" id="i18n">')[0]
+    head = re.sub(r"/\*.*?\*/|<!--.*?-->|(^|\s)//.*", "", head, flags=re.S)
+    assert CYR.findall(head) == []  # стили и разметка до словаря тоже без русского
+
+
+def test_ui_language_mechanism():
+    assert "const tr =" not in INDEX and "const EN =" not in INDEX  # старый tr(ru, en) заменён словарём
+    assert "document.documentElement.lang = LANG" in INDEX  # <html lang> = язык интерфейса
+    assert "'Accept-Language': LANG" in INDEX  # сервер отвечает на языке интерфейса
+
+
+@pytest.mark.parametrize("header, lang", [(None, "ru"), ("ru-RU,ru;q=0.9", "ru"), ("en-US,en;q=0.9", "en"),
+                                          ("de-DE", "en"), ("sr-Latn-RS", "en"), ("uk-UA", "ru")])
+def test_config_reports_browser_language(client, header, lang):
+    """«Авто» на сайте: язык браузера по его Accept-Language, тем же правилом, что у бота и писем."""
+    assert client.get("/api/config", headers={"accept-language": header} if header else {}).json()["lang"] == lang
 
 
 def test_english_public_pages_have_no_russian_ui_note(client):

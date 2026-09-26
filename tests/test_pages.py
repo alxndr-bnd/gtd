@@ -102,7 +102,10 @@ def test_about_ga_event_only_on_prod(client, monkeypatch):
 
 
 def test_app_menu_links_to_about():
-    assert '<a href="/about"' in open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+    page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+    # ссылка в меню — из словаря интерфейса: /about по-русски, /en/about по-английски
+    assert "<a href=\"${t('about_url')}\"" in page
+    assert '"about_url": "/about"' in page and '"about_url": "/en/about"' in page
 
 
 def test_robots(client):

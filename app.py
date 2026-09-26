@@ -1448,9 +1448,11 @@ def dev_login():
 
 @app.get("/api/config")
 def config(request: Request):
-    # user — чтобы фронт сразу знал, показывать ли вход, без заведомого 401 на /api/counts
+    # user — чтобы фронт сразу знал, показывать ли вход, без заведомого 401 на /api/counts;
+    # lang — язык браузера по его Accept-Language (SPA шлёт этот запрос без своего заголовка): «Авто» на сайте
     return {"bot": BOT_USERNAME if TOKEN else "", "dev": DEV, "google": GOOGLE_CLIENT_ID,
-            "email": bool(SMTP_PASSWORD or DEV), "user": bool(session_user(request))}
+            "email": bool(SMTP_PASSWORD or DEV), "user": bool(session_user(request)),
+            "lang": pages.pick_lang(request.headers.get("accept-language"))}
 
 
 @app.post("/tg/webhook")

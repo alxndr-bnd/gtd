@@ -145,41 +145,215 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
 <div id="root"><!--LANDING--></div>
 <dialog id="dlg"></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<!-- Все видимые строки приложения — здесь, ru и en с одинаковыми ключами (проверяет тест). {имя} — подстановка -->
+<script type="application/json" id="i18n">
+{
+"ru": {
+  "views": {"inbox": "📥 Inbox", "next": "⏭ Next", "waiting": "⏳ Waiting", "scheduled": "📅 Календарь / напоминания",
+    "projects": "📁 Проекты", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Готово", "review": "🔍 Weekly Review"},
+  "help": {"inbox": "Всё, что ещё не осмыслено. Разбери: что это и что делать дальше?",
+    "next": "Конкретные следующие физические действия.", "waiting": "Жду ответа/результата от других.",
+    "scheduled": "Задачи с напоминанием — по времени.", "someday": "Когда-нибудь / может быть.",
+    "reference": "Материалы без действия.", "done": "Выполнено."},
+  "empty": {
+    "inbox": ["Inbox пуст 🎉 Запиши всё, что крутится в голове, — разберёшь потом", "позвонить маме завтра в 10:00"],
+    "next": ["Шаги, которые можно сделать сразу. Из Inbox — кнопкой «→ Next» или сразу с @контекстом", "купить батарейки @магазин"],
+    "waiting": ["Что ждёшь от других: ответ, посылку, решение. Из Inbox — кнопкой «→ Waiting»", "Марко пришлёт смету на ремонт"],
+    "scheduled": ["Задачи со временем — бот напомнит о них в Telegram. Время пиши прямо в тексте", "отчёт в пятницу в 15:00"],
+    "projects": ["Всё, что больше одного шага. Создай проект выше или допиши #проект к задаче", "выбрать плитку #Ремонт_кухни"],
+    "someday": ["Идеи на потом: не сейчас, но жалко потерять. Из Inbox — кнопкой «→ Someday»", "выучить испанский"],
+    "reference": ["Полезное без действия: инструкции, адреса, номера. Из Inbox — кнопкой «→ Ref»", "размер фильтра для пылесоса"],
+    "done": ["Отметь задачу галочкой — она окажется здесь", ""],
+    "project": ["В проекте пока нет задач — допиши к задаче его #название", "заказать образцы #{p}"]},
+  "empty_default": "Пусто 🎉",
+  "ex": "Например: «{ex}»",
+  "onb": [["capture", "Запиши 3 мысли", "в поле ниже или боту, не разбирая"],
+    ["process", "Разбери Inbox", "реши, что делать с задачей: → Next, → Waiting, → Someday…"],
+    ["telegram", "Подключи Telegram-бота", "записывать с телефона и получать напоминания — в <a data-view=\"account\">Аккаунте</a>"]],
+  "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть",
+  "cap_hints": ["Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»",
+    "Что сделать? «завтра в 10:00 #дом @телефон»", "Что нужно сделать? #проект @контекст", "Что нужно сделать?", "Задача…"],
+  "cap_add": "Добавить в Inbox",
+  "task_missing": "Задача #{n} не найдена",
+  "login_page": "Вход", "login_hint": "Вход или регистрация — аккаунт создастся сам",
+  "get_code": "Войти по коду", "tg_signin": "Войти через Telegram", "or": "или", "no_methods": "Способы входа не настроены.",
+  "error": "Ошибка, попробуй ещё раз",
+  "merge_yes": "🔗 Объединить в один", "merge_no": "Не сейчас",
+  "email_ph": "Почта", "code_ph": "Код из письма", "confirm": "Подтвердить", "sign_in": "Войти",
+  "code_sent": "Код отправлен на {email}, действует 10 минут",
+  "open_tg": "Открыть Telegram", "tg_hint": "В боте нажми «Start», затем «Подтвердить» — страница обновится сама.",
+  "tg_expired": "Время вышло — нажми кнопку ещё раз",
+  "account": "👤 Аккаунт", "account_short": "Аккаунт", "account_hint": "Любой привязанный способ открывает этот же аккаунт.",
+  "linked": "✅ Привязан", "not_configured": "Не настроен на сервере",
+  "email": "Почта", "email_linked": "✅ {email} — вход по одноразовому коду", "email_none": "Не привязана",
+  "change": "Сменить", "link": "Привязать",
+  "tg_linked": "✅ Привязан — бот принимает задачи и присылает напоминания", "tg_link": "Привязать Telegram", "bot_off": "Бот выключен",
+  "settings": "Настройки", "undo_label": "Сколько секунд показывать «Отменить» после действия с задачей", "sec": "{n} с",
+  "lang_label": "Язык", "lang_auto": "Авто",
+  "lang_hint": "Авто: на сайте — язык браузера, в боте — язык Telegram.",
+  "stats": "📊 Статистика", "stats_hint": "Только числа: названия задач, почты и имена сюда не попадают.",
+  "no_access": "Нет доступа",
+  "st_users": "пользователей", "st_today": "активны сегодня", "st_7d": "за 7 дней", "st_30d": "за 30 дней",
+  "st_daily": "Активные по дням, 30 дней", "st_bar": "{day}: {users} чел., {actions} действий",
+  "st_new7": "новых за 7 дней", "st_new30": "новых за 30 дней", "st_tasks7": "задач за 7 дней", "st_tasks30": "задач за 30 дней",
+  "st_channels": "Каналы за 30 дней", "st_channels_text": "Сайт — {web} · Telegram-бот — {tg}",
+  "st_methods": "Способы входа", "st_methods_text": "Почта — {email} · Google — {google} · Telegram — {tg}",
+  "sign_out": "Выйти", "menu": "Меню", "to_inbox": "На Inbox",
+  "about": "📖 О GTD", "about_title": "Как это работает: метод GTD и разделы приложения", "about_url": "/about",
+  "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс",
+  "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
+  "all": "все", "back_projects": "← Проекты", "rename": "Переименовать", "delete": "Удалить",
+  "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.",
+  "new_project": "Новый проект", "create": "Создать", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
+  "complete": "Завершить",
+  "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
+    "s2": "2. Inbox → ноль", "s2_text": "В инбоксе: <b>{n}</b> — <a data-view=\"inbox\">разобрать</a>",
+    "s3": "3. Проекты без следующего действия", "s3_ok": "Все проекты движутся ✅",
+    "s4": "4. Waiting старше недели", "s4_ok": "Ничего не зависло ✅",
+    "s5": "5. Ближайшие напоминания", "s5_none": "Нет",
+    "s6": "6. Someday/Maybe", "s6_text": "Идей: <b>{n}</b> — <a data-view=\"someday\">просмотреть</a>. Что-то пора активировать?"},
+  "moved_to": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
+    "done": "Готово", "trash": "Корзину"},
+  "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
+    "done": "Готово", "trash": "Корзина"},
+  "moved": "«{title}» → {to}", "deleted": "«{title}» удалена", "undo": "Отменить",
+  "f_title": "Название", "f_notes": "Заметки", "f_list": "Список", "f_project": "Проект", "f_context": "Контекст (@)",
+  "f_context_ph": "работа, дом, телефон…", "f_remind": "Напомнить",
+  "draft": "Восстановлен несохранённый черновик", "draft_drop": "сбросить", "cancel": "Отмена", "save": "Сохранить",
+  "copy_link": "Скопировать ссылку", "copy_link_to": "Скопировать ссылку: {url}", "task_link": "Ссылка на задачу",
+  "failed": "Не получилось, попробуй ещё раз",
+  "rename_project": "Переименовать проект", "delete_project_q": "Удалить проект «{title}»?",
+  "project_tasks": "В нём задач: {n}. Что с ними сделать?", "project_no_tasks": "Задач в нём нет.",
+  "del_keep": "Удалить проект, задачи оставить без проекта", "del_all": "Удалить проект вместе с задачами ({n})",
+  "del_project": "Удалить проект"
+},
+"en": {
+  "views": {"inbox": "📥 Inbox", "next": "⏭ Next", "waiting": "⏳ Waiting", "scheduled": "📅 Calendar / reminders",
+    "projects": "📁 Projects", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Done", "review": "🔍 Weekly Review"},
+  "help": {"inbox": "Everything not yet clarified. Sort it out: what is it, and what's the next step?",
+    "next": "Concrete next physical actions.", "waiting": "Waiting for a reply or a result from others.",
+    "scheduled": "Tasks with a reminder, by time.", "someday": "Someday / maybe.",
+    "reference": "Material with no action.", "done": "Completed."},
+  "empty": {
+    "inbox": ["Inbox is empty 🎉 Write down everything on your mind — sort it out later", "call mom tomorrow at 10:00"],
+    "next": ["Steps you can take right away. From the Inbox, press “→ Next”, or add an @context right away", "buy batteries @store"],
+    "waiting": ["What you're waiting for from others: a reply, a parcel, a decision. From the Inbox, press “→ Waiting”", "Marko sends the renovation quote"],
+    "scheduled": ["Tasks with a time — the bot reminds you in Telegram. Just type the time in the task", "report on friday at 3pm"],
+    "projects": ["Anything that takes more than one step. Create a project above or add #project to a task", "pick the tiles #Kitchen_remodel"],
+    "someday": ["Ideas for later: not now, but too good to lose. From the Inbox, press “→ Someday”", "learn Spanish"],
+    "reference": ["Useful info with no action: instructions, addresses, numbers. From the Inbox, press “→ Ref”", "vacuum filter size"],
+    "done": ["Tick a task off and it lands here", ""],
+    "project": ["No tasks in this project yet — add its #name to a task", "order samples #{p}"]},
+  "empty_default": "Empty 🎉",
+  "ex": "For example: “{ex}”",
+  "onb": [["capture", "Capture 3 thoughts", "in the field below or to the bot, no sorting yet"],
+    ["process", "Clarify your Inbox", "decide what each task needs: → Next, → Waiting, → Someday…"],
+    ["telegram", "Connect the Telegram bot", "capture from your phone and get reminders — under <a data-view=\"account\">Account</a>"]],
+  "onb_title": "First steps in GTD", "onb_close": "Hide",
+  "cap_hints": ["Quick capture: “call the bank tomorrow at 10am #home @phone”",
+    "What to do? “tomorrow at 10am #home @phone”", "What needs doing? #project @context", "What needs doing?", "Task…"],
+  "cap_add": "Add to Inbox",
+  "task_missing": "Task #{n} not found",
+  "login_page": "Sign in", "login_hint": "Sign in or sign up — the account is created automatically",
+  "get_code": "Get a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
+  "error": "Something went wrong, try again",
+  "merge_yes": "🔗 Merge into one", "merge_no": "Not now",
+  "email_ph": "Email", "code_ph": "Code from the email", "confirm": "Confirm", "sign_in": "Sign in",
+  "code_sent": "Code sent to {email}, valid for 10 minutes",
+  "open_tg": "Open Telegram", "tg_hint": "In the bot, tap “Start”, then “Confirm” — this page updates by itself.",
+  "tg_expired": "Time's up — press the button again",
+  "account": "👤 Account", "account_short": "Account", "account_hint": "Any linked method opens this same account.",
+  "linked": "✅ Linked", "not_configured": "Not set up on the server",
+  "email": "Email", "email_linked": "✅ {email} — sign in with a one-time code", "email_none": "Not linked",
+  "change": "Change", "link": "Link",
+  "tg_linked": "✅ Linked — the bot takes tasks and sends reminders", "tg_link": "Link Telegram", "bot_off": "The bot is off",
+  "settings": "Settings", "undo_label": "How long to show “Undo” after an action on a task", "sec": "{n} s",
+  "lang_label": "Language", "lang_auto": "Auto",
+  "lang_hint": "Auto: the site follows your browser language, the bot follows your Telegram language.",
+  "stats": "📊 Stats", "stats_hint": "Numbers only: task titles, emails and names never get here.",
+  "no_access": "No access",
+  "st_users": "users", "st_today": "active today", "st_7d": "last 7 days", "st_30d": "last 30 days",
+  "st_daily": "Active users per day, 30 days", "st_bar": "{day}: {users} users, {actions} actions",
+  "st_new7": "new in 7 days", "st_new30": "new in 30 days", "st_tasks7": "tasks in 7 days", "st_tasks30": "tasks in 30 days",
+  "st_channels": "Channels, 30 days", "st_channels_text": "Website — {web} · Telegram bot — {tg}",
+  "st_methods": "Sign-in methods", "st_methods_text": "Email — {email} · Google — {google} · Telegram — {tg}",
+  "sign_out": "Sign out", "menu": "Menu", "to_inbox": "To Inbox",
+  "about": "📖 About GTD", "about_title": "How it works: the GTD method and the app sections", "about_url": "/en/about",
+  "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>← menu · → tasks · Esc clear",
+  "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
+  "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
+  "projects_hint": "Anything that takes more than one step. Every active project needs a next action.",
+  "new_project": "New project", "create": "Create", "open_n": "{n} open", "no_next": "⚠ no next action",
+  "complete": "Complete",
+  "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
+    "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a data-view=\"inbox\">process it</a>",
+    "s3": "3. Projects without a next action", "s3_ok": "All projects are moving ✅",
+    "s4": "4. Waiting for over a week", "s4_ok": "Nothing is stuck ✅",
+    "s5": "5. Upcoming reminders", "s5_none": "None",
+    "s6": "6. Someday/Maybe", "s6_text": "Ideas: <b>{n}</b> — <a data-view=\"someday\">look through</a>. Time to activate any?"},
+  "moved_to": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
+    "done": "Done", "trash": "Trash"},
+  "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
+    "done": "Done", "trash": "Trash"},
+  "moved": "“{title}” → {to}", "deleted": "“{title}” deleted", "undo": "Undo",
+  "f_title": "Title", "f_notes": "Notes", "f_list": "List", "f_project": "Project", "f_context": "Context (@)",
+  "f_context_ph": "work, home, phone…", "f_remind": "Remind me",
+  "draft": "Restored an unsaved draft", "draft_drop": "discard", "cancel": "Cancel", "save": "Save",
+  "copy_link": "Copy link", "copy_link_to": "Copy link: {url}", "task_link": "Link to the task",
+  "failed": "That didn't work, try again",
+  "rename_project": "Rename project", "delete_project_q": "Delete project “{title}”?",
+  "project_tasks": "Tasks in this project: {n}. What should happen to them?", "project_no_tasks": "There are no tasks in it.",
+  "del_keep": "Delete the project, keep its tasks without a project", "del_all": "Delete the project with its tasks ({n})",
+  "del_project": "Delete project"
+}
+}
+</script>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const VIEWS = [
-  ['inbox','📥 Inbox'],['next','⏭ Next'],['waiting','⏳ Waiting'],['scheduled','📅 Календарь / напоминания'],
-  ['projects','📁 Проекты'],['someday','💭 Someday'],['reference','📚 Reference'],['done','✅ Готово'],['review','🔍 Weekly Review']];
-const HELP = {inbox:'Всё, что ещё не осмыслено. Разбери: что это и что делать дальше?',
-  next:'Конкретные следующие физические действия.', waiting:'Жду ответа/результата от других.',
-  scheduled:'Задачи с напоминанием — по времени.', someday:'Когда-нибудь / может быть.', reference:'Материалы без действия.', done:'Выполнено.'};
-// Пустой раздел: что сюда попадает и как + пример. Строки онбординга вместе — отсюда их заберёт перевод
-const EMPTY = {
-  inbox:['Inbox пуст 🎉 Запиши всё, что крутится в голове, — разберёшь потом', 'позвонить маме завтра в 10:00'],
-  next:['Шаги, которые можно сделать сразу. Из Inbox — кнопкой «→ Next» или сразу с @контекстом', 'купить батарейки @магазин'],
-  waiting:['Что ждёшь от других: ответ, посылку, решение. Из Inbox — кнопкой «→ Waiting»', 'Марко пришлёт смету на ремонт'],
-  scheduled:['Задачи со временем — бот напомнит о них в Telegram. Время пиши прямо в тексте', 'отчёт в пятницу в 15:00'],
-  projects:['Всё, что больше одного шага. Создай проект выше или допиши #проект к задаче', 'выбрать плитку #Ремонт_кухни'],
-  someday:['Идеи на потом: не сейчас, но жалко потерять. Из Inbox — кнопкой «→ Someday»', 'выучить испанский'],
-  reference:['Полезное без действия: инструкции, адреса, номера. Из Inbox — кнопкой «→ Ref»', 'размер фильтра для пылесоса'],
-  done:['Отметь задачу галочкой — она окажется здесь', ''],
-  project:['В проекте пока нет задач — допиши к задаче его #название', 'заказать образцы #{p}'],
+// ── Язык интерфейса (SERBITO-259). t('ключ', {подстановки}) — строка из словаря #i18n на текущем языке.
+// Выбор: явная настройка в «Аккаунте» (me.lang) > вход на /en/ (браузер это запоминает) > язык браузера.
+// Язык браузера определяет сервер (/api/config → lang) по его Accept-Language — тем же правилом pages.lang_of,
+// что и для бота: русский — ru, uk, be, сербский кириллицей; английский — все остальные
+const I18N = JSON.parse($('#i18n').textContent);
+const LANG_NAMES = {ru:'Русский', en:'English'};  // название языка пишется на нём самом — поэтому не в словаре
+const VIEW_KEYS = ['inbox','next','waiting','scheduled','projects','someday','reference','done','review'];
+// VIEWS, HELP, EMPTY (пустой раздел: что сюда попадает + пример), ONB (чек-лист первого запуска:
+// [поле из /api/counts → onboarding, пункт, пояснение]), CAP_HINTS — части словаря текущего языка
+let LANG, L, VIEWS, HELP, EMPTY, ONB, CAP_HINTS;
+const t = (k, v = {}) => String(k.split('.').reduce((o, p) => o?.[p], L) ?? k).replace(/\{(\w+)\}/g, (m, n) => n in v ? v[n] : m);
+function setLang(l){
+  LANG = I18N[l] ? l : 'ru'; L = I18N[LANG]; document.documentElement.lang = LANG;
+  VIEWS = VIEW_KEYS.map(k => [k, L.views[k]]);
+  ({help:HELP, empty:EMPTY, onb:ONB, cap_hints:CAP_HINTS} = L);
+}
+const pathEn = () => /^\/en(\/|$)/.test(location.pathname);
+// Вошёл на /en/ — приложение и дальше английское в этом браузере, пока язык не выбран в «Аккаунте»
+const langHint = {
+  get(){ try{ return localStorage.getItem('gtd-lang'); }catch{ return null; } },
+  set(v){ try{ localStorage.setItem('gtd-lang', v); }catch{} },
+  del(){ try{ localStorage.removeItem('gtd-lang'); }catch{} },
 };
-const EX = 'Например: ';
-// Чек-лист первого запуска над Inbox: [поле из /api/counts → onboarding, пункт, пояснение]; отмечается сам по данным
-const ONB = [['capture','Запиши 3 мысли','в поле ниже или боту, не разбирая'],
-  ['process','Разбери Inbox','реши, что делать с задачей: → Next, → Waiting, → Someday…'],
-  ['telegram','Подключи Telegram-бота','записывать с телефона и получать напоминания — в <a data-view="account">Аккаунте</a>']];
-const ONB_TITLE = 'Первые шаги в GTD', ONB_CLOSE = 'Скрыть';
+const autoLang = () => pathEn() || langHint.get()==='en' ? 'en' : (S.cfg.lang || 'ru');
+function applyLang(){  // после /api/me: вошли на /en/ — запоминаем; на русской странице входа — забываем
+  if(pathEn()) langHint.set('en'); else if(S.fromLogin) langHint.del();
+  S.fromLogin = false;
+  setLang(S.me?.lang || autoLang());
+}
+// До /api/config — язык страницы от сервера (/en/ — en, иначе ru): им говорит лендинг гостю
+setLang(document.documentElement.lang);
 let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, pid:null, cfg:{}};
 
+// Accept-Language — выбранный язык интерфейса: на нём сервер пишет ошибки и письма
+const hdrs = json => ({'Accept-Language': LANG, ...(json ? {'Content-Type':'application/json'} : {})});
 async function api(path, method='GET', body){
-  const r = await fetch('/api'+path, {method, headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
+  const r = await fetch('/api'+path, {method, headers:hdrs(body), body:body?JSON.stringify(body):undefined});
   if(r.status===401) throw new Error('auth');
   return r.json();
 }
-const fmtTs = ts => ts ? new Date(ts*1000).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+// «25.09, 14:00» / «25 Sept, 14:00»: по-английски месяц словом — 09/25 и 25/09 не перепутать
+const fmtTs = ts => ts ? new Date(ts*1000).toLocaleString(LANG==='en' ? 'en-GB' : 'ru-RU',
+  {day:LANG==='en' ? 'numeric' : '2-digit', month:LANG==='en' ? 'short' : '2-digit', hour:'2-digit', minute:'2-digit'}) : '';
 const toLocalInput = ts => { if(!ts) return ''; const d=new Date(ts*1000); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); };
 
 async function load(){
@@ -191,7 +365,7 @@ async function load(){
     }
     S.counts = await api('/counts');
     onbTrack(S.counts.onboarding);
-    if(!S.me) S.me = await api('/me');  // имя для кнопки аккаунта
+    if(!S.me){ S.me = await api('/me'); applyLang(); }  // имя для кнопки аккаунта и язык интерфейса
     S.projects = await api('/projects');
     S.contexts = await api('/contexts');
     if(S.view==='account') S.me = await api('/me');
@@ -215,7 +389,7 @@ async function openDeepLink(){
   S.deepDone = true;
   const it = await api('/items/n/'+m[1]);
   if(it && it.id) openEdit(it.id, it);
-  else { history.replaceState(null, '', '/'); const h = $('.hint'); if(h) h.textContent = `Задача #${m[1]} не найдена`; }
+  else { history.replaceState(null, '', '/'); const h = $('.hint'); if(h) h.textContent = t('task_missing', {n:m[1]}); }
 }
 
 // Локально (DEV=1): страница сама обновляется, когда сервер перезапустился после правки .py
@@ -236,22 +410,21 @@ function devLiveReload(){
   }, 1000);
 }
 
-// Лендинг /en/ — английский; само приложение пока только на русском (SERBITO-259)
-const EN = document.documentElement.lang === 'en', tr = (ru, en) => EN ? en : ru;
 async function loginScreen(){
   S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
-  S.view = 'inbox'; S.pid = null; S.onb = null;  // следующий вход может быть в другой аккаунт
+  S.view = 'inbox'; S.pid = null; S.onb = null; S.me = null; S.fromLogin = true;  // следующий вход может быть в другой аккаунт
+  setLang($('#signin') ? document.documentElement.lang : autoLang());
   devLiveReload();
   const c = S.cfg, parts = [];
   if(c.google) parts.push('<div class="gbtn"></div>');
-  if(c.email) parts.push(emailFormHtml(tr('Войти по коду', 'Get a code')));
-  if(c.bot) parts.push(`<button data-act="tglogin">✈️ ${tr('Войти через Telegram', 'Sign in with Telegram')}</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>`);
-  const buttons = `${parts.join(`<div class="or">${tr('или', 'or')}</div>`) || '<p>Способы входа не настроены.</p>'}
+  if(c.email) parts.push(emailFormHtml(t('get_code')));
+  if(c.bot) parts.push(`<button data-act="tglogin">✈️ ${t('tg_signin')}</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>`);
+  const buttons = `${parts.join(`<div class="or">${t('or')}</div>`) || `<p>${t('no_methods')}</p>`}
     <div class="msg" id="authmsg"></div>
     ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}`;
   // Гостю сервер отдал лендинг (текст — в HTML для поисковиков): кнопки встают в его блок входа
   if($('#signin')) $('#signin').innerHTML = buttons;
-  else $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">Вход или регистрация — аккаунт создастся сам</p>
+  else $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">${t('login_hint')}</p>
     ${buttons}</div>`;
   mountGoogle();
   gaPage();
@@ -259,11 +432,11 @@ async function loginScreen(){
 
 // ── Вход и привязка: одни и те же кнопки; на экране приложения (есть .app) они привязывают способ к аккаунту
 const linking = () => !!$('.app');
-const authMsg = t => { const el = $('#authmsg'); if(el) el.textContent = t; };
+const authMsg = msg => { const el = $('#authmsg'); if(el) el.textContent = msg; };
 async function authPost(path, body){
-  const r = await fetch('/api/auth/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const r = await fetch('/api/auth/'+path, {method:'POST', headers:hdrs(true), body:JSON.stringify(body)});
   const d = await r.json().catch(()=>({}));
-  if(!r.ok) throw Object.assign(new Error(d.detail || 'Ошибка, попробуй ещё раз'), {data:d});
+  if(!r.ok) throw Object.assign(new Error(d.detail || t('error')), {data:d});
   return d;
 }
 // Способ входа уже у другого аккаунта с задачами — сервер предлагает объединить аккаунты
@@ -271,13 +444,13 @@ function authFail(err){ if(err.data?.merge) mergeOffer(err.data); else authMsg(e
 function mergeOffer(d){
   const el = $('#authmsg'); if(!el) return;
   el.innerHTML = `<div class="rv" style="text-align:left">${esc(d.detail)}
-    <div class="row" style="justify-content:flex-start"><button class="pri" data-act="merge" data-token="${esc(d.merge)}">🔗 Объединить в один</button>
-    <button data-act="nomerge">Не сейчас</button></div></div>`;
+    <div class="row" style="justify-content:flex-start"><button class="pri" data-act="merge" data-token="${esc(d.merge)}">${t('merge_yes')}</button>
+    <button data-act="nomerge">${t('merge_no')}</button></div></div>`;
 }
 async function mergeApply(token){
   try{ await authPost('merge', {token}); load(); }catch(err){ authMsg(err.message); }
 }
-const emailFormHtml = label => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="${tr('Почта', 'Email')}">
+const emailFormHtml = label => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="${t('email_ph')}">
   <button data-act="emailsend">${label}</button></div><div id="emcode"></div>`;
 
 function mountGoogle(){
@@ -286,7 +459,7 @@ function mountGoogle(){
     google.accounts.id.initialize({client_id:S.cfg.google, callback: async ({credential}) => {
       try{ const lk = linking(); await authPost('google', {credential, link:lk}); ga(lk ? 'link_method' : 'login', {method:'google'}); load(); }catch(err){ authFail(err); }
     }});
-    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:tr('ru', 'en')});
+    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:LANG});
   };
   if(window.google?.accounts) return go();
   const s = document.createElement('script');
@@ -298,9 +471,9 @@ async function emailSend(){
   const email = $('#em').value.trim(); if(!email) return;
   try{
     await authPost('email/start', {email}); S.email = email;
-    $('#emcode').innerHTML = `<div class="cap" style="margin-top:8px"><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="${tr('Код из письма', 'Code from the email')}">
-      <button class="pri" data-act="emailverify">${linking()?'Подтвердить':tr('Войти', 'Sign in')}</button></div>`;
-    $('#code').focus(); authMsg(tr(`Код отправлен на ${email}, действует 10 минут`, `Code sent to ${email}, valid for 10 minutes`));
+    $('#emcode').innerHTML = `<div class="cap" style="margin-top:8px"><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="${t('code_ph')}">
+      <button class="pri" data-act="emailverify">${t(linking() ? 'confirm' : 'sign_in')}</button></div>`;
+    $('#code').focus(); authMsg(t('code_sent', {email}));
   }catch(err){ authMsg(err.message); }
 }
 
@@ -313,67 +486,71 @@ async function emailVerify(){
 async function tgStart(){
   try{
     const d = await authPost('tg/start', {link:linking()});
-    $('#tgst').innerHTML = `<p><a href="${esc(d.url)}" target="_blank" rel="noopener"><button class="pri">${tr('Открыть Telegram', 'Open Telegram')}</button></a></p>
-      ${tr('В боте нажми «Start», затем «Подтвердить» — страница обновится сама.', 'In the bot, tap “Start”, then “Подтвердить” (Confirm) — this page updates by itself.')}`;
+    $('#tgst').innerHTML = `<p><a href="${esc(d.url)}" target="_blank" rel="noopener"><button class="pri">${t('open_tg')}</button></a></p>
+      ${t('tg_hint')}`;
     tgPoll(d.nonce);
   }catch(err){ authMsg(err.message); }
 }
 
 async function tgPoll(nonce){
   clearTimeout(S.tgTimer);
-  const r = await fetch('/api/auth/tg/poll?nonce='+encodeURIComponent(nonce)).then(r=>r.json()).catch(()=>({status:'pending'}));
+  const r = await fetch('/api/auth/tg/poll?nonce='+encodeURIComponent(nonce), {headers:hdrs()}).then(r=>r.json()).catch(()=>({status:'pending'}));
   if(r.status==='ok'){ ga(linking() ? 'link_method' : 'login', {method:'telegram'}); return load(); }
   if(r.status==='merge') return mergeOffer(r);
-  if(r.status==='expired') return authMsg('Время вышло — нажми кнопку ещё раз');
+  if(r.status==='expired') return authMsg(t('tg_expired'));
   S.tgTimer = setTimeout(()=>tgPoll(nonce), 2000);
 }
 
 function accountHtml(){
   const m = S.me, c = S.cfg;
-  return `<h2>👤 Аккаунт</h2><div class="hint">Любой привязанный способ открывает этот же аккаунт.</div>
-  <div class="rv"><h3>Google</h3>${m.google?'✅ Привязан':c.google?'<div class="gbtn"></div>':'Не настроен на сервере'}</div>
-  <div class="rv"><h3>Почта</h3>${m.email?`✅ ${esc(m.email)} — вход по одноразовому коду`:'Не привязана'}
-    ${c.email?emailFormHtml(m.email?'Сменить':'Привязать'):''}</div>
-  <div class="rv"><h3>Telegram</h3>${m.tg?'✅ Привязан — бот принимает задачи и присылает напоминания'
-    :c.bot?'<button data-act="tglogin">Привязать Telegram</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>':'Бот выключен'}</div>
-  <div class="rv"><h3>Настройки</h3>Сколько секунд показывать «Отменить» после действия с задачей
-    <div class="seg">${[5,10,30].map(n=>`<button class="${(m.undo_seconds||30)===n?'on':''}" data-act="undosec" data-n="${n}">${n} с</button>`).join('')}</div></div>
+  const langs = [['', t('lang_auto')], ...Object.entries(LANG_NAMES)];
+  return `<h2>${t('account')}</h2><div class="hint">${t('account_hint')}</div>
+  <div class="rv"><h3>Google</h3>${m.google?t('linked'):c.google?'<div class="gbtn"></div>':t('not_configured')}</div>
+  <div class="rv"><h3>${t('email')}</h3>${m.email?t('email_linked', {email:esc(m.email)}):t('email_none')}
+    ${c.email?emailFormHtml(t(m.email ? 'change' : 'link')):''}</div>
+  <div class="rv"><h3>Telegram</h3>${m.tg?t('tg_linked')
+    :c.bot?`<button data-act="tglogin">${t('tg_link')}</button><div id="tgst" class="hint" style="margin:10px 0 0"></div>`:t('bot_off')}</div>
+  <div class="rv"><h3>${t('settings')}</h3>${t('undo_label')}
+    <div class="seg">${[5,10,30].map(n=>`<button class="${(m.undo_seconds||30)===n?'on':''}" data-act="undosec" data-n="${n}">${t('sec', {n})}</button>`).join('')}</div>
+    <div style="margin-top:14px">${t('lang_label')}</div>
+    <div class="seg">${langs.map(([k, name])=>`<button class="${(m.lang||'')===k?'on':''}" data-act="lang" data-l="${k}" ${k?`lang="${k}"`:''}>${name}</button>`).join('')}</div>
+    <div class="hint" style="margin:6px 0 0">${t('lang_hint')}</div></div>
   <div class="msg" id="authmsg"></div>`;
 }
 
 // Статистика использования — только агрегаты (сервер не отдаёт ни задач, ни почт, ни имён)
 function statsHtml(){
-  const st = S.stats; if(!st || !st.users) return '<h2>📊 Статистика</h2><div class="empty">Нет доступа</div>';
+  const st = S.stats; if(!st || !st.users) return `<h2>${t('stats')}</h2><div class="empty">${t('no_access')}</div>`;
   const tile = (n, l) => `<div class="tile"><b>${n}</b><span>${l}</span></div>`;
   const max = Math.max(1, ...st.daily.map(d => d.users));
-  return `<h2>📊 Статистика</h2><div class="hint">Только числа: названия задач, почты и имена сюда не попадают.</div>
-  <div class="tiles">${tile(st.users.total,'пользователей')}${tile(st.active.day,'активны сегодня')}
-    ${tile(st.active.week,'за 7 дней')}${tile(st.active.month,'за 30 дней')}</div>
-  <div class="rv"><h3>Активные по дням, 30 дней</h3><div class="bars">${st.daily.map(d =>
-    `<i style="height:${Math.round(d.users / max * 100)}%" title="${d.day}: ${d.users} чел., ${d.actions} действий"></i>`).join('')}</div></div>
-  <div class="tiles">${tile(st.users.new_7d,'новых за 7 дней')}${tile(st.users.new_30d,'новых за 30 дней')}
-    ${tile(st.tasks.created_7d,'задач за 7 дней')}${tile(st.tasks.created_30d,'задач за 30 дней')}</div>
-  <div class="rv"><h3>Каналы за 30 дней</h3>Сайт — ${st.active.web_30d} · Telegram-бот — ${st.active.telegram_30d}
-    <h3 style="margin-top:12px">Способы входа</h3>Почта — ${st.users.with_email} · Google — ${st.users.with_google} · Telegram — ${st.users.with_telegram}</div>`;
+  return `<h2>${t('stats')}</h2><div class="hint">${t('stats_hint')}</div>
+  <div class="tiles">${tile(st.users.total,t('st_users'))}${tile(st.active.day,t('st_today'))}
+    ${tile(st.active.week,t('st_7d'))}${tile(st.active.month,t('st_30d'))}</div>
+  <div class="rv"><h3>${t('st_daily')}</h3><div class="bars">${st.daily.map(d =>
+    `<i style="height:${Math.round(d.users / max * 100)}%" title="${t('st_bar', d)}"></i>`).join('')}</div></div>
+  <div class="tiles">${tile(st.users.new_7d,t('st_new7'))}${tile(st.users.new_30d,t('st_new30'))}
+    ${tile(st.tasks.created_7d,t('st_tasks7'))}${tile(st.tasks.created_30d,t('st_tasks30'))}</div>
+  <div class="rv"><h3>${t('st_channels')}</h3>${t('st_channels_text', {web:st.active.web_30d, tg:st.active.telegram_30d})}
+    <h3 style="margin-top:12px">${t('st_methods')}</h3>${t('st_methods_text', {email:st.users.with_email, google:st.users.with_google, tg:st.users.with_telegram})}</div>`;
 }
 
 function navHtml(){
-  const me = S.me || {}, who = esc(me.email || me.name || 'Аккаунт');
+  const me = S.me || {}, who = esc(me.email || me.name || t('account_short'));
   // «Аккаунт» и «Выйти» свёрнуты в одну кнопку; на телефоне она справа в верхней полосе
   const user = `<div class="userbox"><button class="user" data-act="umenu" aria-haspopup="true">👤 <span>${who}</span> ▾</button>
-    <div class="umenu" hidden><a data-view="account">👤 Аккаунт</a><a data-act="logout">Выйти</a></div></div>`;
-  const cur = S.view==='account' ? '👤 Аккаунт' : S.view==='stats' ? '📊 Статистика' : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
+    <div class="umenu" hidden><a data-view="account">${t('account')}</a><a data-act="logout">${t('sign_out')}</a></div></div>`;
+  const cur = S.view==='account' ? t('account') : S.view==='stats' ? t('stats') : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
   // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается»
-  return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="Меню"><svg viewBox="0 0 24 24" width="22" height="22"
+  return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <span class="tb-title">${cur}</span>${user}</div>
     <div class="scrim" data-act="drawer"></div>
-    <nav><h1 data-view="inbox" title="На Inbox"><img src="/favicon.svg" alt="" width="24" height="24">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
+    <nav><h1 data-view="inbox" title="${t('to_inbox')}"><img src="/favicon.svg" alt="" width="24" height="24">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
-    ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">📊 Статистика</a>`:''}
-    <a href="/about" title="Как это работает: метод GTD и разделы приложения">📖 О GTD</a>
+    ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">${t('stats')}</a>`:''}
+    <a href="${t('about_url')}" title="${t('about_title')}">${t('about')}</a>
     <div class="navfoot"><div class="sep"></div>${user}</div>
-    <div class="keys">C / N — новая задача<br>↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс</div></nav>`;
+    <div class="keys">${t('keys')}</div></nav>`;
 }
 
 function itemHtml(it){
@@ -382,13 +559,13 @@ function itemHtml(it){
   else if(it.status==='next') acts.push(['waiting','→ Waiting'],['someday','→ Someday']);
   else if(it.status==='waiting') acts.push(['next','→ Next']);
   else if(it.status==='someday') acts.push(['next','→ Next']);
-  else if(it.status==='done') acts.push(['next','↩︎ Вернуть']);
+  else if(it.status==='done') acts.push(['next',t('restore')]);
   return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}">
     <input type="checkbox" data-act="toggle" ${it.status==='done'?'checked':''}>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?`<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`:''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
-      ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" data-act="mv" data-st="${s}" ${s==='trash'?'aria-label="В корзину"':''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
-    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="Задача #${it.num}">#${it.num}</a>`:''}</div>`;
+      ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" data-act="mv" data-st="${s}" ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
+    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}</div>`;
 }
 
 // Стрелка, входящая в лоток: «положить во входящие»
@@ -396,9 +573,7 @@ const ICON_INBOX = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" 
   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/>
   <path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M4 14h4l1.5 2h5l1.5-2h4"/></svg>`;
 // Поле захвата — textarea в одну строку: длинный текст переносится, и поле растёт вниз (capFit)
-// Подсказка — самая длинная из вариантов, что целиком влезает в текущую ширину поля (capHint)
-const CAP_HINTS = ['Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»',
-  'Что сделать? «завтра в 10:00 #дом @телефон»', 'Что нужно сделать? #проект @контекст', 'Что нужно сделать?', 'Задача…'];
+// Подсказка — самая длинная из вариантов CAP_HINTS, что целиком влезает в текущую ширину поля (capHint)
 function capHint(el = $('#cap')){
   if(!el || !el.clientWidth) return;
   const cs = getComputedStyle(el), ctx = (capHint.ctx ||= document.createElement('canvas').getContext('2d'));
@@ -408,7 +583,7 @@ function capHint(el = $('#cap')){
 }
 const capHtml = () => `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${CAP_HINTS[0]}" autofocus></textarea>
     <div id="ac" class="ac" role="listbox" hidden></div></div>
-  <button class="pri icon" data-act="capture" aria-label="Добавить в Inbox" title="Добавить в Inbox">${ICON_INBOX}</button></div>`;
+  <button class="pri icon" data-act="capture" aria-label="${t('cap_add')}" title="${t('cap_add')}">${ICON_INBOX}</button></div>`;
 
 function render(){
   let body='', hero='';
@@ -423,7 +598,7 @@ function render(){
     let chips='';
     if(S.view==='next'){
       const ctxs=[...new Set(items.map(i=>i.context).filter(Boolean))];
-      if(ctxs.length) chips=`<div class="chips"><span class="chip ${!S.ctx?'on':''}" data-ctx="">все</span>${ctxs.map(c=>`<span class="chip ${S.ctx===c?'on':''}" data-ctx="${esc(c)}">@${esc(c)}</span>`).join('')}</div>`;
+      if(ctxs.length) chips=`<div class="chips"><span class="chip ${!S.ctx?'on':''}" data-ctx="">${t('all')}</span>${ctxs.map(c=>`<span class="chip ${S.ctx===c?'on':''}" data-ctx="${esc(c)}">@${esc(c)}</span>`).join('')}</div>`;
       if(S.ctx) items=items.filter(i=>i.context===S.ctx);
     }
     const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
@@ -431,18 +606,18 @@ function render(){
       // Inbox — точка входа: поле захвата по центру экрана, задачи под ним (пустой инбокс — ровно посередине)
       const next = S.nextItems || [], onb = onbHtml();
       hero = `${onb}<section class="hero ${onb?'onbh':items.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
-        <div class="hint">${items.length?HELP.inbox:`${EMPTY.inbox[0]}<br>${EX}«${EMPTY.inbox[1]}»`}</div></section>`;
+        <div class="hint">${items.length?HELP.inbox:`${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}`}</div></section>`;
       body = items.length ? items.map(itemHtml).join('')
         : next.length ? `<section class="below"><h3>${VIEWS[1][1]}</h3><div class="hint">${HELP.next}</div>
             ${next.map(itemHtml).join('')}</section>` : '';
-    } else body = `${pj?`<p><a href="#" data-act="back">← Проекты</a></p><h2>#${esc(pj.title)}
-      <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ Переименовать</button>
-      <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 Удалить</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}`}
+    } else body = `${pj?`<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2>#${esc(pj.title)}
+      <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
+      <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}`}
       ${chips}${items.map(itemHtml).join('') || emptyHtml(pj ? 'project' : S.view, pj && pj.title)}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
   if(S.view==='account') mountGoogle();
-  const cap = $('#cap'), t = draft.get('cap'); if(cap && t && !cap.value) cap.value = t;  // черновик поля захвата
+  const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
   capFit(cap); capHint(cap);
   gaPage();
   if(S.sel!=null){ S.sel = Math.min(S.sel, cards().length-1); if(S.sel<0) S.sel = null; }  // выбор переживает перерисовку
@@ -450,19 +625,19 @@ function render(){
 }
 
 function projectsHtml(){
-  return `<h2>📁 Проекты</h2><div class="hint">Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.</div>
-  <div class="cap"><input id="np" placeholder="Новый проект"><button data-act="newproj">Создать</button></div>
+  return `<h2>${L.views.projects}</h2><div class="hint">${t('projects_hint')}</div>
+  <div class="cap"><input id="np" placeholder="${t('new_project')}"><button data-act="newproj">${t('create')}</button></div>
   ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}"><div class="b"><div class="t">${esc(p.title)}</div>
-    <div class="meta"><span>${p.open_count} открыто</span>${p.next_count?'':'<span class="warn">⚠ нет следующего действия</span>'}</div></div>
-    <button class="sm" data-act="renameproj" data-pid="${p.id}" title="Переименовать">✏️</button>
-    <button class="sm" data-act="delproj" data-pid="${p.id}" title="Удалить">🗑</button>
-    <button class="sm" data-act="closeproj" data-pid="${p.id}">Завершить</button></div>`).join('') || emptyHtml('projects')}`;
+    <div class="meta"><span>${t('open_n', {n:p.open_count})}</span>${p.next_count?'':`<span class="warn">${t('no_next')}</span>`}</div></div>
+    <button class="sm" data-act="renameproj" data-pid="${p.id}" title="${t('rename')}">✏️</button>
+    <button class="sm" data-act="delproj" data-pid="${p.id}" title="${t('delete')}">🗑</button>
+    <button class="sm" data-act="closeproj" data-pid="${p.id}">${t('complete')}</button></div>`).join('') || emptyHtml('projects')}`;
 }
 
 // p — название проекта для примера: пробелы → «_», как их разбирает захват
 function emptyHtml(k, p = ''){
-  const [what, ex] = EMPTY[k] || ['Пусто 🎉', ''];
-  return `<div class="empty"><div>${what}</div>${ex?`<div class="ex">${EX}«${esc(ex.replace('{p}', p.trim().replace(/\s+/g,'_')))}»</div>`:''}</div>`;
+  const [what, ex] = EMPTY[k] || [t('empty_default'), ''];
+  return `<div class="empty"><div>${what}</div>${ex?`<div class="ex">${t('ex', {ex:esc(ex.replace('{p}', p.trim().replace(/\s+/g,'_')))})}</div>`:''}</div>`;
 }
 
 // Карточка скрыта навсегда (сервер: закрыл или выполнил всё) или выполнены все видимые пункты — не рисуем.
@@ -471,8 +646,8 @@ const onbSteps = () => ONB.filter(([k]) => k!=='telegram' || S.cfg.bot);
 function onbHtml(){
   const o = S.counts.onboarding, steps = onbSteps();
   if(!o || o.hidden || steps.every(([k]) => o[k])) return '';
-  return `<section class="rv onb"><button class="onbx" data-act="onbclose" aria-label="${ONB_CLOSE}" title="${ONB_CLOSE}">✕</button>
-    <h3>${ONB_TITLE}</h3>${steps.map(([k,t,d]) => `<div class="onbi ${o[k]?'ok':''}">${o[k]?'✅':'⬜'} <b>${t}</b> <span>— ${d}</span></div>`).join('')}</section>`;
+  return `<section class="rv onb"><button class="onbx" data-act="onbclose" aria-label="${t('onb_close')}" title="${t('onb_close')}">✕</button>
+    <h3>${t('onb_title')}</h3>${steps.map(([k,title,d]) => `<div class="onbi ${o[k]?'ok':''}">${o[k]?'✅':'⬜'} <b>${title}</b> <span>— ${d}</span></div>`).join('')}</section>`;
 }
 // GA onboarding_step: пункт стал выполнен у нас на глазах (между двумя загрузками) — шлём только его номер.
 // Выполненные к первой загрузке страницы не шлём: не отличить новое от давнего (например, сделанного в боте).
@@ -488,36 +663,37 @@ function reviewHtml(){
   const oldWait = S.items.filter(i=>i.status==='waiting' && i.created<wk);
   const soon = S.items.filter(i=>i.remind_at && !['done','trash'].includes(i.status)).sort((a,b)=>a.remind_at-b.remind_at).slice(0,8);
   const c=S.counts;
-  return `<h2>🔍 Weekly Review</h2>
-  <div class="rv"><h3>1. Очистить голову</h3>Запиши всё, что в голове, в поле захвата выше.</div>
-  <div class="rv"><h3>2. Inbox → ноль</h3>В инбоксе: <b>${c.inbox||0}</b> — <a data-view="inbox">разобрать</a></div>
-  <div class="rv"><h3>3. Проекты без следующего действия</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):'Все проекты движутся ✅'}</div>
-  <div class="rv"><h3>4. Waiting старше недели</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):'Ничего не зависло ✅'}</div>
-  <div class="rv"><h3>5. Ближайшие напоминания</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):'Нет'}</div>
-  <div class="rv"><h3>6. Someday/Maybe</h3>Идей: <b>${c.someday||0}</b> — <a data-view="someday">просмотреть</a>. Что-то пора активировать?</div>`;
+  return `<h2>${L.views.review}</h2>
+  <div class="rv"><h3>${t('review.s1')}</h3>${t('review.s1_text')}</div>
+  <div class="rv"><h3>${t('review.s2')}</h3>${t('review.s2_text', {n:c.inbox||0})}</div>
+  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
+  <div class="rv"><h3>${t('review.s4')}</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):t('review.s4_ok')}</div>
+  <div class="rv"><h3>${t('review.s5')}</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):t('review.s5_none')}</div>
+  <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
 }
 
 // ── Google Analytics: только раздел и обезличенные события. Сниппет сервер кладёт лишь на gtd.serbito.rs,
 // так что локально и на *.run.app ga()/gaPage() молча ничего не делают.
-function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, params); }
+function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, {...params, language:LANG}); }
 function gaPage(){
   if(typeof gtag !== 'function') return;
   const page = S.cfg?.user === false && !$('.app') ? 'login' : (S.view || 'inbox');
   if(S.gaPage === page) return;
   S.gaPage = page;
-  const label = page==='login' ? 'Вход' : page==='account' ? 'Аккаунт' : page==='stats' ? 'Статистика'
-    : ((VIEWS.find(v=>v[0]===page)||[])[1] || page).replace(/^\S+\s/, '');
-  gtag('event', 'page_view', {page_location: location.origin + '/' + page, page_title: 'GTD — ' + label});
+  const ru = I18N.ru;  // заголовок — всегда русский: отчёты GA не делятся по языку интерфейса, язык — в language
+  const label = page==='login' ? ru.login_page : page==='account' ? ru.account_short : page==='stats' ? ru.stats
+    : (ru.views[page] || page);
+  gtag('event', 'page_view', {page_location: location.origin + '/' + page, page_title: 'GTD — ' + label.replace(/^\S+\s/, ''),
+    language: LANG});
 }
 
 // ── Undo-тост: после действия с задачей — «Отменить» с обратным отсчётом (5/10/30 с из настроек).
 // Новое действие делает предыдущее окончательным. Удаление отложено до конца таймера.
-const ST_LABEL = {inbox:'Inbox', next:'Next', waiting:'Waiting', someday:'Someday', reference:'Reference', done:'Готово', trash:'Корзину'};
 let TOAST = null;
 function toast(text, {undo, commit} = {}){
   toastEnd(true);
   const sec = S.me?.undo_seconds || 30, el = $('#toast');
-  el.innerHTML = `<span class="tx">${esc(text)}</span>${undo?'<button data-act="undo">Отменить</button>':''}
+  el.innerHTML = `<span class="tx">${esc(text)}</span>${undo?`<button data-act="undo">${t('undo')}</button>`:''}
     <b class="sec">${sec}</b><i class="bar" style="animation-duration:${sec}s"></i>`;
   el.hidden = false;
   let left = sec;
@@ -527,12 +703,12 @@ function toast(text, {undo, commit} = {}){
 }
 function toastEnd(commit){
   if(!TOAST) return null;
-  const t = TOAST; TOAST = null;
-  clearInterval(t.tick); clearTimeout(t.end); $('#toast').hidden = true;
-  if(commit) t.commit?.();
-  return t;
+  const tt = TOAST; TOAST = null;
+  clearInterval(tt.tick); clearTimeout(tt.end); $('#toast').hidden = true;
+  if(commit) tt.commit?.();
+  return tt;
 }
-async function toastUndo(){ const t = toastEnd(false); if(t?.undo) await t.undo(); load(); }
+async function toastUndo(){ const tt = toastEnd(false); if(tt?.undo) await tt.undo(); load(); }
 addEventListener('pagehide', () => toastEnd(true));  // закрыли вкладку — отложенное удаление всё равно выполнится
 const findItem = id => S.items.concat(S.nextItems||[]).find(i => i.id===id);
 async function moveItem(id, status){
@@ -540,13 +716,13 @@ async function moveItem(id, status){
   const prev = it.status;
   await api('/items/'+id, 'PATCH', {status});
   load();
-  toast(`«${it.title}» → ${ST_LABEL[status]||status}`, {undo: () => api('/items/'+id, 'PATCH', {status:prev})});
+  toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev})});
 }
 S.pendingDel = new Set();  // удалённые, но ещё не отправленные на сервер (ждут конца таймера)
 function deleteItem(id){
   const it = findItem(id) || {title:''};
   S.pendingDel.add(id); render();
-  toast(`«${it.title}» удалена`, {
+  toast(t('deleted', {title:it.title}), {
     undo: () => { S.pendingDel.delete(id); },
     commit: () => { fetch('/api/items/'+id, {method:'DELETE', keepalive:true}); S.pendingDel.delete(id); }});
 }
@@ -567,16 +743,16 @@ function openEdit(id, found){
   const d = $('#dlg');
   history.replaceState(null, '', `/i/${it.num}`);
   d.onclose = () => { if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };
-  d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px">Задача #${it.num}
-      <button type="button" class="sm" data-act="copylink" aria-label="Скопировать ссылку" title="Скопировать ссылку: ${esc(itemLink(it))}">🔗</button></h3>
-    <label>Название</label><input name="title" value="${esc(it.title)}" required autofocus>
-    <label>Заметки</label><textarea name="notes" rows="3">${esc(it.notes)}</textarea>
-    <label>Список</label><select name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option ${s===it.status?'selected':''}>${s}</option>`).join('')}</select>
-    <label>Проект</label><select name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
-    <label>Контекст (@)</label><input name="context" value="${esc(it.context||'')}" placeholder="работа, дом, телефон…">
-    <label>Напомнить</label><input type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
-    <div class="draftnote" hidden>Восстановлен несохранённый черновик · <a href="#" data-act="dropdraft">сбросить</a></div>
-    <div class="row"><button type="button" data-act="del" style="color:#d33">Удалить</button><span><button type="button" data-act="cancel">Отмена</button> <button class="pri" value="ok">Сохранить</button></span></div></form>`;
+  d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px">${t('task_n', {n:it.num})}
+      <button type="button" class="sm" data-act="copylink" aria-label="${t('copy_link')}" title="${t('copy_link_to', {url:esc(itemLink(it))})}">🔗</button></h3>
+    <label>${t('f_title')}</label><input name="title" value="${esc(it.title)}" required autofocus>
+    <label>${t('f_notes')}</label><textarea name="notes" rows="3">${esc(it.notes)}</textarea>
+    <label>${t('f_list')}</label><select name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
+    <label>${t('f_project')}</label><select name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
+    <label>${t('f_context')}</label><input name="context" value="${esc(it.context||'')}" placeholder="${t('f_context_ph')}">
+    <label>${t('f_remind')}</label><input type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
+    <div class="draftnote" hidden>${t('draft')} · <a href="#" data-act="dropdraft">${t('draft_drop')}</a></div>
+    <div class="row"><button type="button" data-act="del" style="color:#d33">${t('delete')}</button><span><button type="button" data-act="cancel">${t('cancel')}</button> <button class="pri" value="ok">${t('save')}</button></span></div></form>`;
   const form = $('#ef'), key = 'item:'+it.id, saved = draft.get(key);
   if(saved){
     ITEM_FIELDS.forEach(k => { if(k in saved && form.elements[k]) form.elements[k].value = saved[k]; });
@@ -598,7 +774,7 @@ function openEdit(id, found){
   d.querySelector('[data-act=copylink]').onclick = async e => {
     const b = e.currentTarget;
     try{ await navigator.clipboard.writeText(itemLink(it)); b.textContent = '✓'; setTimeout(() => b.textContent = '🔗', 1200); }
-    catch{ prompt('Ссылка на задачу', itemLink(it)); }
+    catch{ prompt(t('task_link'), itemLink(it)); }
   };
   // Без confirm: удаление отменяется из тоста «Отменить»
   d.querySelector('[data-act=del]').onclick = () => { draft.del(key); d.close(); deleteItem(id); };
@@ -606,18 +782,18 @@ function openEdit(id, found){
 
 // ── Проекты: переименование и удаление (с задачами или только снять проект с задач)
 async function projApi(pid, method, body, query=''){
-  const r = await fetch(`/api/projects/${pid}${query}`, {method, headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
+  const r = await fetch(`/api/projects/${pid}${query}`, {method, headers:hdrs(body), body:body?JSON.stringify(body):undefined});
   const d = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d.detail || 'Не получилось, попробуй ещё раз');
+  if(!r.ok) throw new Error(d.detail || t('failed'));
   return d;
 }
 function openRenameProject(pid){
   const p = S.projects.find(x=>x.id===pid); if(!p) return;
   const d = $('#dlg');
-  d.innerHTML = `<form method="dialog" id="pf"><h3 style="margin:0 0 6px">Переименовать проект</h3>
-    <label>Название</label><input name="title" value="${esc(p.title)}" required>
+  d.innerHTML = `<form method="dialog" id="pf"><h3 style="margin:0 0 6px">${t('rename_project')}</h3>
+    <label>${t('f_title')}</label><input name="title" value="${esc(p.title)}" required>
     <div class="msg" id="pfmsg"></div>
-    <div class="row"><span></span><span><button type="button" data-act="cancel">Отмена</button> <button class="pri" value="ok">Сохранить</button></span></div></form>`;
+    <div class="row"><span></span><span><button type="button" data-act="cancel">${t('cancel')}</button> <button class="pri" value="ok">${t('save')}</button></span></div></form>`;
   d.showModal();
   d.querySelector('[data-act=cancel]').onclick = () => d.close();
   $('#pf').onsubmit = async e => {
@@ -629,14 +805,14 @@ function openRenameProject(pid){
 function openDeleteProject(pid){
   const p = S.projects.find(x=>x.id===pid); if(!p) return;
   const n = p.total_count, d = $('#dlg');
-  d.innerHTML = `<h3 style="margin:0 0 6px">Удалить проект «${esc(p.title)}»?</h3>
-    <p class="hint" style="margin:0">${n ? `В нём задач: ${n}. Что с ними сделать?` : 'Задач в нём нет.'}</p>
+  d.innerHTML = `<h3 style="margin:0 0 6px">${t('delete_project_q', {title:esc(p.title)})}</h3>
+    <p class="hint" style="margin:0">${n ? t('project_tasks', {n}) : t('project_no_tasks')}</p>
     <div class="msg" id="pdmsg"></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
-      ${n ? `<button data-del="keep">Удалить проект, задачи оставить без проекта</button>
-      <button data-del="delete" style="color:#d33">Удалить проект вместе с задачами (${n})</button>`
-          : `<button data-del="keep" style="color:#d33">Удалить проект</button>`}
-      <button data-del="">Отмена</button></div>`;
+      ${n ? `<button data-del="keep">${t('del_keep')}</button>
+      <button data-del="delete" style="color:#d33">${t('del_all', {n})}</button>`
+          : `<button data-del="keep" style="color:#d33">${t('del_project')}</button>`}
+      <button data-del="">${t('cancel')}</button></div>`;
   d.showModal();
   d.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if(!b.dataset.del) return d.close();
@@ -699,7 +875,12 @@ document.addEventListener('click', async e => {
   if(act==='undo') return toastUndo();
   if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
-  if(act==='logout'){ await api('/logout','POST'); S.me = null; return location.assign(EN ? '/en/' : '/'); }  // на лендинг: его текст — с сервера
+  if(act==='logout'){ await api('/logout','POST'); S.me = null; return location.assign(LANG==='en' ? '/en/' : '/'); }  // на лендинг: его текст — с сервера
+  if(act==='lang'){  // явный выбор (или «Авто») — сильнее входа на /en/: подсказку и адрес /en/ забываем
+    S.me = await api('/me','PATCH',{lang:el.dataset.l || null}); langHint.del();
+    if(pathEn()) history.replaceState(null, '', '/');
+    setLang(S.me.lang || autoLang()); return render();
+  }
   if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
