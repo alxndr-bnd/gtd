@@ -102,6 +102,8 @@ Inbox · Next (фильтр по @контексту) · Waiting · Календ
 «Как это работает» `/about` и `/en/about`, `robots.txt`, `sitemap.xml`. Картинки превью `static/og*.png` —
 `scripts/og_image.py`. Логотип — знак «Входящие» (`pages.mark()`, цвет `#0F766E` — он же акцент сайта);
 favicon и иконки для телефона в `static/` собирает `scripts/icons.py`.
+Установка на экран телефона — `/manifest.webmanifest` (`pages.manifest()`, описание на языке браузера), без service
+worker. Неизвестный адрес в браузере — страница 404 (`pages.not_found()`); `/api/*` и запросы без `text/html` — JSON.
 
 ## Дальше (идеи)
 Голосовые → текст, повторяющиеся задачи, вебхук вместо long polling, экспорт/импорт.

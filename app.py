@@ -20,7 +20,9 @@ import sentry_sdk
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import pages
 
@@ -1493,7 +1495,27 @@ for _name in ROOT_FILES:
     app.add_api_route("/" + _name, root_file, methods=["GET"], include_in_schema=False)
 
 
-@app.get("/i/{num}")
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def web_manifest(request: Request):
+    """Манифест для «добавить на экран»: один файл на сайт, описание — на языке браузера (ru по умолчанию)."""
+    return JSONResponse(pages.manifest(pages.pick_lang(request.headers.get("accept-language"))),
+                        media_type="application/manifest+json",
+                        headers={"Vary": "Accept-Language", "Cache-Control": "public, max-age=86400"})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def not_found_page(request: Request, exc: StarletteHTTPException):
+    """404 в браузере — страница с логотипом и ссылками вместо сырого JSON. /api/* и запросы без text/html
+    в Accept (fetch, curl, боты) получают JSON, как раньше; остальные ошибки — тоже."""
+    path = request.url.path
+    if exc.status_code != 404 or (path + "/").startswith("/api/") or "text/html" not in request.headers.get("accept", ""):
+        return await http_exception_handler(request, exc)
+    en = path == "/en" or path.startswith("/en/")
+    lang = "en" if en else pages.pick_lang(request.headers.get("accept-language"))
+    return HTMLResponse(pages.not_found(lang), status_code=404, headers={"X-Robots-Tag": "noindex"})
+
+
+@app.get("/i/{num:int}")  # не число (/i/abc) — маршрут не совпадёт, и браузер получит страницу 404, а не 422
 def item_page(num: int, request: Request):
     """Ссылка на задачу: та же страница, фронт откроет карточку после входа. Данные — только через API.
     Страница личная и без входа пустая — поисковикам не индексировать."""
