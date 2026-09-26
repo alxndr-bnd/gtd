@@ -6,7 +6,32 @@ import json
 BOT_URL = "https://t.me/gtdsrbot"
 GTD_SITE = "https://gettingthingsdone.com"
 NOHANDOFF_URL = "https://www.linkedin.com/company/nohandoff/"
-SITE_NAME = "GTD for free"
+SITE_NAME = "GTD"
+BRAND = "#0F766E"  # бирюзовый из логотипа «Входящие»; он же --ac светлой темы в index.html
+
+# Знак: лоток «Входящие» с галочкой. Один источник для шапки, favicon и иконок (scripts/icons.py)
+MARK_GLYPH = ('<path d="M13 37h11l3.5 5h9l3.5-5h11v9a5 5 0 0 1-5 5H18a5 5 0 0 1-5-5z" fill="#fff"/>'
+              '<path d="M23 20l7 7 12-13" fill="none" stroke="#fff" stroke-width="6" '
+              'stroke-linecap="round" stroke-linejoin="round"/>')
+
+
+def mark(size: int = 0) -> str:
+    """Знак в скруглённом квадрате; size — px для встраивания в страницу (0 — без размеров, для файла)."""
+    dim = f' width="{size}" height="{size}" aria-hidden="true"' if size else ""
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"{dim}>'
+            f'<rect width="64" height="64" rx="14" fill="{BRAND}"/>{MARK_GLYPH}</svg>')
+
+
+# Иконки и цвет браузера — во <head> всех страниц, и приложения, и публичных
+ICONS = "\n".join([
+    '<link rel="icon" href="/favicon.ico" sizes="48x48">',
+    '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
+    '<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
+    f'<meta name="theme-color" content="{BRAND}" media="(prefers-color-scheme: light)">',
+    '<meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)">',
+    f'<meta name="application-name" content="{SITE_NAME}">',
+    f'<meta name="apple-mobile-web-app-title" content="{SITE_NAME}">',
+])
 LANGS = ("ru", "en")
 PATHS = {("ru", "home"): "/", ("ru", "about"): "/about", ("en", "home"): "/en/", ("en", "about"): "/en/about"}
 
@@ -54,7 +79,7 @@ PUBLIC_CSS = """<style>
 .pub{max-width:880px;margin:0 auto;padding:18px 16px 32px}
 .pub a{color:var(--ac)}
 .pub .top{display:flex;align-items:center;gap:16px;margin-bottom:28px;font-size:14px}
-.pub .top .brand{flex:1;font-weight:700;font-size:18px;color:var(--tx);text-decoration:none}
+.pub .top .brand{flex:1;display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:var(--tx);text-decoration:none}
 .pub h1{font-size:30px;line-height:1.2;margin:0 0 12px}
 .pub h2{font-size:20px;margin:36px 0 12px}
 .pub .lead{font-size:18px;color:var(--mut);margin:0 0 16px}
@@ -66,7 +91,7 @@ PUBLIC_CSS = """<style>
 .pub .steps li{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px}
 .pub .steps b{display:block;font-size:17px;margin-bottom:4px}
 .pub .steps .where{display:block;color:var(--mut);font-size:13px;margin-top:6px}
-.pub .btn{display:inline-block;padding:10px 18px;border-radius:10px;background:var(--ac);color:#fff;text-decoration:none;font-weight:600}
+.pub .btn{display:inline-block;padding:10px 18px;border-radius:10px;background:var(--ac);color:var(--on-ac);text-decoration:none;font-weight:600}
 .pub .ex{list-style:none;padding:0} .pub .ex li{margin:6px 0}
 .pub q{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .pub q::before,.pub q::after{content:none}
@@ -78,8 +103,8 @@ PUBLIC_CSS = """<style>
 
 # /about — отдельная лёгкая страница без JS приложения: цвета те же, что в index.html
 BASE_CSS = """<style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#3b6cf6}
-@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#6b93ff}}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
 </style>"""
@@ -135,7 +160,7 @@ def topbar(lang: str, page: str) -> str:
     t, other = T[lang], "en" if lang == "ru" else "ru"
     link = (f'<a href="{PATHS[(lang, "about")]}">{t["how"]}</a>' if page == "home"
             else f'<a href="{PATHS[(lang, "home")]}">{t["open"]}</a>')
-    return (f'<div class="top"><a class="brand" href="{PATHS[(lang, "home")]}">✅ GTD</a>{link}'
+    return (f'<div class="top"><a class="brand" href="{PATHS[(lang, "home")]}">{mark(28)} GTD</a>{link}'
             f'<a href="{PATHS[(other, page)]}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></div>')
 
 
@@ -287,7 +312,7 @@ def about(base: str, lang: str, ga: str) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 {head(base, lang, "about")}
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+{ICONS}
 {ga}
 {CF_BEACON}
 {BASE_CSS}

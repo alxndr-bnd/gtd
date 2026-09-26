@@ -1435,7 +1435,7 @@ def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLR
     """Страница приложения. GA-сниппет — статично в HTML (чтобы Google видел тег), только на боевом домене.
     landing — гостю вместо пустого экрана входа: SEO-теги и текст лендинга прямо в HTML (pages.py)."""
     with open(os.path.join(STATIC, "index.html"), encoding="utf-8") as f:
-        page = f.read().replace("<!--GA-->", ga_snippet(request))
+        page = f.read().replace("<!--GA-->", ga_snippet(request)).replace("<!--ICONS-->", pages.ICONS)
     if landing:
         page = (page.replace('<html lang="ru">', f'<html lang="{lang}">')
                 .replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
@@ -1474,12 +1474,23 @@ def sitemap_xml():
     return Response(pages.sitemap(BASE_URL), media_type="application/xml")
 
 
-@app.get("/og.png")
-@app.get("/og-en.png")
-def og_image(request: Request):
-    """Картинка превью ссылки (1200×630): og.png — русская, og-en.png — английская."""
-    return FileResponse(os.path.join(STATIC, request.url.path.lstrip("/")), media_type="image/png",
+# Файлы из static/ по корневым адресам: превью ссылок и иконки (браузеры и Google ищут их в корне).
+# Генерируются scripts/og_image.py и scripts/icons.py
+ROOT_FILES = {
+    "og.png": "image/png", "og-en.png": "image/png",  # превью ссылки 1200×630, русская и английская
+    "favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "apple-touch-icon.png": "image/png",
+    "icon-192.png": "image/png", "icon-512.png": "image/png", "icon-maskable-512.png": "image/png",
+}
+
+
+def root_file(request: Request):
+    name = request.url.path.lstrip("/")
+    return FileResponse(os.path.join(STATIC, name), media_type=ROOT_FILES[name],
                         headers={"Cache-Control": "public, max-age=86400"})
+
+
+for _name in ROOT_FILES:
+    app.add_api_route("/" + _name, root_file, methods=["GET"], include_in_schema=False)
 
 
 @app.get("/i/{num}")

@@ -135,6 +135,29 @@ def test_og_images(client):
         assert (int.from_bytes(r.content[16:20]), int.from_bytes(r.content[20:24])) == (1200, 630)  # IHDR
 
 
+
+def test_icons_served_from_root(client):
+    ico = client.get("/favicon.ico")  # Google берёт favicon для выдачи отсюда, а не из data:-ссылки
+    assert ico.status_code == 200 and ico.headers["content-type"] == "image/x-icon" and ico.content[:4] == b"\0\0\1\0"
+    svg = client.get("/favicon.svg")
+    assert svg.headers["content-type"].startswith("image/svg+xml") and svg.text.strip() == P.mark()  # файл = знак из кода
+    for path, side in (("/apple-touch-icon.png", 180), ("/icon-192.png", 192), ("/icon-512.png", 512),
+                       ("/icon-maskable-512.png", 512)):
+        r = client.get(path)
+        assert r.status_code == 200 and r.headers["content-type"] == "image/png", path
+        assert (int.from_bytes(r.content[16:20]), int.from_bytes(r.content[20:24])) == (side, side), path
+
+
+def test_icons_and_name_on_every_page(client, login):
+    pages = [client.get(p).text for p in ("/", "/en/", "/about", "/en/about", "/i/1")]
+    login(client)
+    pages.append(client.get("/").text)  # приложение после входа
+    for h in pages:
+        assert '<link rel="icon" href="/favicon.ico"' in h and '<link rel="apple-touch-icon"' in h
+        assert f'<meta name="theme-color" content="{P.BRAND}"' in h and "<!--ICONS-->" not in h
+        assert "data:image/svg+xml" not in h and "GTD for free" not in h
+    assert '<meta property="og:site_name" content="GTD">' in pages[0]
+
 def test_item_page_noindex(client):
     r = client.get("/i/1")
     assert r.status_code == 200 and r.headers["x-robots-tag"] == "noindex"
