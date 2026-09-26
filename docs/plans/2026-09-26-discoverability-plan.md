@@ -27,7 +27,7 @@
 | SEO и превью ссылок: теги, OG-картинка, robots, sitemap, noindex `/i/N` | [SERBITO-256](https://serbito.atlassian.net/browse/SERBITO-256) | 1 | Closed — gtd v0.7.0 |
 | Онбординг в боте: описание до Start, `/start` с кнопками, `/about`, подсказка после первой задачи | [SERBITO-257](https://serbito.atlassian.net/browse/SERBITO-257) | 2 | Closed — gtd v0.7.0 |
 | Чек-лист первого запуска и пустые экраны | [SERBITO-258](https://serbito.atlassian.net/browse/SERBITO-258) | 2 | Closed — gtd v0.7.0 |
-| Английская версия приложения и бота | [SERBITO-259](https://serbito.atlassian.net/browse/SERBITO-259) | 3 | In Progress |
+| Английская версия приложения и бота | [SERBITO-259](https://serbito.atlassian.net/browse/SERBITO-259) | 3 | Closed — gtd v0.10.0 |
 | Каталоги: AlternativeTo, GitHub, Search Console (исследование — `docs/research/2026-09-26-catalogs.md`; описание, homepage и темы репозитория — сделано) | [SERBITO-261](https://serbito.atlassian.net/browse/SERBITO-261) | 4 | In Progress |
 | Общий блок «Другие проекты» — история | [SERBITO-260](https://serbito.atlassian.net/browse/SERBITO-260) | 5 | Closed — все подзадачи |
 | · в gtd | [SERBITO-263](https://serbito.atlassian.net/browse/SERBITO-263) | 5 | Closed — gtd v0.7.0 |
