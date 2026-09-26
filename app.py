@@ -506,9 +506,11 @@ def _clean(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip(" ,.-—")
 
 
-def capture(uid: int, raw: str, source: str = "web") -> dict:
-    """Умный захват: текст [@контекст] [#проект] [когда] -> задача."""
-    now = datetime.now(TZ)
+def parse_task(uid: int, raw: str) -> dict:
+    """Разбор строки задачи: текст [@контекст] [#проект] [когда] -> {title, context, project_id, remind_at}.
+    Один разбор на поле захвата (capture) и заголовок в карточке (PATCH /api/items, SERBITO-298).
+    #Проект_Имя — проект пользователя по названию (без учёта регистра, «_» — пробел), нет — создаётся.
+    Токены вырезаются из заголовка; остались одни токены — заголовок остаётся как был введён."""
     text = raw.strip()
     ctx = None
     m = re.search(r"(?<!\S)@([\w-]+)", text)
@@ -520,9 +522,15 @@ def capture(uid: int, raw: str, source: str = "web") -> dict:
     if m:
         proj_id = project_by_title(uid, m.group(1).replace("_", " "))
         text = text[: m.start()] + text[m.end():]
+    title, remind = parse_when(text, datetime.now(TZ))
+    return {"title": title or raw.strip(), "context": ctx, "project_id": proj_id, "remind_at": remind}
+
+
+def capture(uid: int, raw: str, source: str = "web") -> dict:
+    """Умный захват: текст [@контекст] [#проект] [когда] -> задача."""
     track(uid, "telegram" if source == "telegram" else "web")
-    title, remind = parse_when(text, now)
-    title = title or raw.strip()
+    p = parse_task(uid, raw)
+    title, ctx, proj_id, remind = p["title"], p["context"], p["project_id"], p["remind_at"]
     status = "next" if (ctx or proj_id) else "inbox"
     iid = run(
         # Номер — из счётчика пользователя, атомарно в одной команде (изменяющий подзапрос — только в WITH)
@@ -1618,9 +1626,17 @@ def api_capture(body: dict, uid: int = Depends(current_user)):
 
 @app.patch("/api/items/{iid}")
 def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
-    if not item_get(uid, iid):
+    cur = item_get(uid, iid)
+    if not cur:
         raise HTTPException(404)
     track(uid, "web")
+    # Заголовок из карточки разбираем как строку захвата (SERBITO-298): #проект, @контекст и дата из
+    # заголовка перекрывают значения полей, без токена — остаётся выбранное в полях. Только если заголовок
+    # изменился: иначе повторное сохранение вернуло бы, например, снятое вручную напоминание («завтра»).
+    title = body.get("title")
+    if isinstance(title, str) and title.strip() and title.strip() != cur["title"]:
+        p = parse_task(uid, title)
+        body = {**body, **{k: v for k, v in p.items() if v is not None}}
     sets, args = [], []
     for k in ("title", "notes", "status", "project_id", "context", "remind_at"):
         if k not in body:

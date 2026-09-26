@@ -262,3 +262,82 @@ def test_telegram_fallback_deep_link(watch, monkeypatch, lang):
     w.page.click('main [data-act="tglogin"]')
     w.wait(f"main #tgst {link}", f"[{lang}] account: ссылка в бота")
     w.check(f"[{lang}] итог")
+
+
+def smoke_user(w, lang="ru"):
+    """Пользователь с задачами во всех списках, вошедший через /dev-login; возвращает id задач."""
+    uid = A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,%s) returning id",
+                (int(time.time()), lang))
+    ids = seed(uid)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    return ids
+
+
+def test_card_title_suggestions(watch):
+    """SERBITO-298: в заголовке карточки те же подсказки #проект / @контекст, что в поле захвата,
+    с выбором с клавиатуры; сохранение разбирает токены на сервере."""
+    w = watch()
+    ids = smoke_user(w)
+    w.page.click(f'main .it[data-id="{ids["inbox"]}"] .t')
+    w.wait("#dlg[open] #ef", "карточка")
+    title = w.page.locator('#ef [name="title"]')
+    title.press("End")
+    title.type(" #Про")
+    w.wait('#ef .ac:not([hidden]) .aco:has-text("#Проект Альфа")', "подсказка #")
+    title.press("Enter")  # выбирает подсказку, а не отправляет карточку
+    assert w.page.locator("#dlg[open]").count() and title.input_value() == "Позвонить маме #Проект_Альфа "
+    title.type("@h")
+    w.wait('#ef .ac:not([hidden]) .aco:has-text("@home")', "подсказка @")
+    title.press("Escape")  # закрывает только подсказки
+    assert w.page.locator("#ef .ac[hidden]").count() and w.page.locator("#dlg[open]").count()
+    title.type("o")
+    w.wait('#ef .ac:not([hidden]) .aco:has-text("@home")', "подсказка @ снова")
+    title.press("Tab")
+    assert title.input_value() == "Позвонить маме #Проект_Альфа @home "
+    w.page.click('#ef button.pri')
+    w.wait(f'main .it[data-id="{ids["inbox"]}"] .meta:has-text("@home")', "сохранено")
+    it = A.row("select i.title, i.context, p.title project from items i join projects p on p.id=i.project_id "
+               "where i.id=%s", (ids["inbox"],))
+    assert (it["title"], it["context"], it["project"]) == ("Позвонить маме", "home", "Проект Альфа")
+    w.check("итог")
+
+
+def test_click_anywhere_on_card_opens_it(watch):
+    """SERBITO-299: карточку открывает клик по любому её месту, а не только по заголовку; кнопки
+    внутри делают своё и карточку не открывают; конец выделения текста — тоже не открывает."""
+    w = watch()
+    ids = smoke_user(w)
+    card = f'main .it[data-id="{ids["inbox"]}"]'
+    w.wait(card, "список")
+    w.page.click(card, position={"x": 4, "y": 4})  # угол карточки — мимо заголовка
+    w.wait("#dlg[open] #ef", "карточка по клику в тело")
+    assert w.page.url.endswith("/i/1")
+    w.page.click('#ef [data-act="cancel"]')
+    w.page.wait_for_function("location.pathname === '/'", timeout=WAIT_MS)  # close — событие, адрес меняется в нём
+    assert not w.page.locator("#dlg[open]").count()
+
+    # Выделили часть заголовка мышью — это не клик «открыть»
+    box = w.page.locator(f"{card} .t").bounding_box()
+    w.page.mouse.move(box["x"] + 2, box["y"] + box["height"] / 2)
+    w.page.mouse.down()
+    w.page.mouse.move(box["x"] + box["width"] - 2, box["y"] + box["height"] / 2, steps=5)
+    w.page.mouse.up()
+    assert w.page.evaluate("getSelection().toString()")
+    w.page.wait_for_timeout(200)
+    assert not w.page.locator("#dlg[open]").count()
+
+    # ⌘/Ctrl-клик по номеру #N — ссылка /i/N в новой вкладке, здесь карточка не открывается
+    with w.ctx.expect_page() as tab:
+        w.page.click(f"{card} a.num", modifiers=["ControlOrMeta"])
+    assert tab.value.url.endswith("/i/1")
+    tab.value.close()
+    assert not w.page.locator("#dlg[open]").count()
+
+    # Кнопка списка — переносит задачу, карточку не открывает
+    w.page.click(f'{card} [data-act="mv"][data-st="someday"]')
+    w.wait("#toast:not([hidden])", "перенос")
+    w.page.wait_for_timeout(200)
+    assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
+    assert A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "someday"
+    w.check("итог")
