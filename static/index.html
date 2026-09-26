@@ -46,7 +46,10 @@ button.sm:hover{color:var(--tx)}
 .it .b{flex:1;min-width:0}
 .it .num{color:var(--mut);font-size:12.5px;text-decoration:none;margin-top:2px;flex-shrink:0;font-variant-numeric:tabular-nums}
 .it .num:hover{color:var(--ac)}
-.it .t{cursor:pointer;word-break:break-word} .it.done .t{text-decoration:line-through;color:var(--mut)}
+.it .t{word-break:break-word} .it.done .t{text-decoration:line-through;color:var(--mut)}
+/* Вся карточка задачи открывает её (SERBITO-299) */
+.it[data-id]{cursor:pointer;transition:border-color .12s}
+@media(hover:hover){.it[data-id]:hover{border-color:var(--mut)}}
 .meta{color:var(--mut);font-size:12.5px;margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
 .meta .due{color:var(--warn)}
 .act{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
@@ -899,8 +902,16 @@ function acPick(k){
   inp.dispatchEvent(new Event('input', {bubbles:true}));  // черновик и высота поля — как при наборе
 }
 
+// Клик по любому месту карточки задачи открывает её, как по заголовку (SERBITO-299). Кнопки, ссылки,
+// галочка и ряд кнопок списков (промах мимо кнопки на телефоне) — не открывают; конец выделения текста — тоже.
+const selecting = c => { const s = getSelection(); return !s.isCollapsed && c.contains(s.anchorNode); };
+function cardClick(e){
+  const c = e.target.closest('main .it[data-id]');
+  if(!c || e.target.closest('a,button,input,select,textarea,label,.act') || selecting(c)) return;
+  openEdit(+c.dataset.id);
+}
 document.addEventListener('click', async e => {
-  const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return;
+  const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return cardClick(e);
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
   if(act==='drawer'){ const open = !$('nav').classList.contains('open');
     $('nav').classList.toggle('open', open); $('.scrim').classList.toggle('open', open); return; }
@@ -911,7 +922,11 @@ document.addEventListener('click', async e => {
   if(act==='tglogin') return tgStart();
   if(act==='merge') return mergeApply(el.dataset.token);
   if(act==='nomerge') return authMsg('');
-  if(act==='edit'){ e.preventDefault(); return openEdit(id); }  // номер — ссылка /i/N: ⌘-клик откроет вкладку
+  if(act==='edit'){  // номер — ссылка /i/N: ⌘/Ctrl/Shift-клик открывает её в новой вкладке/окне, как обычная ссылка
+    if(el.tagName==='A' && (e.metaKey || e.ctrlKey || e.shiftKey)) return;
+    if(itemEl && selecting(itemEl)) return;
+    e.preventDefault(); return openEdit(id);
+  }
   if(act==='mv') return moveItem(id, el.dataset.st);
   if(act==='undo') return toastUndo();
   if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
