@@ -414,9 +414,29 @@ NOT_FOUND = {
 }
 
 
+# Устаревшая ссылка входа из бота (/auth): что случилось, «войти на сайте» и, если бот известен, «открыть бота»
+AUTH_STALE = {
+    "ru": ("Ссылка устарела", "Ссылка входа из бота работает 10 минут и только один раз. "
+           "Отправь /login боту ещё раз или войди на сайте.", "Войти", "Открыть бота"),
+    "en": ("This link has expired", "A sign-in link from the bot works once and only for 10 minutes. "
+           "Send /login to the bot again or sign in on the site.", "Sign in", "Open the bot"),
+}
+
+
 def not_found(lang: str) -> str:
     h, text, go, how = NOT_FOUND[lang]
-    home, about_ = PATHS[(lang, "home")], PATHS[(lang, "about")]
+    return notice(lang, h, text, go, (PATHS[(lang, "about")], how))
+
+
+def auth_stale(lang: str, bot: str = "") -> str:
+    h, text, go, open_bot = AUTH_STALE[lang]
+    return notice(lang, h, text, go, (f"https://t.me/{bot}", open_bot) if bot else None)
+
+
+def notice(lang: str, h: str, text: str, go: str, link: tuple | None) -> str:
+    """Короткая служебная страница: заголовок, пояснение, кнопка на главную и (необязательно) вторая ссылка."""
+    home = PATHS[(lang, "home")]
+    extra = f'&emsp;<a href="{link[0]}">{link[1]}</a>' if link else ""
     return f"""<!doctype html>
 <html lang="{lang}">
 <head>
@@ -432,6 +452,6 @@ def not_found(lang: str) -> str:
 <div class="pub"><div class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></div>
 <h1>{h}</h1>
 <p class="lead">{text}</p>
-<p><a class="btn" href="{home}">{go}</a>&emsp;<a href="{about_}">{how}</a></p></div>
+<p><a class="btn" href="{home}">{go}</a>{extra}</p></div>
 </body>
 </html>"""

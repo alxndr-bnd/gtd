@@ -101,11 +101,36 @@ def test_login_link(tg, client):
     assert client.get("/auth", params={"t": tok}).status_code == 400  # одноразовая
 
 
-def test_login_link_expires(tg, client):
+def test_login_link_expires(tg, client, monkeypatch):
     bot_message("/login")
     tok = re.search(r"/auth\?t=(\S+)", texts(tg)[-1]).group(1)
     A.run("update login_tokens set expires=0")
-    assert client.get("/auth", params={"t": tok}).status_code == 400
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    r = client.get("/auth", params={"t": tok})
+    # из Telegram ссылку открывают в браузере: страница с выходом (войти, открыть бота), а не сырой JSON
+    assert r.status_code == 400 and r.headers["content-type"].startswith("text/html")
+    assert "Ссылка устарела" in r.text and 'href="https://t.me/gtd_test_bot"' in r.text and 'href="/"' in r.text
+    r = client.get("/auth", params={"t": "nope", "lang": "en"})
+    assert '<html lang="en">' in r.text and "This link has expired" in r.text and 'href="/en/"' in r.text
+
+
+def test_stale_and_broken_buttons_are_answered(tg):
+    """Кнопки прежних версий, испорченные данные, чужой Telegram: без исключения, и часики на кнопке гаснут."""
+    bot_message("задача")
+    for data in ("done:abc", "done:", "oldbutton:1", "oldbutton", "", "done:999999"):
+        tg.clear()
+        bot_callback(data)
+        assert tg == [("answerCallbackQuery", {"callback_query_id": "cb", "text": "Не найдено"})], data
+    tg.clear()
+    bot_callback("done:1", tg_id=555)  # боту неизвестен
+    assert [m for m, _ in tg] == ["answerCallbackQuery"] and A.row("select status from items")["status"] == "inbox"
+
+
+def test_message_without_sender_is_ignored(tg):
+    """Посты каналов и анонимные админы групп приходят без from: аккаунт не заводим, не отвечаем."""
+    asyncio.run(A.handle_message({"chat": {"id": -100}, "text": "пост канала"}))
+    asyncio.run(A.handle_message({"chat": {"id": -100}, "sender_chat": {"id": -100}, "from": {}, "text": "аноним"}))
+    assert A.row("select count(*) n from users")["n"] == 0 and tg == []
 
 
 def test_reminders_sent_once(tg):

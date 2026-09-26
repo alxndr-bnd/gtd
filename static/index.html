@@ -424,8 +424,8 @@ async function loginScreen(){
     ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}`;
   // Гостю сервер отдал лендинг (текст — в HTML для поисковиков): кнопки встают в его блок входа
   if($('#signin')) $('#signin').innerHTML = buttons;
-  else $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">${t('login_hint')}</p>
-    ${buttons}</div>`;
+  else { document.title = 'GTD'; $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">${t('login_hint')}</p>
+    ${buttons}</div>`; }
   mountGoogle();
   gaPage();
 }
@@ -534,12 +534,21 @@ function statsHtml(){
     <h3 style="margin-top:12px">${t('st_methods')}</h3>${t('st_methods_text', {email:st.users.with_email, google:st.users.with_google, tg:st.users.with_telegram})}</div>`;
 }
 
+const viewLabel = () => S.view==='account' ? t('account') : S.view==='stats' ? t('stats')
+  : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
+// Вкладка: «(3) Next — GTD» — число во Входящих видно, не переключаясь на вкладку (задачи из бота). Текст задач
+// сюда не попадает никогда, и на /i/N тоже: заголовок остаётся в истории браузера и на скриншотах
+function docTitle(){
+  const n = S.counts.inbox || 0;
+  document.title = `${n ? `(${n}) ` : ''}${viewLabel().replace(/^\S+\s/, '')} — GTD`;
+}
+
 function navHtml(){
   const me = S.me || {}, who = esc(me.email || me.name || t('account_short'));
   // «Аккаунт» и «Выйти» свёрнуты в одну кнопку; на телефоне она справа в верхней полосе
   const user = `<div class="userbox"><button class="user" data-act="umenu" aria-haspopup="true">👤 <span>${who}</span> ▾</button>
     <div class="umenu" hidden><a data-view="account">${t('account')}</a><a data-act="logout">${t('sign_out')}</a></div></div>`;
-  const cur = S.view==='account' ? t('account') : S.view==='stats' ? t('stats') : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
+  const cur = viewLabel();
   // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается»
   return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
@@ -619,6 +628,7 @@ function render(){
   if(S.view==='account') mountGoogle();
   const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
   capFit(cap); capHint(cap);
+  docTitle();  // и длинный SEO-заголовок лендинга после входа сменится
   gaPage();
   if(S.sel!=null){ S.sel = Math.min(S.sel, cards().length-1); if(S.sel<0) S.sel = null; }  // выбор переживает перерисовку
   if(S.sel!=null || S.zone==='nav') selDraw();

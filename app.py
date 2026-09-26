@@ -289,7 +289,6 @@ TEXTS = {
         "google_off": "Вход через Google не настроен",
         "google_fail": "Google не подтвердил вход — попробуй ещё раз",
         "tg_off": "Telegram-бот выключен",
-        "auth_stale": "Ссылка устарела. Отправь /login боту ещё раз.",
         "project_empty": "Название не может быть пустым",
         "project_exists": "Проект «{title}» уже есть",
         "task_missing": "Задача не найдена",
@@ -362,7 +361,6 @@ TEXTS = {
         "google_off": "Google sign-in isn't set up",
         "google_fail": "Google didn't confirm the sign-in — try again",
         "tg_off": "The Telegram bot is off",
-        "auth_stale": "This link has expired. Send /login to the bot again.",
         "project_empty": "The name can't be empty",
         "project_exists": "Project “{title}” already exists",
         "task_missing": "Task not found",
@@ -393,7 +391,13 @@ ON = r"(?:\bon\s+)?"  # «pay rent on 24 oct», «on 2026-10-24»: предло�
 def parse_when(text: str, now: datetime):
     """Возвращает (очищенный_текст, epoch|None). Понимает рус/англ: «через 2 часа» / «in 2 hours»,
     «завтра в 10:00» / «tomorrow 10am», «в пятницу» / «on friday», «next monday», «24.10 12:00» / «24 oct 12:00»,
-    «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow»."""
+    «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow».
+
+    Дата через точку — всегда с месяцем из двух цифр. С двузначным днём («24.10», «01.09») или годом
+    («5.10.2026») — всегда дата. С однозначным днём («1.10») — только если рядом признак даты: начало
+    текста («1.02 оплата»), предлог перед ней («к», «до», «на», «в», «с», «по», «by», «on», «until»,
+    «till») или время сразу после («1.10 12:00», «1.10 в 12:00»). Иначе это число: «версия 1.05»,
+    «курс 1.10» напоминаний не ставят."""
     found = False
 
     def cut(m):
@@ -416,16 +420,19 @@ def parse_when(text: str, now: datetime):
         cut(m)
         return _clean(text), int((now + d).timestamp())
 
-    hm = None
+    hm = tm = None
     # 12-часовое время: «10am», «at 3 pm», «9:30pm»; 12am — полночь, 12pm — полдень
     m = re.search(r"(?:\bat\s+)?\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?", text, re.I)
     if m and 1 <= int(m.group(1)) <= 12 and int(m.group(2) or 0) < 60:
-        hm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0))
-        cut(m)
-    m = None if hm else re.search(r"(?:\b(?:в|at|к)\s+)?\b(\d{1,2}):(\d{2})\b", text)
+        hm, tm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0)), m
+    m = None if hm else re.search(r"(?:\b(?:в|at|к)\s+)?\b(\d{1,2}):(\d{2})\b", text, re.I)
     if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
-        hm = (int(m.group(1)), int(m.group(2)))
-        cut(m)
+        hm, tm = (int(m.group(1)), int(m.group(2))), m
+    timed_dm = None  # позиция «1.10» прямо перед временем: текст до вырезанного времени не сдвигается
+    if tm:
+        p = re.search(r"\b\d\.\d{2}\s+$", text[: tm.start()])
+        timed_dm = p and p.start()
+        cut(tm)
 
     base, explicit_dm = None, False
     m = re.search(ON + r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
@@ -436,8 +443,11 @@ def parse_when(text: str, now: datetime):
         except ValueError:
             pass
     if base is None:
-        # Месяц — две цифры: «24.10», «1.02»; иначе «версия 1.2» становится 1 февраля
-        m = re.search(r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b", text)
+        # Месяц — две цифры, однозначный день — только с признаком даты (правило — в docstring)
+        m = next((m for m in re.finditer(r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b", text)
+                  if len(m.group(1)) == 2 or m.group(3) or m.start() == timed_dm
+                  or re.fullmatch(r"(?s)\s*|.*\b(?:к|до|на|в|с|по|by|on|until|till)\s+", text[: m.start()], re.I)),
+                 None)
         if m:
             try:
                 y = int(m.group(3)) if m.group(3) else now.year
@@ -775,6 +785,8 @@ def login_url(uid: int, lang: str) -> str:
 async def handle_message(msg):
     chat = msg["chat"]["id"]
     frm = msg.get("from", {})
+    if not frm.get("id"):  # посты каналов, анонимные админы групп: не от человека — аккаунт не заводим
+        return
     text = (msg.get("text") or msg.get("caption") or "").strip()
     cmd, _, arg = text.partition(" ")
     cmd = cmd.split("@")[0].lower()
@@ -853,8 +865,13 @@ def mark_done(uid, iid=None, num=None):
     return it
 
 
+CB_ITEM_ACTS = ("done", "snz", "next")  # кнопки под задачей: «act:<id задачи>»
+
+
 async def handle_callback(cb):
-    act, _, sid = cb["data"].partition(":")
+    """Кнопки бота. На любое нажатие отвечаем answerCallbackQuery — иначе у пользователя крутится часики;
+    кнопки прежних версий и испорченные данные — просто «Не найдено», без исключения."""
+    act, _, sid = (cb.get("data") or "").partition(":")
     if act == "tgok":
         await tg_login_confirm(cb, sid)
         return
@@ -874,15 +891,13 @@ async def handle_callback(cb):
             await tg_email_ask(chat, tg_user(frm["id"], frm.get("first_name", ""), frm.get("language_code")), lang)
         return
     u, lang = tg_known(frm)
-    if not u:
-        return
-    track(u["id"], "telegram")
-    iid = int(sid)
-    it = item_get(u["id"], iid)
-    msg = cb.get("message", {})
+    it = u and act in CB_ITEM_ACTS and sid.isdigit() and item_get(u["id"], int(sid))
     if not it:
         await tg("answerCallbackQuery", callback_query_id=cb["id"], text=tr(lang, "cb_missing"))
         return
+    track(u["id"], "telegram")
+    iid = it["id"]
+    msg = cb.get("message", {})
     if act == "done":
         mark_done(u["id"], iid)
         note = tr(lang, "cb_done")
@@ -892,8 +907,6 @@ async def handle_callback(cb):
     elif act == "next":
         run("update items set status='next' where id=%s", (iid,))
         note = tr(lang, "cb_next")
-    else:
-        return
     await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
     if msg:
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"],
@@ -1429,9 +1442,9 @@ def auth(t: str, request: Request, lang: str = ""):
     """Ссылка входа из /login в боте. lang=en — бот говорил с пользователем по-английски: ведём в /en/,
     если язык не выбран явно в «Аккаунте»."""
     r = row("select * from login_tokens where token=%s and expires>%s", (t, int(time.time())))
-    if not r:
-        msg = tr(lang if lang in LANGS else req_lang(request), "auth_stale")
-        return JSONResponse({"error": msg}, status_code=400)
+    if not r:  # ссылку открывают в браузере из Telegram — страница с выходом, а не сырой JSON
+        page = pages.auth_stale(lang if lang in LANGS else req_lang(request), BOT_USERNAME)
+        return HTMLResponse(page, status_code=400, headers={"X-Robots-Tag": "noindex"})
     run("delete from login_tokens where token=%s", (t,))
     chosen = row("select lang from users where id=%s", (r["user_id"],))["lang"] or lang
     return set_session(RedirectResponse("/en/" if chosen == "en" else "/", status_code=303), r["user_id"])
