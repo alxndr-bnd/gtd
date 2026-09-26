@@ -204,13 +204,19 @@ def track(uid, channel: str, n: int = 1):
 WEEKDAYS = {"понедельник": 0, "вторник": 1, "сред": 2, "четверг": 3, "пятниц": 4,
             "суббот": 5, "воскресень": 6, "monday": 0, "tuesday": 1, "wednesday": 2,
             "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
-WD_RE = (r"(?:\b(?:в|во|на|on)\s+)?\b(понедельник|вторник|сред[ауы]|четверг|пятниц[ауы]|"
+# «next monday», «this friday» — тот же ближайший день недели, что и «on monday»
+WD_RE = (r"(?:\b(?:в|во|на|on)\s+)?(?:\b(?:next|this)\s+)?\b(понедельник|вторник|сред[ауы]|четверг|пятниц[ауы]|"
          r"суббот[ауы]|воскресенье|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b")
+MONTHS_EN = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+MON_RE = (r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|"
+          r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?")
+ON = r"(?:\bon\s+)?"  # «pay rent on 24 oct», «on 2026-10-24»: предлог уходит вместе с датой
 
 
 def parse_when(text: str, now: datetime):
-    """Возвращает (очищенный_текст, epoch|None). Понимает рус/англ: «через 2 часа»,
-    «завтра в 10:00», «в пятницу», «24.10 12:00», «2026-10-24», «в 15:30»."""
+    """Возвращает (очищенный_текст, epoch|None). Понимает рус/англ: «через 2 часа» / «in 2 hours»,
+    «завтра в 10:00» / «tomorrow 10am», «в пятницу» / «on friday», «next monday», «24.10 12:00» / «24 oct 12:00»,
+    «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow»."""
     found = False
 
     def cut(m):
@@ -218,7 +224,7 @@ def parse_when(text: str, now: datetime):
         text = text[: m.start()] + " " + text[m.end():]
         found = True
 
-    m = re.search(r"\b(?:через|in)\s+(\d+)\s*(мин\w*|min\w*|час\w*|ч|hour\w*|h|дн\w*|день|day\w*|недел\w*|week\w*)\b",
+    m = re.search(r"\b(?:через|in)\s+(\d+)\s*(мин\w*|min\w*|час\w*|ч|hour\w*|hr\w*|h|дн\w*|день|day\w*|недел\w*|week\w*)\b",
                   text, re.I)
     if m:
         n, u = int(m.group(1)), m.group(2).lower()
@@ -234,13 +240,18 @@ def parse_when(text: str, now: datetime):
         return _clean(text), int((now + d).timestamp())
 
     hm = None
-    m = re.search(r"(?:\b(?:в|at|к)\s+)?\b(\d{1,2}):(\d{2})\b", text)
+    # 12-часовое время: «10am», «at 3 pm», «9:30pm»; 12am — полночь, 12pm — полдень
+    m = re.search(r"(?:\bat\s+)?\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?", text, re.I)
+    if m and 1 <= int(m.group(1)) <= 12 and int(m.group(2) or 0) < 60:
+        hm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0))
+        cut(m)
+    m = None if hm else re.search(r"(?:\b(?:в|at|к)\s+)?\b(\d{1,2}):(\d{2})\b", text)
     if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
         hm = (int(m.group(1)), int(m.group(2)))
         cut(m)
 
     base, explicit_dm = None, False
-    m = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
+    m = re.search(ON + r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
     if m:
         try:
             base = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
@@ -259,10 +270,23 @@ def parse_when(text: str, now: datetime):
             except ValueError:
                 pass
     if base is None:
-        m = re.search(r"\b(послезавтра|завтра|сегодня|today|tomorrow)\b", text, re.I)
+        # Английский месяц словом: «24 oct», «24th of October», «oct 24», «October 24, 2027»
+        m = (re.search(ON + r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?" + MON_RE + r"(?:,?\s+(\d{4}))?(?!\w)", text, re.I)
+             or re.search(ON + r"\b" + MON_RE + r"\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4})\b)?", text, re.I))
+        if m:
+            g = m.groups()
+            day, mon = (g[0], g[1]) if g[0].isdigit() else (g[1], g[0])
+            try:
+                base = date(int(g[2]) if g[2] else now.year, MONTHS_EN.index(mon[:3].lower()) + 1, int(day))
+                explicit_dm = not g[2]
+                cut(m)
+            except ValueError:
+                pass
+    if base is None:
+        m = re.search(r"\b(послезавтра|завтра|сегодня|today|day after tomorrow|tomorrow)\b", text, re.I)
         if m:
             k = m.group(1).lower()
-            off = 2 if k == "послезавтра" else 1 if k in ("завтра", "tomorrow") else 0
+            off = 2 if k in ("послезавтра", "day after tomorrow") else 1 if k in ("завтра", "tomorrow") else 0
             base = now.date() + timedelta(days=off)
             cut(m)
     if base is None:
