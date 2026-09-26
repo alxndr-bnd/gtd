@@ -340,7 +340,7 @@ function navHtml(){
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
     ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">📊 Статистика</a>`:''}
     <div class="navfoot"><div class="sep"></div>${user}</div>
-    <div class="keys">↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс</div></nav>`;
+    <div class="keys">C / N — новая задача<br>↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс</div></nav>`;
 }
 
 function itemHtml(it){
@@ -703,6 +703,19 @@ function toMenu(){
   const i = menu().findIndex(a => a.dataset.view===S.view && !a.dataset.pid);
   S.navSel = i < 0 ? 0 : i;
 }
+// C (create) / N (new) — к полю захвата, если сейчас не печатаешь в поле. По e.code — физической
+// клавише, поэтому работает и на русской раскладке (С / Т). ⌘/Ctrl-сочетания (⌘C) не трогаем.
+function captureKey(e){
+  if(e.code!=='KeyC' && e.code!=='KeyN') return false;
+  if(e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || $('#dlg').open) return false;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return false;
+  const cap = $('#cap'); if(!cap) return false;
+  e.preventDefault();  // иначе буква впечатается в поле
+  closeDrawer(); S.zone = 'main'; S.sel = null; selDraw();
+  cap.focus(); cap.setSelectionRange(cap.value.length, cap.value.length);
+  return true;
+}
+
 function navKey(e){
   if($('#dlg').open || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return false;
   const list = cards();
@@ -752,6 +765,7 @@ document.addEventListener('keydown', e => {
     if(e.key==='Escape') return acClose();
   }
   if(e.key==='Escape' && $('nav.open')) return closeDrawer();
+  if(captureKey(e)) return;
   if(navKey(e)) return;
   if(e.key!=='Enter') return;
   if(e.target.id==='cap'){ e.preventDefault(); capture(); }  // Enter — добавить, а не перенос строки
