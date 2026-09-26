@@ -56,6 +56,59 @@ def test_patch_item(client, login):
     assert client.patch(f"/api/items/{iid}", json={"project_id": pid}).json()["project"] == "П"
 
 
+def card_save(client, iid, **fields):
+    """Сохранение карточки: SPA шлёт все поля формы разом, как в openEdit."""
+    body = {"title": "", "notes": "", "status": "inbox", "project_id": None, "context": "", "remind_at": None, **fields}
+    r = client.patch(f"/api/items/{iid}", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_card_title_parsed_like_capture(client, login):
+    """SERBITO-298: #проект, @контекст и дата в заголовке карточки — как в поле захвата."""
+    uid = login(client)
+    iid = client.post("/api/capture", json={"text": "черновик"}).json()["id"]
+    it = card_save(client, iid, title="позвонить в банк завтра в 10:00 @Телефон #Новый_Проект")
+    same = A.capture(uid, "позвонить в банк завтра в 10:00 @Телефон #Новый_Проект")
+    assert (it["title"], it["context"], it["project"]) == ("позвонить в банк", "телефон", "Новый Проект")
+    assert it["remind_at"] == same["remind_at"] and it["reminded"] == 0
+    assert it["project_id"] == same["project_id"]  # проект создан один раз и переиспользован захватом
+    assert it["status"] == "inbox"  # список — из поля «Список», токены его не меняют
+    assert A.row("select count(*) n from projects where user_id=%s", (uid,))["n"] == 1
+
+
+def test_card_title_token_overrides_fields(client, login):
+    login(client)
+    a = client.post("/api/projects", json={"title": "Дом"}).json()["id"]
+    b = client.post("/api/projects", json={"title": "Клиент X"}).json()["id"]
+    iid = client.post("/api/capture", json={"text": "задача"}).json()["id"]
+    it = card_save(client, iid, title="задача #клиент_x @Работа", project_id=a, context="дом")
+    assert (it["title"], it["project_id"], it["context"]) == ("задача", b, "работа")
+
+
+def test_card_title_without_tokens_keeps_fields(client, login):
+    login(client)
+    pid = client.post("/api/projects", json={"title": "Дом"}).json()["id"]
+    iid = client.post("/api/capture", json={"text": "задача"}).json()["id"]
+    when = int(time.time()) + 3600
+    it = card_save(client, iid, title="новое название", project_id=pid, context="@Дача", remind_at=when)
+    assert (it["title"], it["project_id"], it["context"], it["remind_at"]) == ("новое название", pid, "дача", when)
+    # Только #проект в заголовке: контекст и напоминание из полей остаются
+    it = card_save(client, iid, title="новое название #Дом", context="дача", remind_at=when)
+    assert (it["title"], it["project_id"], it["context"], it["remind_at"]) == ("новое название", pid, "дача", when)
+
+
+def test_card_unchanged_title_not_reparsed(client, login):
+    """Заголовок не меняли — не разбираем: снятое в карточке напоминание не возвращается из «завтра»,
+    выбранный контекст не перекрывается токеном, оставшимся в заголовке из одних токенов."""
+    login(client)
+    it = client.post("/api/capture", json={"text": "завтра"}).json()
+    assert it["title"] == "завтра" and it["remind_at"]
+    assert card_save(client, it["id"], title="завтра")["remind_at"] is None
+    it = client.post("/api/capture", json={"text": "@дом"}).json()
+    assert card_save(client, it["id"], title="@дом", context="работа")["context"] == "работа"
+
+
 def test_delete_item(client, login):
     login(client)
     iid = client.post("/api/capture", json={"text": "удалить"}).json()["id"]

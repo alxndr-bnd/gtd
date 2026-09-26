@@ -779,10 +779,11 @@ function openEdit(id, found){
   const it = found || S.items.concat(S.nextItems||[]).find(i=>i.id===id); if(!it) return;
   const d = $('#dlg');
   history.replaceState(null, '', `/i/${it.num}`);
-  d.onclose = () => { if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };
+  d.onclose = () => { acClose(); if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };
   d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px">${t('task_n', {n:it.num})}
       <button type="button" class="sm" data-act="copylink" aria-label="${t('copy_link')}" title="${t('copy_link_to', {url:esc(itemLink(it))})}">🔗</button></h3>
-    <label>${t('f_title')}</label><input name="title" value="${esc(it.title)}" required autofocus>
+    <label>${t('f_title')}</label><div class="capw"><input name="title" value="${esc(it.title)}" required autofocus autocomplete="off" data-ac-src>
+      <div class="ac" role="listbox" hidden></div></div>
     <label>${t('f_notes')}</label><textarea name="notes" rows="3">${esc(it.notes)}</textarea>
     <label>${t('f_list')}</label><select name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
     <label>${t('f_project')}</label><select name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
@@ -865,10 +866,12 @@ async function capture(){
   await load(); $('#cap')?.focus();  // записываем подряд, не кликая в поле снова
 }
 
-// ── Подсказки в поле захвата: «@» — существующие контексты, «#» — активные проекты.
-// Сервер разбирает #проект как [\w-]+ с «_» вместо пробелов, поэтому вставляем так же.
-const AC = {items:[], i:0, start:0, end:0};
+// ── Подсказки в поле захвата и в заголовке карточки (SERBITO-298): «@» — существующие контексты,
+// «#» — активные проекты. Сервер разбирает #проект как [\w-]+ с «_» вместо пробелов, поэтому вставляем так же.
+// Список — .ac рядом с полем внутри .capw; AC.inp — поле, для которого он сейчас открыт.
+const AC = {items:[], i:0, start:0, end:0, inp:null};
 function acUpdate(inp){
+  AC.inp = inp;
   const pos = inp.selectionStart, m = inp.value.slice(0, pos).match(/(?:^|\s)([@#])([\p{L}\p{N}_-]*)$/u);
   if(!m) return acClose();
   const [, sig, q] = m, ql = q.toLowerCase();
@@ -883,16 +886,17 @@ function acUpdate(inp){
   acDraw();
 }
 function acDraw(){
-  const box = $('#ac'); if(!box) return;
+  const box = AC.inp?.closest('.capw')?.querySelector('.ac'); if(!box) return;
   box.hidden = !AC.items.length;
   box.innerHTML = AC.items.map((o,k) => `<div class="aco ${k===AC.i?'on':''}" role="option" data-ac="${k}">${esc(o.label)}</div>`).join('');
 }
 function acClose(){ AC.items = []; acDraw(); }
 function acPick(k){
-  const inp = $('#cap'), o = AC.items[k]; if(!o) return;
+  const inp = AC.inp, o = AC.items[k]; if(!inp || !o) return;
   const rest = inp.value.slice(AC.end), ins = o.ins + (rest.startsWith(' ') ? '' : ' ');
   inp.value = inp.value.slice(0, AC.start) + ins + rest;
   const p = AC.start + ins.length; inp.setSelectionRange(p, p); inp.focus(); acClose();
+  inp.dispatchEvent(new Event('input', {bubbles:true}));  // черновик и высота поля — как при наборе
 }
 
 document.addEventListener('click', async e => {
@@ -943,6 +947,7 @@ function capFit(el = $('#cap')){
 }
 addEventListener('resize', () => { capFit(); capHint(); });
 document.addEventListener('input', e => {
+  if(e.target.dataset.acSrc!==undefined) return acUpdate(e.target);
   if(e.target.id!=='cap') return;
   capFit(e.target);
   acUpdate(e.target);
@@ -1032,12 +1037,13 @@ function navKey(e){
 }
 
 document.addEventListener('keydown', e => {
-  if(e.target.id==='cap' && AC.items.length){
+  if(e.target===AC.inp && AC.items.length){
     if(e.key==='ArrowDown' || e.key==='ArrowUp'){
       e.preventDefault(); AC.i = (AC.i + (e.key==='ArrowDown' ? 1 : -1) + AC.items.length) % AC.items.length; return acDraw();
     }
+    // preventDefault: Enter не отправит карточку, Esc закроет только подсказки, а не карточку
     if(e.key==='Enter' || e.key==='Tab'){ e.preventDefault(); return acPick(AC.i); }
-    if(e.key==='Escape') return acClose();
+    if(e.key==='Escape'){ e.preventDefault(); return acClose(); }
   }
   if(e.key==='Escape' && $('nav.open')) return closeDrawer();
   if(captureKey(e)) return;

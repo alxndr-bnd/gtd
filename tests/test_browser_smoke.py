@@ -262,3 +262,42 @@ def test_telegram_fallback_deep_link(watch, monkeypatch, lang):
     w.page.click('main [data-act="tglogin"]')
     w.wait(f"main #tgst {link}", f"[{lang}] account: ссылка в бота")
     w.check(f"[{lang}] итог")
+
+
+def smoke_user(w, lang="ru"):
+    """Пользователь с задачами во всех списках, вошедший через /dev-login; возвращает id задач."""
+    uid = A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,%s) returning id",
+                (int(time.time()), lang))
+    ids = seed(uid)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    return ids
+
+
+def test_card_title_suggestions(watch):
+    """SERBITO-298: в заголовке карточки те же подсказки #проект / @контекст, что в поле захвата,
+    с выбором с клавиатуры; сохранение разбирает токены на сервере."""
+    w = watch()
+    ids = smoke_user(w)
+    w.page.click(f'main .it[data-id="{ids["inbox"]}"] .t')
+    w.wait("#dlg[open] #ef", "карточка")
+    title = w.page.locator('#ef [name="title"]')
+    title.press("End")
+    title.type(" #Про")
+    w.wait('#ef .ac:not([hidden]) .aco:has-text("#Проект Альфа")', "подсказка #")
+    title.press("Enter")  # выбирает подсказку, а не отправляет карточку
+    assert w.page.locator("#dlg[open]").count() and title.input_value() == "Позвонить маме #Проект_Альфа "
+    title.type("@h")
+    w.wait('#ef .ac:not([hidden]) .aco:has-text("@home")', "подсказка @")
+    title.press("Escape")  # закрывает только подсказки
+    assert w.page.locator("#ef .ac[hidden]").count() and w.page.locator("#dlg[open]").count()
+    title.type("o")
+    w.wait('#ef .ac:not([hidden]) .aco:has-text("@home")', "подсказка @ снова")
+    title.press("Tab")
+    assert title.input_value() == "Позвонить маме #Проект_Альфа @home "
+    w.page.click('#ef button.pri')
+    w.wait(f'main .it[data-id="{ids["inbox"]}"] .meta:has-text("@home")', "сохранено")
+    it = A.row("select i.title, i.context, p.title project from items i join projects p on p.id=i.project_id "
+               "where i.id=%s", (ids["inbox"],))
+    assert (it["title"], it["context"], it["project"]) == ("Позвонить маме", "home", "Проект Альфа")
+    w.check("итог")
