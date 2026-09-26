@@ -158,6 +158,10 @@ alter table users add column if not exists checklist_hidden boolean not null def
 create table if not exists activity(
   user_id bigint not null, day date not null, channel text not null, actions integer not null default 0,
   primary key (user_id, day, channel));
+-- Язык интерфейса (SERBITO-259): null — авто (сайт — по браузеру, бот — по Telegram), иначе 'ru' или 'en'
+alter table users add column if not exists lang text;
+-- language_code из последнего апдейта Telegram: на нём «авто»-пользователю приходят напоминания (в них апдейта нет)
+alter table users add column if not exists tg_lang text;
 """
     )
 
@@ -198,6 +202,179 @@ def track(uid, channel: str, n: int = 1):
         _seen_today.add((uid, day, channel))
     run("insert into activity(user_id,day,channel,actions) values(%s,%s,%s,%s) on conflict(user_id,day,channel) "
         "do update set actions = activity.actions + excluded.actions", (uid, day, channel, n))
+
+
+# ───────────────────────── Язык ─────────────────────────
+# Правило выбора языка — pages.lang_of / pages.pick_lang (одно на сайт, бот, письма, 404 и манифест)
+LANGS, RU_LANGS = pages.LANGS, pages.RU_LANGS
+
+
+def req_lang(request: Request, uid: int | None = None) -> str:
+    """Язык ответа сервера: явная настройка пользователя > Accept-Language (SPA шлёт в нём выбранный язык)."""
+    uid = uid or session_user(request)
+    u = row("select lang from users where id=%s", (uid,)) if uid else None
+    return (u and u["lang"]) or pages.pick_lang(request.headers.get("accept-language"))
+
+
+def bot_lang(u, code=None) -> str:
+    """Язык бота: явная настройка > language_code этого апдейта > последний известный из Telegram > русский."""
+    if u and u.get("lang"):
+        return u["lang"]
+    return pages.lang_of(code or (u or {}).get("tg_lang"))
+
+
+# Тексты бота, писем и ошибок API, которые видит пользователь. Ключи в обоих языках одинаковые (тест)
+TEXTS = {
+    "ru": {
+        "help": "Просто пришли мысль — она попадёт в Inbox.\n\n"
+                "Умный захват:\n"
+                "• «Позвонить в банк завтра в 10:00» → напоминание\n"
+                "• «через 2 часа проверить деплой»\n"
+                "• «в пятницу отчёт #Клиент_X @работа» → сразу в Next, проект и контекст\n\n"
+                "/inbox — что в инбоксе\n/next — следующие действия\n/done 12 — закрыть задачу №12\n"
+                "/login — ссылка для входа в веб-интерфейс\n"
+                "/email you@example.com — привязать почту: входить на сайте по коду или через Google\n"
+                "/about — что такое GTD",
+        "ready": "GTD-бот готов.\n\n",
+        "start": "Пришли любую мысль — она попадёт во Входящие, а разберёшь потом.\n\n"
+                 "• «позвонить маме завтра в 10:00» → напомню\n"
+                 "• «отчёт #Работа @комп» → сразу в проект и контекст\n\n"
+                 "Все команды — /help",
+        "about": "GTD (Getting Things Done) — метод Дэвида Аллена из его книги «Getting Things Done» "
+                 "(по-русски — «Как привести дела в порядок»). Голова — для идей, а не для хранения: всё, что требует "
+                 "внимания, сразу записываешь во Входящие, а потом решаешь, что это и какой следующий конкретный шаг. "
+                 "Шаги ложатся в списки — Next, Waiting, проекты, Someday, — и раз в неделю ты их пересматриваешь, "
+                 "так что ничего не теряется.\n\nПодробнее: {url}/about",
+        "first_task": "Готово! Можно добавить срок — «завтра в 10:00», — а разобрать всё удобнее на сайте: {url}",
+        "btn_email": "📧 Добавить email", "btn_about": "ℹ️ Как это работает", "btn_site": "🌐 Открыть сайт",
+        "btn_done": "✅ Готово", "btn_snooze": "💤 +1ч", "btn_next": "⏭ Next",
+        "btn_confirm": "✅ Подтвердить", "btn_merge": "🔗 Объединить", "btn_nomerge": "Не сейчас",
+        "text_only": "Пока понимаю только текст.",
+        "empty": "Пусто 🎉",
+        "done_usage": "Использование: /done 12",
+        "done_ok": "✅ Готово: {ref} {title}",
+        "not_found_task": "Не нашёл такую задачу",
+        "login_link": "Вход (10 минут, одноразовая):\n{url}",
+        "cb_done": "✅ Готово", "cb_snooze": "💤 Напомню через час", "cb_next": "⏭ В Next", "cb_missing": "Не найдено",
+        "tg_link_stale": "Ссылка устарела — нажми кнопку на сайте ещё раз",
+        "tg_confirm_link": "привязать этот Telegram к аккаунту GTD",
+        "tg_confirm_login": "войти в GTD в браузере",
+        "tg_confirm": "Подтвердить: {what}?\n\nЖми, только если сам только что нажал кнопку на сайте.",
+        "tg_linked": "✅ Telegram привязан — вернись в браузер",
+        "tg_link_merge": "У этого Telegram уже есть свой аккаунт с задачами — подтверди объединение в браузере",
+        "tg_login_ok": "✅ Вход подтверждён — вернись в браузер",
+        "email_now": "Сейчас привязана {email} — пришли другой адрес, чтобы сменить.\n\n",
+        "email_ask": "Пришли адрес почты — вышлю на него код. С этой почтой можно будет входить на сайте "
+                     "по коду или через Google.",
+        "email_sent": "Код отправлен на {email}. Пришли его сюда — 6 цифр.",
+        "email_linked": "✅ Почта {email} привязана. На сайте можно входить по коду на неё или через Google "
+                        "с этим адресом: {url}",
+        "merge_no": "Ок, не объединяю. Передумаешь — снова /email",
+        "merge_ok": "✅ Аккаунты объединены",
+        "merge_stale_bot": "Предложение устарело — начни заново с /email",
+        "merge_offer": "{what} уже у другого аккаунта: задач — {items}, проектов — {projects}. Объединить его "
+                       "с этим? Всё окажется в одном аккаунте, и войти можно будет любым способом.",
+        "what_email_addr": "Почта {email}", "what_email": "Эта почта", "what_google": "Этот Google-аккаунт",
+        "what_tg": "Этот Telegram",
+        # Ошибки API и входа
+        "bad_email": "Неверный адрес почты",
+        "email_off": "Вход по почте не настроен",
+        "code_cooldown": "Код уже отправлен — новый можно запросить через минуту",
+        "too_many": "Слишком много запросов — попробуй через 10 минут",
+        "smtp_fail": "Не удалось отправить письмо — попробуй позже",
+        "code_expired": "Код устарел — запроси новый",
+        "code_wrong": "Неверный код",
+        "merge_missing": "Аккаунт для объединения не найден",
+        "merge_stale": "Предложение устарело — привяжи способ входа ещё раз",
+        "google_off": "Вход через Google не настроен",
+        "google_fail": "Google не подтвердил вход — попробуй ещё раз",
+        "tg_off": "Telegram-бот выключен",
+        "auth_stale": "Ссылка устарела. Отправь /login боту ещё раз.",
+        "project_empty": "Название не может быть пустым",
+        "project_exists": "Проект «{title}» уже есть",
+        "task_missing": "Задача не найдена",
+        # Письмо с кодом
+        "mail_subject": "Код входа в GTD: {code}",
+        "mail_body": "Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.",
+    },
+    "en": {
+        "help": "Just send me a thought — it lands in your Inbox.\n\n"
+                "Smart capture:\n"
+                "• “Call the bank tomorrow at 10am” → a reminder\n"
+                "• “in 2 hours check the deploy”\n"
+                "• “report on friday #Client_X @work” → straight to Next, with a project and a context\n\n"
+                "/inbox — what's in your Inbox\n/next — next actions\n/done 12 — complete task #12\n"
+                "/login — a sign-in link for the website\n"
+                "/email you@example.com — link an email to sign in on the site with a code or Google\n"
+                "/about — what GTD is",
+        "ready": "The GTD bot is ready.\n\n",
+        "start": "Send me any thought — it lands in your Inbox, and you sort it out later.\n\n"
+                 "• “call mom tomorrow at 10:00” → I'll remind you\n"
+                 "• “report #Work @computer” → straight into a project and a context\n\n"
+                 "All commands — /help",
+        "about": "GTD (Getting Things Done) is David Allen's method from his book “Getting Things Done”. "
+                 "Your head is for having ideas, not holding them: capture everything that needs attention into "
+                 "the Inbox right away, then decide what it is and what the next concrete step is. "
+                 "Steps go into lists — Next, Waiting, projects, Someday — and once a week you review them, "
+                 "so nothing slips through.\n\nMore: {url}/en/about",
+        "first_task": "Got it! You can add a time — “tomorrow at 10:00” — and sorting everything out is easier "
+                      "on the website: {url}/en/",
+        "btn_email": "📧 Add email", "btn_about": "ℹ️ How it works", "btn_site": "🌐 Open the website",
+        "btn_done": "✅ Done", "btn_snooze": "💤 +1h", "btn_next": "⏭ Next",
+        "btn_confirm": "✅ Confirm", "btn_merge": "🔗 Merge", "btn_nomerge": "Not now",
+        "text_only": "I only understand text for now.",
+        "empty": "Empty 🎉",
+        "done_usage": "Usage: /done 12",
+        "done_ok": "✅ Done: {ref} {title}",
+        "not_found_task": "Couldn't find that task",
+        "login_link": "Sign-in link (one-time, valid for 10 minutes):\n{url}",
+        "cb_done": "✅ Done", "cb_snooze": "💤 I'll remind you in an hour", "cb_next": "⏭ Moved to Next",
+        "cb_missing": "Not found",
+        "tg_link_stale": "This link has expired — press the button on the website again",
+        "tg_confirm_link": "link this Telegram to your GTD account",
+        "tg_confirm_login": "sign in to GTD in your browser",
+        "tg_confirm": "Confirm: {what}?\n\nTap only if you've just pressed the button on the website yourself.",
+        "tg_linked": "✅ Telegram linked — go back to your browser",
+        "tg_link_merge": "This Telegram already has its own account with tasks — confirm the merge in your browser",
+        "tg_login_ok": "✅ Sign-in confirmed — go back to your browser",
+        "email_now": "{email} is linked now — send another address to change it.\n\n",
+        "email_ask": "Send me your email address and I'll email you a code. With this email you can sign in on "
+                     "the website with a code or with Google.",
+        "email_sent": "Code sent to {email}. Send it here — 6 digits.",
+        "email_linked": "✅ {email} is linked. On the website you can sign in with a code sent to it or with Google "
+                        "using this address: {url}/en/",
+        "merge_no": "OK, not merging. Changed your mind? Send /email again",
+        "merge_ok": "✅ Accounts merged",
+        "merge_stale_bot": "This offer has expired — start again with /email",
+        "merge_offer": "{what} already belongs to another account (tasks: {items}, projects: {projects}). Merge it "
+                       "with this one? Everything ends up in one account, and any sign-in method will open it.",
+        "what_email_addr": "The email {email}", "what_email": "This email", "what_google": "This Google account",
+        "what_tg": "This Telegram",
+        "bad_email": "Invalid email address",
+        "email_off": "Email sign-in isn't set up",
+        "code_cooldown": "A code has already been sent — you can request a new one in a minute",
+        "too_many": "Too many requests — try again in 10 minutes",
+        "smtp_fail": "Couldn't send the email — try again later",
+        "code_expired": "The code has expired — request a new one",
+        "code_wrong": "Wrong code",
+        "merge_missing": "The account to merge wasn't found",
+        "merge_stale": "This offer has expired — link the sign-in method again",
+        "google_off": "Google sign-in isn't set up",
+        "google_fail": "Google didn't confirm the sign-in — try again",
+        "tg_off": "The Telegram bot is off",
+        "auth_stale": "This link has expired. Send /login to the bot again.",
+        "project_empty": "The name can't be empty",
+        "project_exists": "Project “{title}” already exists",
+        "task_missing": "Task not found",
+        "mail_subject": "Your GTD sign-in code: {code}",
+        "mail_body": "Your GTD sign-in code: {code}\n\nIt's valid for 10 minutes. If you didn't try to sign in, "
+                     "just ignore this email.",
+    },
+}
+
+
+def tr(lang: str, key: str, **kw) -> str:
+    return TEXTS[lang if lang in TEXTS else "ru"][key].format(**kw)
 
 
 # ───────────────────────── Парсинг захвата ─────────────────────────
@@ -366,14 +543,18 @@ def item_by_num(uid, num):
     return row(ITEM_SQL + "where i.user_id=%s and i.num=%s", (uid, num))
 
 
-def fmt_ts(ts):
-    return datetime.fromtimestamp(ts, TZ).strftime("%d.%m %H:%M")
+def fmt_ts(ts, lang="ru"):
+    """«25.09 14:00» / «25 Sep 14:00» — месяц словом, чтобы не путать день и месяц; strftime("%b") зависит от локали."""
+    d = datetime.fromtimestamp(ts, TZ)
+    if lang == "en":
+        return f"{d.day} {MONTHS_EN[d.month - 1].title()} {d:%H:%M}"
+    return d.strftime("%d.%m %H:%M")
 
 
-def describe(it) -> str:
+def describe(it, lang="ru") -> str:
     bits = []
     if it.get("remind_at"):
-        bits.append("⏰ " + fmt_ts(it["remind_at"]))
+        bits.append("⏰ " + fmt_ts(it["remind_at"], lang))
     if it.get("context"):
         bits.append("@" + it["context"])
     if it.get("project"):
@@ -399,65 +580,69 @@ async def tg(method, **params):
         return None
 
 
-def tg_user(tg_id: int, name: str):
+def tg_user(tg_id: int, name: str, code=None):
+    """Пользователь по Telegram (новый — создаём). code — language_code апдейта: запоминаем для напоминаний."""
     u = row("select * from users where tg_id=%s", (tg_id,))
-    if u:
-        return u
-    uid = run("insert into users(tg_id,name,created) values(%s,%s,%s) returning id", (tg_id, name, int(time.time())))
-    return row("select * from users where id=%s", (uid,))
+    if not u:
+        uid = run("insert into users(tg_id,name,created) values(%s,%s,%s) returning id", (tg_id, name, int(time.time())))
+        u = row("select * from users where id=%s", (uid,))
+    if code and u["tg_lang"] != code:
+        run("update users set tg_lang=%s where id=%s", (code, u["id"]))
+        u["tg_lang"] = code
+    return u
 
 
-HELP = (
-    "Просто пришли мысль — она попадёт в Inbox.\n\n"
-    "Умный захват:\n"
-    "• «Позвонить в банк завтра в 10:00» → напоминание\n"
-    "• «через 2 часа проверить деплой»\n"
-    "• «в пятницу отчёт #Клиент_X @работа» → сразу в Next, проект и контекст\n\n"
-    "/inbox — что в инбоксе\n/next — следующие действия\n/done 12 — закрыть задачу №12\n"
-    "/login — ссылка для входа в веб-интерфейс\n"
-    "/email you@example.com — привязать почту: входить на сайте по коду или через Google\n"
-    "/about — что такое GTD"
-)
+def tg_known(frm: dict):
+    """Уже известный боту пользователь (без создания) и язык ответа ему."""
+    u = row("select * from users where tg_id=%s", (frm.get("id"),))
+    return u, bot_lang(u, frm.get("language_code"))
 
-# ── Онбординг в боте (SERBITO-257): все тексты рядом — отсюда их заберёт перевод
-# Описание до Start и короткое (профиль, репосты): язык → (описание ≤512, короткое ≤120); "" — для всех прочих
+
+# ── Профиль бота (SERBITO-257, 259): описание до Start, короткое (профиль, репосты) и меню команд.
+# Язык текста → (описание ≤512, короткое ≤120). Telegram показывает вариант по language_code клиента, а ""
+# — всем прочим; поэтому "" — английский, а языки, которым по правилу pages.lang_of положен русский, — явно
 BOT_PROFILE = {
-    "": ("Записывай задачи и мысли в один тап — разберёшь потом. Работает по методу GTD Дэвида Аллена: "
-         "Входящие, следующие действия, проекты, напоминания. Всё синхронизируется с сайтом gtd.serbito.rs. "
-         "Бесплатно.",
-         "GTD в Telegram: записывай задачи в один тап, напоминания и проекты. gtd.serbito.rs"),
+    "ru": ("Записывай задачи и мысли в один тап — разберёшь потом. Работает по методу GTD Дэвида Аллена: "
+           "Входящие, следующие действия, проекты, напоминания. Всё синхронизируется с сайтом gtd.serbito.rs. "
+           "Бесплатно.",
+           "GTD в Telegram: записывай задачи в один тап, напоминания и проекты. gtd.serbito.rs"),
     "en": ("Capture tasks and ideas in one tap — sort them out later. Built on David Allen's GTD method: "
            "Inbox, next actions, projects, reminders. Everything syncs with the website gtd.serbito.rs. Free.",
            "GTD in Telegram: capture tasks in one tap, reminders and projects. gtd.serbito.rs"),
 }
-BOT_COMMANDS = [
-    {"command": "inbox", "description": "Инбокс"}, {"command": "next", "description": "Следующие действия"},
-    {"command": "done", "description": "Закрыть задачу: /done 12"},
-    {"command": "login", "description": "Ссылка для входа в веб"},
-    {"command": "email", "description": "Привязать почту"},
-    {"command": "about", "description": "Что такое GTD"},
-    {"command": "help", "description": "Помощь"}]
-START = ("Пришли любую мысль — она попадёт во Входящие, а разберёшь потом.\n\n"
-         "• «позвонить маме завтра в 10:00» → напомню\n"
-         "• «отчёт #Работа @комп» → сразу в проект и контекст\n\n"
-         "Все команды — /help")
-ABOUT = ("GTD (Getting Things Done) — метод Дэвида Аллена из его книги «Getting Things Done» "
-         "(по-русски — «Как привести дела в порядок»). Голова — для идей, а не для хранения: всё, что требует "
-         "внимания, сразу записываешь во Входящие, а потом решаешь, что это и какой следующий конкретный шаг. "
-         "Шаги ложатся в списки — Next, Waiting, проекты, Someday, — и раз в неделю ты их пересматриваешь, "
-         "так что ничего не теряется.\n\nПодробнее: {url}/about")
-FIRST_TASK_HINT = "Готово! Можно добавить срок — «завтра в 10:00», — а разобрать всё удобнее на сайте: {url}"
+BOT_COMMANDS = {
+    "ru": [{"command": "inbox", "description": "Инбокс"}, {"command": "next", "description": "Следующие действия"},
+           {"command": "done", "description": "Закрыть задачу: /done 12"},
+           {"command": "login", "description": "Ссылка для входа в веб"},
+           {"command": "email", "description": "Привязать почту"},
+           {"command": "about", "description": "Что такое GTD"},
+           {"command": "help", "description": "Помощь"}],
+    "en": [{"command": "inbox", "description": "Inbox"}, {"command": "next", "description": "Next actions"},
+           {"command": "done", "description": "Complete a task: /done 12"},
+           {"command": "login", "description": "Sign-in link for the website"},
+           {"command": "email", "description": "Link an email"},
+           {"command": "about", "description": "What GTD is"},
+           {"command": "help", "description": "Help"}],
+}
+PROFILE_CODES = ("", *RU_LANGS)  # language_code профиля в Telegram; язык текста для каждого — profile_lang
 
-BTN_START, BTN_EMAIL, BTN_ABOUT, BTN_SITE = "🚀 Начать", "📧 Добавить email", "ℹ️ Как это работает", "🌐 Открыть сайт"
+
+def profile_lang(code: str) -> str:
+    return pages.lang_of(code) if code else "en"
+
+
+# Кнопки постоянной клавиатуры прежних версий (были только русские): нажатие — не задача
+BTN_START, BTN_EMAIL = "🚀 Начать", "📧 Добавить email"
 NO_PREVIEW = {"link_preview_options": {"is_disabled": True}}
 
 
-def kb_start():
+def kb_start(lang="ru"):
     """Кнопки — под приветствием (inline), а не постоянной клавиатурой: поле ввода остаётся свободным.
     «Открыть сайт» — только с https: ссылку на http://localhost Telegram отвергнет вместе с сообщением."""
-    kb = [[{"text": BTN_ABOUT, "callback_data": "about"}, {"text": BTN_EMAIL, "callback_data": "addemail"}]]
+    kb = [[{"text": tr(lang, "btn_about"), "callback_data": "about"},
+           {"text": tr(lang, "btn_email"), "callback_data": "addemail"}]]
     if BASE_URL.startswith("https://"):
-        kb.append([{"text": BTN_SITE, "url": BASE_URL}])
+        kb.append([{"text": tr(lang, "btn_site"), "url": BASE_URL + ("/en/" if lang == "en" else "")}])
     return {"inline_keyboard": kb}
 # Постоянную клавиатуру прежних версий Telegram убирает только ответом с remove_keyboard
 KB_REMOVE = {"remove_keyboard": True}
@@ -480,11 +665,11 @@ def item_ref(it: dict) -> str:
     return f'<a href="{item_url(it["num"])}">#{it["num"]}</a>'
 
 
-def kb_item(iid, done_only=False):
+def kb_item(iid, lang="ru"):
     return {"inline_keyboard": [[
-        {"text": "✅ Готово", "callback_data": f"done:{iid}"},
-        {"text": "💤 +1ч", "callback_data": f"snz:{iid}"},
-        {"text": "⏭ Next", "callback_data": f"next:{iid}"},
+        {"text": tr(lang, "btn_done"), "callback_data": f"done:{iid}"},
+        {"text": tr(lang, "btn_snooze"), "callback_data": f"snz:{iid}"},
+        {"text": tr(lang, "btn_next"), "callback_data": f"next:{iid}"},
     ]]}
 
 
@@ -493,93 +678,98 @@ def tg_login_get(nonce):
                (nonce, int(time.time())))
 
 
-async def tg_login_prompt(chat, nonce):
+async def tg_login_prompt(chat, nonce, lang):
     """/start <nonce> — пришли с кнопки «Войти через Telegram» на сайте. Просим подтвердить явно:
     иначе чужую ссылку можно подсунуть жертве и получить сессию в её аккаунт."""
     r = tg_login_get(nonce)
     if not r:
-        await tg("sendMessage", chat_id=chat, text="Ссылка устарела — нажми кнопку на сайте ещё раз.")
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "tg_link_stale") + ".")
         return
-    what = "привязать этот Telegram к аккаунту GTD" if r["link_user_id"] else "войти в GTD в браузере"
-    await tg("sendMessage", chat_id=chat,
-             text=f"Подтвердить: {what}?\n\nЖми, только если сам только что нажал кнопку на сайте.",
-             reply_markup={"inline_keyboard": [[{"text": "✅ Подтвердить", "callback_data": f"tgok:{nonce}"}]]})
+    what = tr(lang, "tg_confirm_link" if r["link_user_id"] else "tg_confirm_login")
+    await tg("sendMessage", chat_id=chat, text=tr(lang, "tg_confirm", what=what),
+             reply_markup={"inline_keyboard": [[{"text": tr(lang, "btn_confirm"), "callback_data": f"tgok:{nonce}"}]]})
 
 
 async def tg_login_confirm(cb, nonce):
     frm, msg = cb["from"], cb.get("message", {})
+    _, lang = tg_known(frm)
     r = tg_login_get(nonce)
     if not r:
-        note = "Ссылка устарела — нажми кнопку на сайте ещё раз"
+        note = tr(lang, "tg_link_stale")
     elif r["link_user_id"]:
         res = link_identity(r["link_user_id"], "tg_id", frm["id"])
         run("update tg_logins set status=%s, user_id=%s, merge=%s where nonce=%s",
             ("ok" if res["ok"] else "merge", r["link_user_id"], res.get("merge"), nonce))
-        note = ("✅ Telegram привязан — вернись в браузер" if res["ok"]
-                else "У этого Telegram уже есть свой аккаунт с задачами — подтверди объединение в браузере")
+        note = tr(lang, "tg_linked" if res["ok"] else "tg_link_merge")
     else:
-        u = tg_user(frm["id"], frm.get("first_name", ""))
+        u = tg_user(frm["id"], frm.get("first_name", ""), frm.get("language_code"))
         run("update tg_logins set status='ok', user_id=%s where nonce=%s", (u["id"], nonce))
-        note = "✅ Вход подтверждён — вернись в браузер"
+        note = tr(lang, "tg_login_ok")
     await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
     if msg:
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
 
 
-async def tg_email_ask(chat, u, reply_markup=None):
+async def tg_email_ask(chat, u, lang, reply_markup=None):
     """Кнопка «Добавить email» или /email без адреса: ждём адрес следующим сообщением."""
     run("insert into tg_email_links(tg_id,email,expires) values(%s,null,%s) on conflict(tg_id) do update "
         "set email=null, expires=excluded.expires", (u["tg_id"], int(time.time()) + 600))
-    now = f"Сейчас привязана {u['email']} — пришли другой адрес, чтобы сменить.\n\n" if u.get("email") else ""
-    await tg("sendMessage", chat_id=chat, text=f"{now}Пришли адрес почты — вышлю на него код. С этой почтой "
-             "можно будет входить на сайте по коду или через Google.", reply_markup=reply_markup)
+    now = tr(lang, "email_now", email=u["email"]) if u.get("email") else ""
+    await tg("sendMessage", chat_id=chat, text=now + tr(lang, "email_ask"), reply_markup=reply_markup)
 
 
-async def tg_email_start(chat, u, email):
+async def tg_email_start(chat, u, email, lang):
     """/email адрес — шлём код на почту; пришедшие потом 6 цифр сверяем в tg_email_verify."""
     if not email:
-        await tg_email_ask(chat, u)
+        await tg_email_ask(chat, u, lang)
         return
     try:
-        send_code(email, f"tg:{u['tg_id']}")
+        send_code(email, f"tg:{u['tg_id']}", lang)
     except AuthError as e:
-        await tg("sendMessage", chat_id=chat, text=e.detail)
+        await tg("sendMessage", chat_id=chat, text=e.text(lang))
         return
     run("insert into tg_email_links(tg_id,email,expires) values(%s,%s,%s) on conflict(tg_id) do update "
         "set email=excluded.email, expires=excluded.expires", (u["tg_id"], email, int(time.time()) + 600))
-    await tg("sendMessage", chat_id=chat, text=f"Код отправлен на {email}. Пришли его сюда — 6 цифр.")
+    await tg("sendMessage", chat_id=chat, text=tr(lang, "email_sent", email=email))
 
 
-async def tg_email_verify(chat, u, email, code):
+async def tg_email_verify(chat, u, email, code, lang):
     try:
         check_code(email, code)
     except AuthError as e:
-        await tg("sendMessage", chat_id=chat, text=e.detail)
+        await tg("sendMessage", chat_id=chat, text=e.text(lang))
         return
     run("delete from tg_email_links where tg_id=%s", (u["tg_id"],))
     res = link_identity(u["id"], "email", email)
     if res["ok"]:
-        await tg("sendMessage", chat_id=chat, text=f"✅ Почта {email} привязана. На сайте можно входить "
-                 f"по коду на неё или через Google с этим адресом: {BASE_URL}")
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "email_linked", email=email, url=BASE_URL))
         return
-    await tg("sendMessage", chat_id=chat, text=merge_text(res, f"Почта {email}"),
-             reply_markup={"inline_keyboard": [[{"text": "🔗 Объединить", "callback_data": f"merge:{res['merge']}"},
-                                                {"text": "Не сейчас", "callback_data": f"nomerge:{res['merge']}"}]]})
+    await tg("sendMessage", chat_id=chat, text=merge_text(res, tr(lang, "what_email_addr", email=email), lang),
+             reply_markup={"inline_keyboard": [[
+                 {"text": tr(lang, "btn_merge"), "callback_data": f"merge:{res['merge']}"},
+                 {"text": tr(lang, "btn_nomerge"), "callback_data": f"nomerge:{res['merge']}"}]]})
 
 
 async def tg_merge_answer(cb, token, accept):
-    u = row("select id from users where tg_id=%s", (cb["from"]["id"],))
+    u, lang = tg_known(cb["from"])
     if not accept:
         run("delete from merge_offers where token=%s and keep_uid=%s", (token, u["id"] if u else None))
-        note = "Ок, не объединяю. Передумаешь — снова /email"
+        note = tr(lang, "merge_no")
     elif u and merge_apply(token, u["id"]):
-        note = "✅ Аккаунты объединены"
+        note = tr(lang, "merge_ok")
     else:
-        note = "Предложение устарело — начни заново с /email"
+        note = tr(lang, "merge_stale_bot")
     await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
     msg = cb.get("message", {})
     if msg:
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
+
+
+def login_url(uid: int, lang: str) -> str:
+    """Одноразовая ссылка входа из бота; английскому пользователю — сразу в английское приложение."""
+    tok = secrets.token_urlsafe(24)
+    run("insert into login_tokens(token,user_id,expires) values(%s,%s,%s)", (tok, uid, int(time.time()) + 600))
+    return f"{BASE_URL}/auth?t={tok}" + ("&lang=en" if lang == "en" else "")
 
 
 async def handle_message(msg):
@@ -589,69 +779,69 @@ async def handle_message(msg):
     cmd, _, arg = text.partition(" ")
     cmd = cmd.split("@")[0].lower()
     if cmd == "/start" and arg.strip():
-        await tg_login_prompt(chat, arg.strip())
+        await tg_login_prompt(chat, arg.strip(), tg_known(frm)[1])
         return
-    u = tg_user(frm.get("id"), frm.get("first_name", ""))
+    u = tg_user(frm.get("id"), frm.get("first_name", ""), frm.get("language_code"))
+    lang = bot_lang(u)
     if text.startswith("/"):
         track(u["id"], "telegram")
     if not text:
-        await tg("sendMessage", chat_id=chat, text="Пока понимаю только текст.")
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "text_only"))
         return
     pending = row("select email from tg_email_links where tg_id=%s and expires>%s", (u["tg_id"], int(time.time())))
     if pending and pending["email"] is None and not text.startswith("/") and text not in (BTN_START, BTN_EMAIL):
         if EMAIL_RE.match(text.lower()):  # ждали адрес после «Добавить email»
-            await tg_email_start(chat, u, text.lower())
+            await tg_email_start(chat, u, text.lower(), lang)
             return
         run("delete from tg_email_links where tg_id=%s", (u["tg_id"],))  # передумал — это обычная задача
     if pending and pending["email"] and re.fullmatch(r"\d{6}", text):  # код из письма, только если ждём его
-        await tg_email_verify(chat, u, pending["email"], text)
+        await tg_email_verify(chat, u, pending["email"], text, lang)
         return
     if text == BTN_EMAIL:  # нажали кнопку старой постоянной клавиатуры — отвечаем и убираем её
-        await tg_email_ask(chat, u, KB_REMOVE)
+        await tg_email_ask(chat, u, lang, KB_REMOVE)
     elif text == BTN_START:
-        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=KB_REMOVE)
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "ready") + tr(lang, "help"), reply_markup=KB_REMOVE)
     elif cmd == "/start":
-        await tg("sendMessage", chat_id=chat, text=START, reply_markup=kb_start())
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "start"), reply_markup=kb_start(lang))
     elif cmd == "/help":
-        await tg("sendMessage", chat_id=chat, text="GTD-бот готов.\n\n" + HELP, reply_markup=kb_start())
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "ready") + tr(lang, "help"), reply_markup=kb_start(lang))
     elif cmd == "/about":
-        await tg("sendMessage", chat_id=chat, text=ABOUT.format(url=BASE_URL), **NO_PREVIEW)
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "about", url=BASE_URL), **NO_PREVIEW)
     elif cmd == "/login":
-        tok = secrets.token_urlsafe(24)
-        run("insert into login_tokens(token,user_id,expires) values(%s,%s,%s)", (tok, u["id"], int(time.time()) + 600))
-        await tg("sendMessage", chat_id=chat, text=f"Вход (10 минут, одноразовая):\n{BASE_URL}/auth?t={tok}")
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "login_link", url=login_url(u["id"], lang)))
     elif cmd == "/email":
-        await tg_email_start(chat, u, arg.strip().lower())
+        await tg_email_start(chat, u, arg.strip().lower(), lang)
     elif cmd in ("/inbox", "/next"):
         st = cmd[1:]
         its = rows(ITEM_SQL + "where i.user_id=%s and i.status=%s order by i.created limit 20", (u["id"], st))
-        body = "\n".join(f"{item_ref(i)} {html.escape(i['title'])} {html.escape(describe(i))}".strip()
-                         for i in its) or "Пусто 🎉"
+        body = "\n".join(f"{item_ref(i)} {html.escape(i['title'])} {html.escape(describe(i, lang))}".strip()
+                         for i in its) or tr(lang, "empty")
         await tg("sendMessage", chat_id=chat, text=f"{st.upper()}:\n{body}", **HTML_MSG)
     elif cmd == "/done":
         try:
             iid = int(arg.strip().lstrip("#"))
         except ValueError:
-            await tg("sendMessage", chat_id=chat, text="Использование: /done 12")
+            await tg("sendMessage", chat_id=chat, text=tr(lang, "done_usage"))
             return
         it = mark_done(u["id"], num=iid)
         if it:
-            await tg("sendMessage", chat_id=chat, text=f"✅ Готово: {item_ref(it)} {html.escape(it['title'])}", **HTML_MSG)
+            await tg("sendMessage", chat_id=chat, text=tr(lang, "done_ok", ref=item_ref(it), title=html.escape(it["title"])),
+                     **HTML_MSG)
         else:
-            await tg("sendMessage", chat_id=chat, text="Не нашёл такую задачу")
+            await tg("sendMessage", chat_id=chat, text=tr(lang, "not_found_task"))
     elif text.startswith("/"):
-        await tg("sendMessage", chat_id=chat, text=HELP)
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "help"))
     else:
         it = capture(u["id"], text, "telegram")
         where = "Next" if it["status"] == "next" else "Inbox"
         await tg("sendMessage", chat_id=chat,
-                 text=f"✓ {where} {item_ref(it)}: {html.escape(it['title'])}\n{html.escape(describe(it))}".strip(),
-                 reply_markup=kb_item(it["id"]), **HTML_MSG)
+                 text=f"✓ {where} {item_ref(it)}: {html.escape(it['title'])}\n{html.escape(describe(it, lang))}".strip(),
+                 reply_markup=kb_item(it["id"], lang), **HTML_MSG)
         # Подсказка — один раз на аккаунт: только к самой первой его задаче. Номер 1 выдаёт счётчик
         # users.item_seq, который не убывает (и при объединении аккаунтов тоже), — поэтому повтора не будет,
         # а у кого задачи уже были (с сайта или раньше в боте), подсказки нет
         if it["num"] == 1:
-            await tg("sendMessage", chat_id=chat, text=FIRST_TASK_HINT.format(url=BASE_URL), **NO_PREVIEW)
+            await tg("sendMessage", chat_id=chat, text=tr(lang, "first_task", url=BASE_URL), **NO_PREVIEW)
 
 
 def mark_done(uid, iid=None, num=None):
@@ -671,17 +861,19 @@ async def handle_callback(cb):
     if act in ("merge", "nomerge"):
         await tg_merge_answer(cb, sid, act == "merge")
         return
+    frm = cb["from"]
     if act in ("about", "help", "addemail"):  # кнопки под приветствием («help» — у приветствий прежних версий)
-        chat = (cb.get("message") or {}).get("chat", {}).get("id", cb["from"]["id"])
+        chat = (cb.get("message") or {}).get("chat", {}).get("id", frm["id"])
+        _, lang = tg_known(frm)
         await tg("answerCallbackQuery", callback_query_id=cb["id"])
         if act == "about":
-            await tg("sendMessage", chat_id=chat, text=ABOUT.format(url=BASE_URL), **NO_PREVIEW)
+            await tg("sendMessage", chat_id=chat, text=tr(lang, "about", url=BASE_URL), **NO_PREVIEW)
         elif act == "help":
-            await tg("sendMessage", chat_id=chat, text=HELP)
+            await tg("sendMessage", chat_id=chat, text=tr(lang, "help"))
         else:
-            await tg_email_ask(chat, tg_user(cb["from"]["id"], cb["from"].get("first_name", "")))
+            await tg_email_ask(chat, tg_user(frm["id"], frm.get("first_name", ""), frm.get("language_code")), lang)
         return
-    u = row("select * from users where tg_id=%s", (cb["from"]["id"],))
+    u, lang = tg_known(frm)
     if not u:
         return
     track(u["id"], "telegram")
@@ -689,17 +881,17 @@ async def handle_callback(cb):
     it = item_get(u["id"], iid)
     msg = cb.get("message", {})
     if not it:
-        await tg("answerCallbackQuery", callback_query_id=cb["id"], text="Не найдено")
+        await tg("answerCallbackQuery", callback_query_id=cb["id"], text=tr(lang, "cb_missing"))
         return
     if act == "done":
         mark_done(u["id"], iid)
-        note = "✅ Готово"
+        note = tr(lang, "cb_done")
     elif act == "snz":
         run("update items set remind_at=%s, reminded=0 where id=%s", (int(time.time()) + 3600, iid))
-        note = "💤 Напомню через час"
+        note = tr(lang, "cb_snooze")
     elif act == "next":
         run("update items set status='next' where id=%s", (iid,))
-        note = "⏭ В Next"
+        note = tr(lang, "cb_next")
     else:
         return
     await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
@@ -742,20 +934,22 @@ def _field(r, key):
 
 async def bot_profile():
     """Описание до Start, короткое описание и меню команд живут в коде, а не руками в @BotFather.
-    Холодных стартов много (Cloud Run спит без трафика), поэтому сначала читаем текущее — параллельно —
-    и ставим только то, что разошлось. Не прочиталось (None) — просто ставим: вызовы идемпотентны."""
-    langs = list(BOT_PROFILE)
-    cmds, *cur = await asyncio.gather(
-        tg("getMyCommands"),
-        *(tg("getMyDescription", language_code=lang) for lang in langs),
-        *(tg("getMyShortDescription", language_code=lang) for lang in langs))
-    sets = [] if cmds == BOT_COMMANDS else [tg("setMyCommands", commands=BOT_COMMANDS)]
-    for i, lang in enumerate(langs):
-        desc, short = BOT_PROFILE[lang]
-        if _field(cur[i], "description") != desc:
-            sets.append(tg("setMyDescription", description=desc, language_code=lang))
-        if _field(cur[len(langs) + i], "short_description") != short:
-            sets.append(tg("setMyShortDescription", short_description=short, language_code=lang))
+    Холодных стартов много (Cloud Run спит без трафика), поэтому сначала читаем текущее — параллельно,
+    по каждому language_code из PROFILE_CODES, — и ставим только то, что разошлось. Не прочиталось (None) —
+    просто ставим: вызовы идемпотентны."""
+    codes, n = PROFILE_CODES, len(PROFILE_CODES)
+    cur = await asyncio.gather(*(tg(m, language_code=c) for m in ("getMyCommands", "getMyDescription",
+                                                                   "getMyShortDescription") for c in codes))
+    sets = []
+    for i, code in enumerate(codes):
+        lang = profile_lang(code)
+        (desc, short), cmds = BOT_PROFILE[lang], BOT_COMMANDS[lang]
+        if cur[i] != cmds:
+            sets.append(tg("setMyCommands", commands=cmds, language_code=code))
+        if _field(cur[n + i], "description") != desc:
+            sets.append(tg("setMyDescription", description=desc, language_code=code))
+        if _field(cur[2 * n + i], "short_description") != short:
+            sets.append(tg("setMyShortDescription", short_description=short, language_code=code))
     await asyncio.gather(*sets)
 
 
@@ -777,7 +971,7 @@ async def poll_loop():
 
 
 async def send_due_reminders():
-    due = rows("select i.*, u.tg_id from items i join users u on u.id=i.user_id "
+    due = rows("select i.*, u.tg_id, u.lang, u.tg_lang from items i join users u on u.id=i.user_id "
                "where i.remind_at is not null and i.reminded=0 and i.remind_at<=%s "
                "and i.status not in ('done','trash')", (int(time.time()),))
     sent = 0
@@ -787,7 +981,7 @@ async def send_due_reminders():
             continue
         if TOKEN and it["tg_id"]:
             await tg("sendMessage", chat_id=it["tg_id"], text=f"⏰ {item_ref(it)} {html.escape(it['title'])}",
-                     reply_markup=kb_item(it["id"]), **HTML_MSG)
+                     reply_markup=kb_item(it["id"], bot_lang(it)), **HTML_MSG)
             sent += 1
     return sent
 
@@ -877,9 +1071,13 @@ def client_ip(request: Request) -> str:
 
 
 class AuthError(Exception):
-    def __init__(self, status: int, detail: str):
-        super().__init__(detail)
-        self.status, self.detail = status, detail
+    """Ошибка входа/привязки: текст — ключ TEXTS, язык выбирает тот, кто показывает (сайт или бот)."""
+    def __init__(self, status: int, key: str):
+        super().__init__(key)
+        self.status, self.key = status, key
+
+    def text(self, lang: str) -> str:
+        return tr(lang, self.key)
 
 
 def has_data(uid: int) -> bool:
@@ -913,7 +1111,7 @@ def merge_accounts(keep: int, drop: int):
         k = c.execute("select * from users where id=%s for update", (keep,)).fetchone()
         d = c.execute("select * from users where id=%s for update", (drop,)).fetchone()
         if not k or not d or keep == drop:
-            raise AuthError(400, "Аккаунт для объединения не найден")
+            raise AuthError(400, "merge_missing")
         mine = {p["title"].casefold(): p["id"]
                 for p in c.execute("select id, title from projects where user_id=%s", (keep,)).fetchall()}
         for p in c.execute("select id, title from projects where user_id=%s", (drop,)).fetchall():
@@ -935,6 +1133,8 @@ def merge_accounts(keep: int, drop: int):
             c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
         c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
         moved = {f: d[f] for f in IDENTITIES if d[f] and not k[f]}
+        # Язык: свой выбор keep важнее; язык Telegram — вместе с Telegram
+        moved.update({f: d[f] for f in ("lang", "tg_lang") if d[f] and not k[f] and (f == "lang" or "tg_id" in moved)})
         c.execute("delete from merge_offers where keep_uid=%s or drop_uid=%s", (drop, drop))
         c.execute("delete from users where id=%s", (drop,))  # освобождает уникальные tg_id/email/google_sub
         for f, v in moved.items():
@@ -977,9 +1177,8 @@ def merge_apply(token: str, keep_uid: int) -> bool:
     return True
 
 
-def merge_text(offer: dict, what: str) -> str:
-    return (f"{what} уже у другого аккаунта: задач — {offer['items']}, проектов — {offer['projects']}. "
-            "Объединить его с этим? Всё окажется в одном аккаунте, и войти можно будет любым способом.")
+def merge_text(offer: dict, what: str, lang: str) -> str:
+    return tr(lang, "merge_offer", what=what, items=offer["items"], projects=offer["projects"])
 
 
 def email_user(email: str) -> int:
@@ -1027,18 +1226,18 @@ def send_email(to: str, subject: str, body: str):
         s.send_message(m)
 
 
-def send_code(email: str, rate_key: str):
-    """Одноразовый код на почту. Кулдаун минута на адрес, 5 писем за 10 минут на rate_key."""
+def send_code(email: str, rate_key: str, lang: str = "ru"):
+    """Одноразовый код на почту (письмо — на языке lang). Кулдаун минута на адрес, 5 писем за 10 минут на rate_key."""
     if len(email) > 254 or not EMAIL_RE.match(email):
-        raise AuthError(400, "Неверный адрес почты")
+        raise AuthError(400, "bad_email")
     if not (SMTP_PASSWORD or DEV):
-        raise AuthError(400, "Вход по почте не настроен")
+        raise AuthError(400, "email_off")
     now = int(time.time())
     prev = row("select sent from email_codes where email=%s", (email,))
     if prev and prev["sent"] > now - 60:
-        raise AuthError(429, "Код уже отправлен — новый можно запросить через минуту")
+        raise AuthError(429, "code_cooldown")
     if not rate_ok(rate_key, 5, 600):
-        raise AuthError(429, "Слишком много запросов — попробуй через 10 минут")
+        raise AuthError(429, "too_many")
     code = f"{secrets.randbelow(10 ** 6):06d}"
     run("delete from email_codes where expires<%s", (now,))
     run("insert into email_codes(email,code_hash,expires,attempts,sent) values(%s,%s,%s,0,%s) "
@@ -1048,38 +1247,42 @@ def send_code(email: str, rate_key: str):
         log.warning("DEV: код входа для %s — %s", email, code)
         return
     try:
-        send_email(email, f"Код входа в GTD: {code}",
-                   f"Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.")
+        send_email(email, tr(lang, "mail_subject", code=code), tr(lang, "mail_body", code=code))
     except (smtplib.SMTPException, OSError) as e:
         log.warning("smtp to %s failed: %s", email, e)
         run("delete from email_codes where email=%s", (email,))
-        raise AuthError(502, "Не удалось отправить письмо — попробуй позже")
+        raise AuthError(502, "smtp_fail")
 
 
 def check_code(email: str, code: str):
     """Сверяет код; 5 неверных попыток — и код сгорает. Верный код одноразовый."""
     r = row("select * from email_codes where email=%s and expires>%s", (email, int(time.time())))
     if not r or r["attempts"] >= 5:
-        raise AuthError(400, "Код устарел — запроси новый")
+        raise AuthError(400, "code_expired")
     if not hmac.compare_digest(r["code_hash"], code_hash(email, code)):
         run("update email_codes set attempts=attempts+1 where email=%s", (email,))
-        raise AuthError(400, "Неверный код")
+        raise AuthError(400, "code_wrong")
     run("delete from email_codes where email=%s", (email,))
 
 
-def link_response(res: dict, what: str):
+def link_response(res: dict, what: str, lang: str):
+    """what — ключ TEXTS: какой способ входа уже у другого аккаунта."""
     if res["ok"]:
         return {"ok": True}
-    return JSONResponse({**res, "detail": merge_text(res, what)}, status_code=409)
+    return JSONResponse({**res, "detail": merge_text(res, tr(lang, what), lang)}, status_code=409)
+
+
+def auth_fail(e: AuthError, request: Request):
+    return HTTPException(e.status, e.text(req_lang(request)))
 
 
 @app.post("/api/auth/google")
 def auth_google(body: dict, request: Request):
     if not GOOGLE_CLIENT_ID:
-        raise HTTPException(400, "Вход через Google не настроен")
+        raise auth_fail(AuthError(400, "google_off"), request)
     d = google_verify(body.get("credential") or "")
     if not d:
-        raise HTTPException(400, "Google не подтвердил вход — попробуй ещё раз")
+        raise auth_fail(AuthError(400, "google_fail"), request)
     email = d["email"].lower()
     uid = session_user(request) if body.get("link") else None
     if uid:
@@ -1088,16 +1291,16 @@ def auth_google(body: dict, request: Request):
             uid = session_user(request)  # после переезда сессия уже в другом аккаунте
             if not row("select email from users where id=%s", (uid,))["email"]:
                 attach(uid, "email", email)
-        return link_response(res, "Этот Google-аккаунт")
+        return link_response(res, "what_google", req_lang(request))
     return set_session(JSONResponse({"ok": True}), google_user(d["sub"], email, d.get("name", "")))
 
 
 @app.post("/api/auth/email/start")
 def auth_email_start(body: dict, request: Request):
     try:
-        send_code((body.get("email") or "").strip().lower(), "ip:" + client_ip(request))
+        send_code((body.get("email") or "").strip().lower(), "ip:" + client_ip(request), req_lang(request))
     except AuthError as e:
-        raise HTTPException(e.status, e.detail)
+        raise auth_fail(e, request)
     return {"ok": True}
 
 
@@ -1107,28 +1310,28 @@ def auth_email_verify(body: dict, request: Request):
     try:
         check_code(email, (body.get("code") or "").strip())
     except AuthError as e:
-        raise HTTPException(e.status, e.detail)
+        raise auth_fail(e, request)
     uid = session_user(request) if body.get("link") else None
     if uid:
-        return link_response(link_identity(uid, "email", email), "Эта почта")
+        return link_response(link_identity(uid, "email", email), "what_email", req_lang(request))
     return set_session(JSONResponse({"ok": True}), email_user(email))
 
 
 @app.post("/api/auth/merge")
-def auth_merge(body: dict, uid: int = Depends(current_user)):
+def auth_merge(body: dict, request: Request, uid: int = Depends(current_user)):
     try:
         ok = merge_apply(body.get("token") or "", uid)
     except AuthError as e:
-        raise HTTPException(e.status, e.detail)
+        raise auth_fail(e, request)
     if not ok:
-        raise HTTPException(400, "Предложение устарело — привяжи способ входа ещё раз")
+        raise auth_fail(AuthError(400, "merge_stale"), request)
     return {"ok": True}
 
 
 @app.post("/api/auth/tg/start")
 def auth_tg_start(body: dict, request: Request):
     if not (TOKEN and BOT_USERNAME):
-        raise HTTPException(400, "Telegram-бот выключен")
+        raise auth_fail(AuthError(400, "tg_off"), request)
     nonce = secrets.token_urlsafe(16)
     now = int(time.time())
     run("delete from tg_logins where expires<%s", (now,))
@@ -1138,7 +1341,7 @@ def auth_tg_start(body: dict, request: Request):
 
 
 @app.get("/api/auth/tg/poll")
-def auth_tg_poll(nonce: str):
+def auth_tg_poll(nonce: str, request: Request):
     r = row("select * from tg_logins where nonce=%s", (nonce,))
     if not r or r["expires"] < time.time():
         return {"status": "expired"}
@@ -1150,7 +1353,8 @@ def auth_tg_poll(nonce: str):
         if not o:
             return {"status": "expired"}
         stats = account_stats(o["drop_uid"])
-        return {"status": "merge", "merge": r["merge"], **stats, "detail": merge_text(stats, "Этот Telegram")}
+        lang = req_lang(request)
+        return {"status": "merge", "merge": r["merge"], **stats, "detail": merge_text(stats, tr(lang, "what_tg"), lang)}
     if r["status"] != "ok" or r["link_user_id"]:
         return {"status": r["status"]}
     return set_session(JSONResponse({"status": "ok"}), r["user_id"])
@@ -1161,9 +1365,9 @@ UNDO_CHOICES = (5, 10, 30)
 
 @app.get("/api/me")
 def me(uid: int = Depends(current_user)):
-    u = row("select name, email, tg_id, google_sub, undo_seconds from users where id=%s", (uid,))
+    u = row("select name, email, tg_id, google_sub, undo_seconds, lang from users where id=%s", (uid,))
     return {"name": u["name"], "email": u["email"], "tg": bool(u["tg_id"]), "google": bool(u["google_sub"]),
-            "undo_seconds": u["undo_seconds"], "admin": uid in ADMIN_USER_IDS}
+            "undo_seconds": u["undo_seconds"], "lang": u["lang"], "admin": uid in ADMIN_USER_IDS}
 
 
 @app.get("/api/admin/stats")
@@ -1203,7 +1407,8 @@ def admin_stats(uid: int = Depends(current_user)):
 
 @app.patch("/api/me")
 def patch_me(body: dict, uid: int = Depends(current_user)):
-    """Настройки пользователя: время на «Отменить» — 5, 10 или 30 секунд; скрыть чек-лист первого запуска."""
+    """Настройки пользователя: время на «Отменить» — 5, 10 или 30 секунд; скрыть чек-лист первого запуска;
+    язык интерфейса — ru, en или null (авто: сайт — по браузеру, бот — по Telegram)."""
     if "undo_seconds" in body:
         if body["undo_seconds"] not in UNDO_CHOICES:
             raise HTTPException(400, "undo_seconds: 5, 10 или 30")
@@ -1212,16 +1417,24 @@ def patch_me(body: dict, uid: int = Depends(current_user)):
         if not isinstance(body["checklist_hidden"], bool):
             raise HTTPException(400, "checklist_hidden: true или false")
         run("update users set checklist_hidden=%s where id=%s", (body["checklist_hidden"], uid))
+    if "lang" in body:
+        if body["lang"] is not None and body["lang"] not in LANGS:
+            raise HTTPException(400, "lang: ru, en или null")
+        run("update users set lang=%s where id=%s", (body["lang"], uid))
     return me(uid)
 
 
 @app.get("/auth")
-def auth(t: str):
+def auth(t: str, request: Request, lang: str = ""):
+    """Ссылка входа из /login в боте. lang=en — бот говорил с пользователем по-английски: ведём в /en/,
+    если язык не выбран явно в «Аккаунте»."""
     r = row("select * from login_tokens where token=%s and expires>%s", (t, int(time.time())))
     if not r:
-        return JSONResponse({"error": "Ссылка устарела. Отправь /login боту ещё раз."}, status_code=400)
+        msg = tr(lang if lang in LANGS else req_lang(request), "auth_stale")
+        return JSONResponse({"error": msg}, status_code=400)
     run("delete from login_tokens where token=%s", (t,))
-    return start_session(r["user_id"])
+    chosen = row("select lang from users where id=%s", (r["user_id"],))["lang"] or lang
+    return set_session(RedirectResponse("/en/" if chosen == "en" else "/", status_code=303), r["user_id"])
 
 
 @app.get("/dev-login")
@@ -1399,15 +1612,15 @@ def project_get(uid: int, pid: int) -> dict:
 
 
 @app.patch("/api/projects/{pid}")
-def patch_project(pid: int, body: dict, uid: int = Depends(current_user)):
+def patch_project(pid: int, body: dict, request: Request, uid: int = Depends(current_user)):
     project_get(uid, pid)
     if "title" in body:
         title = (body.get("title") or "").strip()
         if not title:
-            raise HTTPException(400, "Название не может быть пустым")
+            raise HTTPException(400, tr(req_lang(request, uid), "project_empty"))
         if any(r["id"] != pid and r["title"].casefold() == title.casefold()
                for r in rows("select id, title from projects where user_id=%s", (uid,))):
-            raise HTTPException(409, f"Проект «{title}» уже есть")
+            raise HTTPException(409, tr(req_lang(request, uid), "project_exists", title=title))
         run("update projects set title=%s where id=%s and user_id=%s", (title, pid, uid))
     if "status" in body:
         if body["status"] not in ("active", "done"):
@@ -1432,10 +1645,10 @@ def delete_project(pid: int, items: str = "keep", uid: int = Depends(current_use
 
 
 @app.get("/api/items/n/{num}")
-def get_item_by_num(num: int, uid: int = Depends(current_user)):
+def get_item_by_num(num: int, request: Request, uid: int = Depends(current_user)):
     it = item_by_num(uid, num)  # номера у каждого свои: чужую задачу по ссылке не открыть
     if not it:
-        raise HTTPException(404, "Задача не найдена")
+        raise HTTPException(404, tr(req_lang(request, uid), "task_missing"))
     return it
 
 
@@ -1462,9 +1675,9 @@ def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLR
     landing — гостю вместо пустого экрана входа: SEO-теги и текст лендинга прямо в HTML (pages.py)."""
     with open(os.path.join(STATIC, "index.html"), encoding="utf-8") as f:
         page = f.read().replace("<!--GA-->", ga_snippet(request)).replace("<!--ICONS-->", pages.ICONS)
+    page = page.replace('<html lang="ru">', f'<html lang="{lang}">')  # SPA потом поставит язык интерфейса
     if landing:
-        page = (page.replace('<html lang="ru">', f'<html lang="{lang}">')
-                .replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
+        page = (page.replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
                 .replace("<!--LANDING-->", pages.landing(lang)))
     return HTMLResponse(page)
 

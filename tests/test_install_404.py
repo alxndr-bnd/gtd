@@ -11,7 +11,9 @@ BROWSER = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
 @pytest.mark.parametrize("accept_language, lang", [
     (None, "ru"), ("ru-RU,ru;q=0.9,en;q=0.8", "ru"), ("en-US,en;q=0.9,ru;q=0.8", "en"), ("en-GB", "en"),
-    ("sr-RS,sr;q=0.9,en;q=0.8,ru;q=0.7", "en"), ("de-DE,de;q=0.9", "ru"), ("en;q=0,ru", "ru"), ("en;q=bad", "ru"),
+    # правило языка SERBITO-259: сербский кириллицей — русский, латиницей и прочие языки — английский
+    ("sr-RS,sr;q=0.9,en;q=0.8,ru;q=0.7", "ru"), ("sr-Latn-RS", "en"), ("de-DE,de;q=0.9", "en"),
+    ("en;q=0,ru", "ru"), ("en;q=bad", "ru"),
 ])
 def test_manifest(client, accept_language, lang):
     r = client.get("/manifest.webmanifest", headers={"accept-language": accept_language} if accept_language else {})

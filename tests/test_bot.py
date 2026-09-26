@@ -15,7 +15,7 @@ def texts(sent):
 
 def test_anyone_gets_an_account(tg):
     bot_message("/start", tg_id=999, name="Stranger")
-    assert texts(tg)[-1] == A.START
+    assert texts(tg)[-1] == A.tr("ru", "start")
     assert A.row("select name from users where tg_id=999")["name"] == "Stranger"
 
 
@@ -145,7 +145,7 @@ def test_start_shows_inline_buttons(tg):
     assert "keyboard" not in markup  # никакой постоянной клавиатуры под полем ввода
     # локально (http) без «Открыть сайт»: ссылку на localhost Telegram не примет и не отправит всё сообщение
     assert [[(b["text"], b["callback_data"]) for b in r] for r in markup["inline_keyboard"]] == \
-           [[(A.BTN_ABOUT, "about"), (A.BTN_EMAIL, "addemail")]]
+           [[(A.tr("ru", "btn_about"), "about"), (A.tr("ru", "btn_email"), "addemail")]]
     bot_callback("help")  # кнопка «🚀 Начать» под приветствиями прежних версий по-прежнему работает
     assert "/inbox" in texts(tg)[-1] and A.row("select count(*) n from items")["n"] == 0
 
@@ -157,7 +157,7 @@ def test_start_greeting_explains_inbox_with_examples(tg, monkeypatch):
     assert "попадёт во Входящие" in text
     assert "«позвонить маме завтра в 10:00» → напомню" in text
     assert "«отчёт #Работа @комп» → сразу в проект и контекст" in text
-    assert markup["inline_keyboard"][1] == [{"text": A.BTN_SITE, "url": "https://gtd.serbito.rs"}]
+    assert markup["inline_keyboard"][1] == [{"text": A.tr("ru", "btn_site"), "url": "https://gtd.serbito.rs"}]
     assert A.row("select count(*) n from items")["n"] == 0  # /start — не задача
 
 
@@ -195,11 +195,16 @@ def test_no_first_task_hint_for_existing_users(tg, client, login):
 
 
 def test_bot_profile_texts_fit_telegram_limits():
-    assert set(A.BOT_PROFILE) == {"", "en"}
+    assert set(A.BOT_PROFILE) == set(A.BOT_COMMANDS) == {"ru", "en"}
     for desc, short in A.BOT_PROFILE.values():
         assert 0 < len(desc) <= 512 and 0 < len(short) <= 120 and "gtd.serbito.rs" in short
-    assert A.BOT_PROFILE[""][0].startswith("Записывай задачи и мысли в один тап")
-    assert "about" in [c["command"] for c in A.BOT_COMMANDS]
+    assert A.BOT_PROFILE["ru"][0].startswith("Записывай задачи и мысли в один тап")
+    # меню команд на обоих языках — одни и те же команды, описания в пределах лимита Telegram
+    ru, en = ([c["command"] for c in A.BOT_COMMANDS[lg]] for lg in ("ru", "en"))
+    assert ru == en and "about" in ru
+    assert all(0 < len(c["description"]) <= 256 for lg in A.BOT_COMMANDS for c in A.BOT_COMMANDS[lg])
+    # профиль по language_code: русский — ru/uk/be/sr, всем прочим ("") — английский
+    assert {c: A.profile_lang(c) for c in A.PROFILE_CODES} == {"": "en", "ru": "ru", "uk": "ru", "be": "ru", "sr": "ru"}
 
 
 def test_add_email_button_flow(tg, mail):
@@ -353,9 +358,10 @@ def test_local_polling_leaves_prod_webhook_alone(monkeypatch):
 
 def current_profile():
     """Ответы Telegram, когда профиль уже совпадает с кодом."""
-    return {"getMe": {"username": "gtdsrbot"}, "getMyCommands": A.BOT_COMMANDS,
-            "getMyDescription": lambda p: {"description": A.BOT_PROFILE[p["language_code"]][0]},
-            "getMyShortDescription": lambda p: {"short_description": A.BOT_PROFILE[p["language_code"]][1]}}
+    lang = lambda p: A.profile_lang(p["language_code"])
+    return {"getMe": {"username": "gtdsrbot"}, "getMyCommands": lambda p: A.BOT_COMMANDS[lang(p)],
+            "getMyDescription": lambda p: {"description": A.BOT_PROFILE[lang(p)][0]},
+            "getMyShortDescription": lambda p: {"short_description": A.BOT_PROFILE[lang(p)][1]}}
 
 
 def profile_tg(monkeypatch, answers):
@@ -380,11 +386,14 @@ def test_bot_setup_sets_profile_when_it_differs(monkeypatch):
                                      "getMyDescription": {"description": ""}})  # у нового бота описания нет
     asyncio.run(A.bot_setup())
     sets = profile_sets(calls)
-    assert ("setMyCommands", {"commands": A.BOT_COMMANDS}) in sets
-    for lang, (desc, short) in A.BOT_PROFILE.items():
-        assert ("setMyDescription", {"description": desc, "language_code": lang}) in sets
-        assert ("setMyShortDescription", {"short_description": short, "language_code": lang}) in sets
-    assert len(sets) == 1 + 2 * len(A.BOT_PROFILE)
+    for code in A.PROFILE_CODES:
+        lang = A.profile_lang(code)
+        desc, short = A.BOT_PROFILE[lang]
+        assert ("setMyCommands", {"commands": A.BOT_COMMANDS[lang], "language_code": code}) in sets
+        assert ("setMyDescription", {"description": desc, "language_code": code}) in sets
+        assert ("setMyShortDescription", {"short_description": short, "language_code": code}) in sets
+    assert len(sets) == 3 * len(A.PROFILE_CODES)
+    assert ("setMyCommands", {"commands": A.BOT_COMMANDS["en"], "language_code": ""}) in sets  # всем прочим — английское
 
 
 def test_bot_setup_skips_unchanged_profile(monkeypatch):
@@ -396,12 +405,14 @@ def test_bot_setup_skips_unchanged_profile(monkeypatch):
 
 def test_bot_setup_updates_only_changed_text(monkeypatch):
     answers = current_profile()
-    answers["getMyShortDescription"] = lambda p: {"short_description": "старое" if p["language_code"] == "en"
-                                                  else A.BOT_PROFILE[""][1]}
+    answers["getMyShortDescription"] = lambda p: {"short_description": "старое" if p["language_code"] == "uk"
+                                                  else A.BOT_PROFILE[A.profile_lang(p["language_code"])][1]}
+    answers["getMyCommands"] = lambda p: [] if p["language_code"] == "" else A.BOT_COMMANDS["ru"]
     calls = profile_tg(monkeypatch, answers)
     asyncio.run(A.bot_setup())
     assert profile_sets(calls) == \
-           [("setMyShortDescription", {"short_description": A.BOT_PROFILE["en"][1], "language_code": "en"})]
+           [("setMyCommands", {"commands": A.BOT_COMMANDS["en"], "language_code": ""}),
+            ("setMyShortDescription", {"short_description": A.BOT_PROFILE["ru"][1], "language_code": "uk"})]
 
 
 def test_bot_setup_local_leaves_profile_alone(monkeypatch):
@@ -451,4 +462,4 @@ def test_bot_setup_garbage_answers(monkeypatch):
     calls = profile_tg(monkeypatch, {"getMe": None, "getMyCommands": None, "getMyDescription": "??",
                                      "getMyShortDescription": [1]})
     asyncio.run(A.bot_setup())  # непонятный ответ — считаем, что текста нет, и ставим заново
-    assert A.BOT_USERNAME == "" and len(profile_sets(calls)) == 1 + 2 * len(A.BOT_PROFILE)
+    assert A.BOT_USERNAME == "" and len(profile_sets(calls)) == 3 * len(A.PROFILE_CODES)

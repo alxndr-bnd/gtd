@@ -97,10 +97,15 @@ def login(mail):
     return do
 
 
-def bot_message(text, tg_id=777, name="Tom"):
-    asyncio.run(A.handle_message({"chat": {"id": tg_id}, "from": {"id": tg_id, "first_name": name}, "text": text}))
+def tg_from(tg_id, name, lang):
+    """Отправитель апдейта; lang — language_code клиента Telegram (None — клиент его не прислал)."""
+    return {"id": tg_id, "first_name": name, **({"language_code": lang} if lang else {})}
 
 
-def bot_callback(data, tg_id=777, message=True):
-    asyncio.run(A.handle_callback({"id": "cb", "from": {"id": tg_id, "first_name": "Tom"}, "data": data,
+def bot_message(text, tg_id=777, name="Tom", lang=None):
+    asyncio.run(A.handle_message({"chat": {"id": tg_id}, "from": tg_from(tg_id, name, lang), "text": text}))
+
+
+def bot_callback(data, tg_id=777, message=True, lang=None):
+    asyncio.run(A.handle_callback({"id": "cb", "from": tg_from(tg_id, "Tom", lang), "data": data,
                                    "message": {"chat": {"id": tg_id}, "message_id": 1} if message else {}}))

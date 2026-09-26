@@ -182,8 +182,7 @@ LANDING = {
     "ru": """<h1>GTD онлайн — бесплатно, на сайте и в Telegram</h1>
 <p class="lead">Запиши всё, что крутится в голове, за секунду — и разбери потом, по методу Getting Things Done.</p>""",
     "en": """<h1>GTD online — free, on the web and in Telegram</h1>
-<p class="lead">Capture everything on your mind in a second, then sort it out later with the Getting Things Done method.</p>
-<p class="note">The app interface is in Russian for now; the English version is on its way.</p>""",
+<p class="lead">Capture everything on your mind in a second, then sort it out later with the Getting Things Done method.</p>""",
 }
 LANDING_SIGNIN = {
     "ru": ("Вход", "Вход или регистрация — аккаунт создастся сам"),
@@ -269,7 +268,6 @@ ABOUT = {
 <p class="lead">GTD (Getting Things Done) is David Allen's method from his book “Getting Things Done” (2001).
 Your head is for having ideas, not holding them: capture everything that needs attention into an Inbox right away,
 then decide what it is and what the next concrete step is.</p>
-<p class="note">The app interface is in Russian for now; the English version is on its way.</p>
 <h2>The five steps — and where they live in the app</h2>
 <ol class="steps">
 <li><b>1. Capture</b>Write down everything on your mind right away, without sorting it.
@@ -287,6 +285,7 @@ then decide what it is and what the next concrete step is.</p>
 <ul class="ex">
 <li><q>call mom tomorrow at 10:00</q> — a task in the Inbox and a reminder tomorrow at 10:00.</li>
 <li><q>report #Work @computer</q> — straight to Next, in the “Work” project, with the @computer context.</li>
+<li>Times and dates are understood too: <q>in 2 hours</q>, <q>tomorrow 10am</q>, <q>next monday</q>, <q>24 oct 12:00</q>.</li>
 <li>Russian works too: <q>позвонить маме завтра в 10:00</q>, <q>отчёт #Работа @комп</q>.</li>
 </ul>
 <h2>Telegram bot</h2>
@@ -358,8 +357,24 @@ def sitemap(base: str) -> str:
     return "\n".join(out)
 
 
+# Язык интерфейса (SERBITO-259) — одно правило на сайт, бот, письма, манифест и 404 (в SPA — его копия pickLang):
+# русский — для ru, uk, be и сербского кириллицей (sr, sr-RS, sr-Cyrl; не sr-Latn), английский — для всех
+# остальных. Языка нет вовсе — русский, как было до английской версии. Явная настройка в «Аккаунте»
+# (users.lang) важнее любого автоопределения.
+RU_LANGS = ("ru", "uk", "be", "sr")
+
+
+def lang_of(code) -> str:
+    """Язык интерфейса по коду языка — из браузера (en-US, sr-Latn-RS) или language_code Telegram (en, ru)."""
+    parts = str(code or "").strip().lower().replace("_", "-").split("-")
+    if not parts[0] or parts[0] == "*":
+        return "ru"
+    return "ru" if parts[0] in RU_LANGS and not (parts[0] == "sr" and "latn" in parts) else "en"
+
+
 def pick_lang(accept: str | None) -> str:
-    """Язык по Accept-Language: en, если английский в нём выше русского; иначе ru (язык по умолчанию)."""
+    """Язык по Accept-Language: решает самый предпочтительный язык (выше q, при равных — раньше в списке).
+    SPA шлёт в этом заголовке уже выбранный язык интерфейса."""
     found = []
     for i, part in enumerate((accept or "").split(",")):
         tag, *params = part.split(";")
@@ -368,10 +383,9 @@ def pick_lang(accept: str | None) -> str:
             q = float(q)
         except ValueError:
             continue
-        lg = tag.strip().split("-")[0].lower()
-        if lg in LANGS and q > 0:
-            found.append((-q, i, lg))  # выше q, при равных — раньше в списке
-    return min(found)[2] if found else "ru"
+        if tag.strip() and q > 0:
+            found.append((-q, i, tag.strip()))
+    return lang_of(min(found)[2] if found else "")
 
 
 # Манифест для установки на экран телефона. Файл один на сайт, поэтому язык описания — по Accept-Language
