@@ -131,6 +131,110 @@ if(location.hostname==='gtd.serbito.rs'){
 </script>"""
 
 
+# Согласие на cookie аналитики (SERBITO-319, решение владельца SERBITO-285 — одно на все четыре продукта).
+# Google Consent Mode v2: до любого gtag('config') — «запрещено» по умолчанию; GA на проде всё равно грузится
+# и шлёт пинги без cookie. «Принять» разрешает только analytics_storage: рекламы в gtd нет, и три рекламных
+# разрешения (ad_storage, ad_user_data, ad_personalization) всегда denied. Выбор (и дата) — в localStorage на 12 месяцев; сохранённый выбор сразу идёт
+# в consent default, чтобы согласившийся не отправил первый пинг «запрещено». Баннер и ссылка «Настройки cookie» —
+# на всех хостах (так его видно и локально), а сам gtag.js грузится только на gtd.serbito.rs (app.ga_snippet)
+CONSENT_KEY = "gtd-consent"
+CONSENT_DAYS = 365
+CONSENT = {
+    "ru": {"text": "GTD использует cookie Google Analytics, чтобы понимать, какие разделы полезны, — "
+                   "без текста задач.",
+           "more": "Подробнее", "yes": "Принять", "no": "Отклонить", "label": "Cookie", "settings": "Настройки cookie"},
+    "en": {"text": "GTD uses Google Analytics cookies to learn which sections are useful — never your task text.",
+           "more": "Details", "yes": "Accept", "no": "Decline", "label": "Cookies", "settings": "Cookie settings"},
+}
+CONSENT_CSS = """<style>
+.cc{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;width:min(640px,calc(100vw - 24px));
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;background:var(--card);color:var(--tx);
+  border:1px solid var(--bd);border-radius:12px;padding:12px 14px;box-shadow:0 8px 30px #0003;
+  font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+.cc[hidden]{display:none}
+.cc p{flex:1 1 280px;margin:0} .cc a{color:var(--ac)}
+.cc .ccb{display:flex;gap:8px;margin-left:auto}
+.cc button{font:inherit;min-height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--bd);
+  background:var(--card);color:var(--tx);cursor:pointer}
+.cc button.ccy{background:var(--ac);color:var(--on-ac);border-color:var(--ac);font-weight:600}
+.cc button:focus-visible,.cc a:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+body.cc-open .pub{padding-bottom:calc(var(--cc-h,0px) + 32px)}
+body.cc-open main{padding-bottom:calc(var(--cc-h,0px) + 24px)}
+body.cc-open .toast{bottom:calc(var(--cc-h,0px) + 24px)}
+@media(max-width:700px){.cc{bottom:8px;padding:10px 12px}.cc .ccb{flex:1}.cc button{flex:1;min-height:44px}
+  body.cc-kb .cc{display:none}}
+</style>"""
+CONSENT_JS = """<script>
+// Согласие на cookie Google Analytics (SERBITO-319): описание — у CONSENT в pages.py
+window.dataLayer = window.dataLayer || [];
+function gtag(){ dataLayer.push(arguments); }
+(() => {
+  const KEY = '__KEY__', TTL = __DAYS__ * 864e5, TXT = __TXT__;
+  // Баннер спрашивает только про аналитику: рекламные разрешения — denied при любом выборе
+  const state = v => ({ad_storage: 'denied', analytics_storage: v, ad_user_data: 'denied', ad_personalization: 'denied'});
+  // Выбор старше 12 месяцев или localStorage недоступен — выбора нет: снова «запрещено» и баннер
+  const saved = () => {
+    try{ const c = JSON.parse(localStorage.getItem(KEY));
+      if(c && (c.v === 'granted' || c.v === 'denied') && Date.now() - c.t < TTL) return c.v; }catch(e){}
+    return null;
+  };
+  const choice = saved();
+  gtag('consent', 'default', {...state(choice === 'granted' ? 'granted' : 'denied'), wait_for_update: 500});
+
+  let el = null, drawn = '';
+  const lang = () => document.documentElement.lang === 'en' ? 'en' : 'ru';
+  function draw(){  // язык баннера — язык страницы; SPA меняет его после входа, тогда и перерисовываем
+    const lg = lang(); if(!el || drawn === lg) return;
+    const t = TXT[drawn = lg];
+    el.setAttribute('aria-label', t.label);
+    el.innerHTML = `<p>${t.text} <a href="${t.privacy}#cookies">${t.more}</a></p><div class="ccb">`
+      + `<button type="button" class="ccy" data-cc="granted">${t.yes}</button>`
+      + `<button type="button" data-cc="denied">${t.no}</button></div>`;
+  }
+  // Высота баннера — в --cc-h: низ страницы и тост «Отменить» не прячутся под ним
+  const fit = () => { if(el && !el.hidden) document.body.style.setProperty('--cc-h', el.offsetHeight + 'px'); };
+  function show(focus){
+    if(!el){
+      el = document.createElement('div'); el.className = 'cc'; el.id = 'cc'; el.setAttribute('role', 'region');
+      document.body.prepend(el);  // первым в порядке Tab; position:fixed — страница не сдвигается
+      new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
+    }
+    draw(); el.hidden = false; document.body.classList.add('cc-open'); fit();
+    if(focus) el.querySelector('button').focus();
+  }
+  function hide(){ if(el) el.hidden = true; document.body.classList.remove('cc-open'); }
+  // Отзыв согласия: стираем _ga* на этом хосте (GA пишет их host-only, cookie_domain 'none') и на родительских
+  // доменах — там остались cookie, которые GA ставил на .serbito.rs до SERBITO-319
+  function dropCookies(){
+    const hs = location.hostname.split('.'), doms = [''];
+    for(let i = 0; i < hs.length - 1; i++) doms.push('; domain=' + hs.slice(i).join('.'));
+    document.cookie.split(';').map(c => c.split('=')[0].trim()).filter(n => n.startsWith('_ga'))
+      .forEach(n => doms.forEach(d => { document.cookie = `${n}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${d}`; }));
+  }
+  function choose(v){
+    try{ localStorage.setItem(KEY, JSON.stringify({v, t: Date.now()})); }catch(e){}
+    gtag('consent', 'update', state(v));
+    if(v === 'denied') dropCookies();
+    hide();
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-cc]'); if(b) return choose(b.dataset.cc);
+    if(e.target.closest('[data-cc-open]')){ e.preventDefault(); show(true); }  // «Настройки cookie»
+  });
+  addEventListener('resize', fit);
+  // Телефон: открыта клавиатура (видимая область сжалась, фокус в поле) — баннер не закрывает поле ввода
+  window.visualViewport?.addEventListener('resize', () => document.body.classList.toggle('cc-kb',
+    visualViewport.height < innerHeight * .75 && /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)));
+  const start = () => { if(!choice) show(false); };
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start) : start();
+})();
+</script>"""
+CONSENT_HEAD = CONSENT_CSS + "\n" + (
+    CONSENT_JS.replace("__KEY__", CONSENT_KEY).replace("__DAYS__", str(CONSENT_DAYS))
+    .replace("__TXT__", json.dumps({lg: {**CONSENT[lg], "privacy": PATHS[(lg, "privacy")]} for lg in LANGS},
+                                   ensure_ascii=False).replace("</", "<\\/")))
+
+
 def url(base: str, lang: str, page: str) -> str:
     return base + PATHS[(lang, page)]
 
@@ -185,7 +289,9 @@ def footer(lang: str) -> str:
     return (f'<footer><b>{t["other"]}</b><ul>{items}</ul>'
             f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{contact}</p>'
             f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a> · '
-            f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a></p>'
+            f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a> · '
+            # Снова открыть баннер согласия (SERBITO-319); без JS — ссылка на раздел политики о cookie
+            f'<a href="{PATHS[(lang, "privacy")]}#cookies" data-cc-open>{CONSENT[lang]["settings"]}</a></p>'
             f'<p>{t["tm"]} <a href="{GTD_SITE}">gettingthingsdone.com</a></p></footer>')
 
 
@@ -338,7 +444,7 @@ Read how it works, suggest a fix, or run your own copy — see the <a href="{SEL
 
 
 def about(base: str, lang: str, ga: str) -> str:
-    """Страница «Как это работает». ga — GA-сниппет (только на боевом домене) или пусто."""
+    """Страница «Как это работает». ga — app.ga_snippet: согласие на cookie и (только на боевом домене) тег GA."""
     path = PATHS[(lang, "about")]
     # Только событие и адрес страницы — никаких данных пользователя (как вся аналитика gtd)
     track = ("<script>function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, params); }\n"
@@ -365,13 +471,13 @@ def about(base: str, lang: str, ga: str) -> str:
 # Политика конфиденциальности (SERBITO-282). Каждое утверждение сверено с app.py и index.html — меняешь, что
 # хранится или куда уходит, правь и этот текст. Адрес для запросов о данных — только здесь, больше нигде
 PRIVACY_EMAIL = "alexander.bondarchuk@gmail.com"
-PRIVACY_DATE = {"ru": "26 сентября 2026", "en": "26 September 2026"}
+PRIVACY_DATE = {"ru": "27 сентября 2026", "en": "27 September 2026"}
 T["ru"].update(privacy="Конфиденциальность", privacy_title="Политика конфиденциальности — GTD онлайн",
-               privacy_desc="Какие данные хранит GTD онлайн, что получает аналитика, кто обрабатывает данные "
-                            "и как удалить аккаунт.")
+               privacy_desc="Какие данные хранит GTD онлайн, что получает аналитика, как дать или отозвать "
+                            "согласие на cookie, кто обрабатывает данные и как удалить аккаунт.")
 T["en"].update(privacy="Privacy", privacy_title="Privacy policy — GTD online",
-               privacy_desc="What data GTD online stores, what analytics receive, who processes it "
-                            "and how to delete your account.")
+               privacy_desc="What data GTD online stores, what analytics receive, how to give or withdraw "
+                            "cookie consent, who processes it and how to delete your account.")
 # Ссылка на политику под кнопками входа на лендинге
 PRIVACY_NOTE = {
     "ru": '<p class="note" style="margin:14px 0 0">Что мы храним — <a href="/privacy">политика конфиденциальности</a></p>',
@@ -392,15 +498,32 @@ PRIVACY = {
 и без IP-адресов.</li>
 <li><b>Вход</b>: cookie <code>sid</code> (httpOnly, 90 дней) держит тебя в аккаунте, выход удаляет сессию.
 Ссылки и коды входа живут 10 минут, коды из писем хранятся только в виде хеша.</li>
-<li><b>Только в браузере</b> (localStorage): выбранный язык и ещё не сохранённые черновики.</li>
+<li><b>Только в браузере</b> (localStorage): выбранный язык, ещё не сохранённые черновики и твой выбор
+в баннере cookie.</li>
 </ul>
 <h2>Аналитика</h2>
 <ul class="ex">
 <li><b>Google Analytics 4</b> — только на gtd.serbito.rs: какой раздел открыт (Inbox, Next…) и события — вход
 и привязка (каким способом), факт записи задачи, шаги чек-листа, просмотр «Как это работает», язык интерфейса.
-Текст задач, их номера, почта и id пользователя туда не уходят. GA ставит свои cookie, а Google получает
-обычные технические данные браузера (устройство, примерное местоположение).</li>
+Текст задач, их номера, почта и id пользователя туда не уходят. Свои cookie GA ставит, только если ты
+согласишься (см. ниже), а Google в любом случае получает обычные технические данные браузера (устройство,
+примерное местоположение).</li>
 <li><b>Cloudflare Web Analytics</b> — общее число посещений, без cookie.</li>
+</ul>
+<h2 id="cookies">Cookie и согласие</h2>
+<ul class="ex">
+<li><b>Баннер</b>: при первом визите спрашиваем, можно ли Google Analytics ставить cookie, — «Принять» или
+«Отклонить». Выбор действует и на сайте, и в приложении.</li>
+<li><b>Пока не согласишься</b> (или если отклонишь), GA работает без cookie (Google Consent Mode): уходят
+только пинги без идентификатора браузера — какой раздел открыт или какое событие случилось. По ним Google
+считает общую статистику, но не узнаёт, что визиты — от одного человека.</li>
+<li><b>Если примешь</b>, GA ставит cookie <code>_ga</code> и <code>_ga_…</code> — только для gtd.serbito.rs,
+не для других сайтов serbito.rs; по ним видно повторные визиты. Согласие — только на аналитику: рекламы
+у нас нет, рекламные разрешения Google всегда выключены.</li>
+<li><b>Выбор хранится</b> в localStorage этого браузера 12 месяцев, потом спросим снова. Если браузер
+не даёт его сохранить, баннер появится при следующем визите.</li>
+<li><b>Передумать</b> можно в любой момент: ссылка «Настройки cookie» внизу каждой страницы и в меню
+приложения. При отказе удаляем cookie <code>_ga*</code> этого сайта.</li>
 </ul>
 <h2>Кто обрабатывает данные</h2>
 <ul class="ex">
@@ -434,15 +557,32 @@ the site or the bot.</li>
 no IP addresses.</li>
 <li><b>Sign-in</b>: the <code>sid</code> cookie (httpOnly, 90 days) keeps you signed in; signing out deletes
 the session. Sign-in links and codes last 10 minutes; email codes are stored only as a hash.</li>
-<li><b>In your browser only</b> (localStorage): your language choice and unsaved drafts.</li>
+<li><b>In your browser only</b> (localStorage): your language choice, unsaved drafts and your answer
+to the cookie banner.</li>
 </ul>
 <h2>Analytics</h2>
 <ul class="ex">
 <li><b>Google Analytics 4</b> — only on gtd.serbito.rs: which section is open (Inbox, Next…) and events — sign-in
 and account linking (which method), the fact a task was captured, checklist steps, “How it works” views,
-interface language. Task text, task numbers, email and user ID are never sent. GA sets its own cookies, and
-Google receives standard technical data from your browser (device, approximate location).</li>
+interface language. Task text, task numbers, email and user ID are never sent. GA sets its cookies only if you
+agree (see below); either way, Google receives standard technical data from your browser (device,
+approximate location).</li>
 <li><b>Cloudflare Web Analytics</b> — total visits, no cookies.</li>
+</ul>
+<h2 id="cookies">Cookies and consent</h2>
+<ul class="ex">
+<li><b>Banner</b>: on your first visit we ask whether Google Analytics may set cookies — Accept or Decline.
+The choice applies to both the site and the app.</li>
+<li><b>Until you accept</b> (or if you decline), GA runs without cookies (Google Consent Mode): it only receives
+pings without a browser identifier — which section is open or which event happened. Google uses them for
+overall statistics but can't tell that visits come from the same person.</li>
+<li><b>If you accept</b>, GA sets the <code>_ga</code> and <code>_ga_…</code> cookies — for gtd.serbito.rs only,
+not for other serbito.rs sites; they show repeat visits. Consent covers analytics only: we have no ads, and
+Google's advertising permissions stay off.</li>
+<li><b>Your choice is stored</b> in this browser's localStorage for 12 months, then we ask again. If the browser
+doesn't let us store it, the banner shows up on your next visit.</li>
+<li><b>Change your mind</b> at any time: the “Cookie settings” link at the bottom of every page and in the app
+menu. Declining deletes this site's <code>_ga*</code> cookies.</li>
 </ul>
 <h2>Who processes data</h2>
 <ul class="ex">
@@ -466,7 +606,7 @@ Google or Telegram). We delete the account and all its data within 30 days of th
 
 
 def privacy(base: str, lang: str, ga: str) -> str:
-    """Политика конфиденциальности — такая же лёгкая страница, как /about. ga — GA-сниппет или пусто."""
+    """Политика конфиденциальности — такая же лёгкая страница, как /about. ga — app.ga_snippet, как у /about."""
     path = PATHS[(lang, "privacy")]
     body = PRIVACY[lang].format(date=PRIVACY_DATE[lang], email=PRIVACY_EMAIL)
     track = ("<script>if(typeof gtag === 'function') gtag('event', 'page_view', "
