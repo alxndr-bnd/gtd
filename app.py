@@ -1046,6 +1046,34 @@ async def lifespan(app):
 # ───────────────────────── Web / API ─────────────────────────
 app = FastAPI(lifespan=lifespan)
 
+# HEAD отвечаем как GET, только без тела. Мониторинги аптайма и превью ссылок (Slack и др.) сперва шлют HEAD,
+# а FastAPI сам его не добавляет — без этого на HEAD / был 405 и сайт считался лежащим.
+# API и ссылки входа — только GET: HEAD от бота-превью не должен сжечь одноразовый токен /auth.
+NO_HEAD = {"/auth", "/dev-login"}
+
+
+class HeadAsGet:
+    def __init__(self, asgi):
+        self.asgi = asgi
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] != "HEAD" or scope["path"].startswith("/api/") or scope["path"] in NO_HEAD:
+            return await self.asgi(scope, receive, send)
+
+        async def headers_only(msg):
+            # Статус и заголовки (в т.ч. Content-Length) — как у GET; тело выбрасываем, закрывая ответ пустым куском
+            if msg["type"] == "http.response.body":
+                if msg.get("more_body"):
+                    return
+                msg = {"type": "http.response.body", "body": b""}
+            await send(msg)
+
+        # Копия scope, а не правка: сервер (uvicorn) по своему scope знает, что запрос HEAD, и тела не ждёт
+        await self.asgi(dict(scope, method="GET"), receive, headers_only)
+
+
+app.add_middleware(HeadAsGet)
+
 
 def session_user(request: Request) -> int | None:
     sid = request.cookies.get("sid")
