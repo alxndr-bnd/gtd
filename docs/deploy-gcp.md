@@ -63,7 +63,19 @@ The schema is created and migrated on startup.
 
 - Cloud Run connects through the unix socket:
   `postgresql://gtd:PASSWORD@/gtd?host=/cloudsql/serbito:europe-west1:serbitodb`
-- A local server connects to the production database **only explicitly**:
+- A local server connects to the production database **only explicitly**. Keep the URL in your own `.env`
+  (never committed; `.env.example` has no production values):
+
+  ```bash
+  DATABASE_URL_PROD=postgresql://USER:PASSWORD@PUBLIC_IP:5432/gtd?sslmode=require
+  ```
+
+  - `PUBLIC_IP` — the `PRIMARY` address of the instance:
+    `gcloud sql instances describe serbitodb --project serbito --format='json(ipAddresses)'`.
+  - `USER:PASSWORD` — the same as in the Cloud Run URL, i.e. the secret
+    `gcloud secrets versions access latest --secret gtd-database-url --project serbito`.
+
+  Then run against it:
 
   ```bash
   DATABASE_URL="$(sed -n 's/^DATABASE_URL_PROD=//p' .env)" .venv/bin/uvicorn app:app --env-file .env
@@ -87,7 +99,7 @@ on the free plan the 300 emails/day limit covers both projects.
 1. @BotFather → `/newbot` → token.
 2. `scripts/setup_gcp.sh` — Artifact Registry `gtd`, service accounts `gtd-deployer` / `gtd-run`, roles,
    secrets `gtd-database-url`, `gtd-telegram-bot-token` (asks for the token; takes the DB password from
-   `.env`), `gtd-sentry-dsn`, `gtd-cron-secret`, access to the shared `GOOGLE_CLIENT_ID` /
+   `DATABASE_URL_PROD` in `.env`, otherwise asks), `gtd-sentry-dsn`, `gtd-cron-secret`, access to the shared `GOOGLE_CLIENT_ID` /
    `EMAIL_HOST_PASSWORD`, the repo in the WIF condition, and the Cloud Scheduler job `gtd-reminders`.
    Idempotent.
 3. Google Cloud Console → APIs & Services → Credentials → the serbito OAuth client (the one whose ID is in
