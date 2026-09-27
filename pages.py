@@ -134,9 +134,10 @@ if(location.hostname==='gtd.serbito.rs'){
 # Согласие на cookie аналитики (SERBITO-319, решение владельца SERBITO-285 — одно на все четыре продукта).
 # Google Consent Mode v2: до любого gtag('config') — «запрещено» по умолчанию; GA на проде всё равно грузится
 # и шлёт пинги без cookie. «Принять» разрешает только analytics_storage: рекламы в gtd нет, и три рекламных
-# разрешения (ad_storage, ad_user_data, ad_personalization) всегда denied. Выбор (и дата) — в localStorage на 12 месяцев; сохранённый выбор сразу идёт
-# в consent default, чтобы согласившийся не отправил первый пинг «запрещено». Баннер и ссылка «Настройки cookie» —
-# на всех хостах (так его видно и локально), а сам gtag.js грузится только на gtd.serbito.rs (app.ga_snippet)
+# разрешения (ad_storage, ad_user_data, ad_personalization) всегда denied. Выбор (и дата) — в localStorage
+# на 12 месяцев; сохранённый выбор сразу идёт в consent default, чтобы согласившийся не отправил первый пинг
+# «запрещено». Баннер и ссылки «Настройки cookie» — только если задан GA_MEASUREMENT_ID (self-hosted копия без GA не спрашивает про cookie, которых нет), зато на любом
+# хосте — так их видно и локально; сам gtag.js грузится только на gtd.serbito.rs (app.ga_snippet)
 CONSENT_KEY = "gtd-consent"
 CONSENT_DAYS = 365
 CONSENT = {
@@ -225,6 +226,7 @@ function gtag(){ dataLayer.push(arguments); }
   // Телефон: открыта клавиатура (видимая область сжалась, фокус в поле) — баннер не закрывает поле ввода
   window.visualViewport?.addEventListener('resize', () => document.body.classList.toggle('cc-kb',
     visualViewport.height < innerHeight * .75 && /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)));
+  window.gtdConsent = {open: () => show(true)};  // по нему SPA решает, показывать ли «Настройки cookie» в меню
   const start = () => { if(!choice) show(false); };
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start) : start();
 })();
@@ -281,17 +283,19 @@ def topbar(lang: str, page: str) -> str:
             f'<a href="{PATHS[(other, page)]}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></div>')
 
 
-def footer(lang: str) -> str:
-    """Другие проекты No Handoff, открытый код, подпись и оговорка о товарном знаке — на всех публичных страницах."""
+def footer(lang: str, consent: bool = False) -> str:
+    """Другие проекты No Handoff, открытый код, подпись и оговорка о товарном знаке — на всех публичных страницах.
+    consent — задан GA: тогда и ссылка «Настройки cookie»."""
     t, i = T[lang], 2 if lang == "ru" else 3
     items = "".join(f'<li><a href="{p[1]}{FOOTER_UTM}">{p[0]}</a> — {p[i]}</li>' for p in PRODUCTS)
     contact = f' · <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>' if CONTACT_EMAIL else ""
+    # Снова открыть баннер согласия (SERBITO-319); без JS — ссылка на раздел политики о cookie
+    cookie = (f' · <a href="{PATHS[(lang, "privacy")]}#cookies" data-cc-open>{CONSENT[lang]["settings"]}</a>'
+              if consent else "")
     return (f'<footer><b>{t["other"]}</b><ul>{items}</ul>'
             f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{contact}</p>'
             f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a> · '
-            f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a> · '
-            # Снова открыть баннер согласия (SERBITO-319); без JS — ссылка на раздел политики о cookie
-            f'<a href="{PATHS[(lang, "privacy")]}#cookies" data-cc-open>{CONSENT[lang]["settings"]}</a></p>'
+            f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a>{cookie}</p>'
             f'<p>{t["tm"]} <a href="{GTD_SITE}">gettingthingsdone.com</a></p></footer>')
 
 
@@ -337,13 +341,13 @@ sign in on the site with Telegram or link the bot under “Account”.</p>
 }
 
 
-def landing(lang: str) -> str:
+def landing(lang: str, consent: bool = False) -> str:
     """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin."""
     h, hint = LANDING_SIGNIN[lang]
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
     return (f'<div class="pub">{topbar(lang, "home")}<div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin"></div>{PRIVACY_NOTE[lang]}</div></div>{LANDING_STEPS[lang]}{footer(lang)}</div>')
+            f'<div id="signin"></div>{PRIVACY_NOTE[lang]}</div></div>{LANDING_STEPS[lang]}{footer(lang, consent)}</div>')
 
 
 ABOUT = {
@@ -462,7 +466,7 @@ def about(base: str, lang: str, ga: str) -> str:
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "about")}{ABOUT[lang]}{OSS[lang]}{INSTALL[lang]}{footer(lang)}</div>
+<div class="pub">{topbar(lang, "about")}{ABOUT[lang]}{OSS[lang]}{INSTALL[lang]}{footer(lang, bool(ga))}</div>
 {track}
 </body>
 </html>"""
@@ -512,8 +516,8 @@ PRIVACY = {
 </ul>
 <h2 id="cookies">Cookie и согласие</h2>
 <ul class="ex">
-<li><b>Баннер</b>: при первом визите спрашиваем, можно ли Google Analytics ставить cookie, — «Принять» или
-«Отклонить». Выбор действует и на сайте, и в приложении.</li>
+<li><b>Баннер</b>: на gtd.serbito.rs при первом визите спрашиваем, можно ли Google Analytics ставить cookie, —
+«Принять» или «Отклонить». Выбор действует и на сайте, и в приложении.</li>
 <li><b>Пока не согласишься</b> (или если отклонишь), GA работает без cookie (Google Consent Mode): уходят
 только пинги без идентификатора браузера — какой раздел открыт или какое событие случилось. По ним Google
 считает общую статистику, но не узнаёт, что визиты — от одного человека.</li>
@@ -571,8 +575,8 @@ approximate location).</li>
 </ul>
 <h2 id="cookies">Cookies and consent</h2>
 <ul class="ex">
-<li><b>Banner</b>: on your first visit we ask whether Google Analytics may set cookies — Accept or Decline.
-The choice applies to both the site and the app.</li>
+<li><b>Banner</b>: on gtd.serbito.rs, on your first visit we ask whether Google Analytics may set cookies —
+Accept or Decline. The choice applies to both the site and the app.</li>
 <li><b>Until you accept</b> (or if you decline), GA runs without cookies (Google Consent Mode): it only receives
 pings without a browser identifier — which section is open or which event happened. Google uses them for
 overall statistics but can't tell that visits come from the same person.</li>
@@ -623,7 +627,7 @@ def privacy(base: str, lang: str, ga: str) -> str:
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "privacy")}{body}{footer(lang)}</div>
+<div class="pub">{topbar(lang, "privacy")}{body}{footer(lang, bool(ga))}</div>
 {track}
 </body>
 </html>"""

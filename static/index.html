@@ -591,7 +591,7 @@ function navHtml(){
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
     ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">${t('stats')}</a>`:''}
     <a href="${t('about_url')}" title="${t('about_title')}">${t('about')}</a>
-    <a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>${t('cookie_settings')}</a>
+    ${window.gtdConsent ? `<a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>${t('cookie_settings')}</a>` : ''}
     <div class="navfoot"><div class="sep"></div>${user}</div>
     <div class="keys">${t('keys')}</div></nav>`;
 }
@@ -716,8 +716,9 @@ function reviewHtml(){
   <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
 }
 
-// ── Google Analytics: только раздел и обезличенные события. gtag() и согласие на cookie сервер кладёт везде
-// (pages.CONSENT_HEAD), а сам gtag.js — лишь на gtd.serbito.rs: локально и на *.run.app события остаются в dataLayer.
+// ── Google Analytics: только раздел и обезличенные события. gtag() и согласие на cookie сервер кладёт, только если
+// задан GA (pages.CONSENT_HEAD), а сам gtag.js — лишь на gtd.serbito.rs: на других хостах события остаются в dataLayer,
+// без GA ga()/gaPage() молча ничего не делают.
 function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, {...params, language:LANG}); }
 function gaPage(){
   if(typeof gtag !== 'function') return;

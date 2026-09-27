@@ -39,8 +39,9 @@ def test_consent_default_denied_and_ads_never_granted():
 
 
 @pytest.mark.parametrize("path", [*PUBLIC, "/i/5"])
-def test_banner_everywhere_ga_only_on_prod(client, monkeypatch, path):
-    """Баннер и логика согласия — и локально (их можно проверить), а gtag.js — только на боевом домене."""
+def test_banner_on_any_host_ga_only_on_prod(client, monkeypatch, path):
+    """GA задан — баннер и логика согласия на любом хосте (их можно проверить локально), а gtag.js — только
+    на боевом домене."""
     monkeypatch.setattr(A, "GA_ID", "G-TEST123")
     for host in ("localhost:8000", "gtd-488744139718.europe-west1.run.app"):
         h = client.get(path, headers={"host": host}).text
@@ -48,8 +49,23 @@ def test_banner_everywhere_ga_only_on_prod(client, monkeypatch, path):
         assert "googletagmanager" not in h, host
 
 
+@pytest.mark.parametrize("path", [*PUBLIC, "/i/5"])
+def test_no_ga_no_consent(client, path):
+    """Self-hosted копия без GA_MEASUREMENT_ID: ни скрипта согласия, ни баннера, ни «Настройки cookie»
+    (в меню SPA ссылку рисует только при window.gtdConsent — см. test_browser_smoke)."""
+    assert A.GA_ID == ""
+    for host in ("localhost:8000", "gtd.serbito.rs"):
+        h = client.get(path, headers={"host": host}).text
+        assert "gtag(" not in h.split("</head>")[0] and "dataLayer" not in h.split("</head>")[0], host
+        assert "gtdConsent = {" not in h and ".cc{position:fixed" not in h, host
+        if "<footer>" in h:
+            foot = h[h.index("<footer>"):h.index("</footer>")]
+            assert "data-cc-open" not in foot and "cookie" not in foot.lower(), host
+
+
 @pytest.mark.parametrize("path, lang", PUBLIC.items())
-def test_cookie_settings_link_in_every_footer(client, path, lang):
+def test_cookie_settings_link_in_every_footer(client, monkeypatch, path, lang):
+    monkeypatch.setattr(A, "GA_ID", "G-TEST123")
     h = client.get(path).text
     foot = h[h.index("<footer>"):h.index("</footer>")]
     priv = P.PATHS[(lang, "privacy")]
@@ -61,7 +77,8 @@ def test_cookie_settings_link_in_the_app():
     ui = json.loads(index.split('<script type="application/json" id="i18n">')[1].split("</script>")[0])
     assert ui["ru"]["cookie_settings"] == "Настройки cookie" and ui["en"]["cookie_settings"] == "Cookie settings"
     assert ui["ru"]["privacy_url"] == "/privacy" and ui["en"]["privacy_url"] == "/en/privacy"
-    assert """<a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>${t('cookie_settings')}</a>""" in index
+    assert ("""${window.gtdConsent ? `<a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>"""
+            """${t('cookie_settings')}</a>` : ''}""") in index
 
 
 def test_banner_texts():

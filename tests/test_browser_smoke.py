@@ -384,11 +384,12 @@ def banner(w, what):
 
 
 @pytest.mark.parametrize("lang", ["ru", "en"])
-def test_consent_banner(watch, lang):
+def test_consent_banner(watch, monkeypatch, lang):
     """Первый визит — баннер на языке страницы и consent default «запрещено»; Принять/Отклонить — нужные
     update, выбор с датой в localStorage и применяется в default при следующем визите; через 12 месяцев
     спрашиваем снова; «Настройки cookie» в подвале каждой страницы и в меню приложения открывают баннер,
     отказ стирает _ga*. Всё — с клавиатуры в том числе."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")  # баннер — только при заданном GA; gtag.js на localhost не грузится
     t, home = P.CONSENT[lang], P.PATHS[(lang, "home")]
     w = watch(lang)
     w.goto(home)
@@ -456,9 +457,10 @@ def test_consent_banner(watch, lang):
     w.check(f"[{lang}] итог")
 
 
-def test_consent_without_storage(watch):
+def test_consent_without_storage(watch, monkeypatch):
     """localStorage недоступен (приватный режим, запрет сайта): без ошибок, выбор работает на этой странице,
     а при следующем визите баннер появляется снова."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
     w = watch()
     w.ctx.add_init_script("Object.defineProperty(window, 'localStorage', "
                           "{get(){ throw new DOMException('blocked', 'SecurityError'); }})")
@@ -469,6 +471,20 @@ def test_consent_without_storage(watch):
     w.page.reload()
     banner(w, "баннер снова")
     assert consent_calls(w) == [["default", all_kinds("denied", wait_for_update=500)]]
+    w.check("итог")
+
+
+def test_no_consent_without_ga(watch):
+    """Self-hosted копия без GA: ни баннера, ни «Настройки cookie» — ни в подвале, ни в меню приложения."""
+    assert A.GA_ID == ""
+    w = watch()
+    w.goto("/")
+    w.wait('#signin a[href="/dev-login"]', "лендинг")
+    assert not w.page.locator("#cc, [data-cc-open]").count()
+    assert w.page.evaluate("typeof window.gtdConsent === 'undefined' && typeof window.dataLayer === 'undefined'")
+    smoke_user(w)
+    w.page.wait_for_timeout(300)  # баннер появился бы на DOMContentLoaded — ждём с запасом
+    assert not w.page.locator("#cc, nav a.ccl, [data-cc-open]").count()
     w.check("итог")
 
 

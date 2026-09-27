@@ -1748,10 +1748,12 @@ STATIC = os.path.join(os.path.dirname(__file__), "static")
 
 
 def ga_snippet(request: Request) -> str:
-    """Согласие на cookie (SERBITO-319) — на любом хосте, чтобы баннер был виден и локально; за ним тег GA —
-    только на боевом домене. Порядок важен: consent default раньше gtag('config')."""
-    ga = GA_SNIPPET.format(id=GA_ID) if GA_ID and request.url.hostname == GA_HOST else ""
-    return pages.CONSENT_HEAD + ga
+    """GA не задан (self-hosted копия) — ни GA, ни баннера согласия. Задан — согласие на cookie (SERBITO-319)
+    на любом хосте, чтобы баннер был виден и локально, а за ним тег GA — только на боевом домене.
+    Порядок важен: consent default раньше gtag('config')."""
+    if not GA_ID:
+        return ""
+    return pages.CONSENT_HEAD + (GA_SNIPPET.format(id=GA_ID) if request.url.hostname == GA_HOST else "")
 
 
 def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLResponse:
@@ -1762,7 +1764,7 @@ def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLR
     page = page.replace('<html lang="ru">', f'<html lang="{lang}">')  # SPA потом поставит язык интерфейса
     if landing:
         page = (page.replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
-                .replace("<!--LANDING-->", pages.landing(lang)))
+                .replace("<!--LANDING-->", pages.landing(lang, consent=bool(GA_ID))))
     return HTMLResponse(page)
 
 
