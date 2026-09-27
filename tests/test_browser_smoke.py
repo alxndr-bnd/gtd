@@ -57,24 +57,34 @@ def server():
 
 
 @pytest.fixture(scope="module")
-def browser():
-    with sync_playwright() as p:
-        try:
-            b = p.chromium.launch()
-        except PWError as e:
-            if "Executable doesn't exist" in str(e) or "playwright install" in str(e):
-                pytest.fail(f"{INSTALL_HINT}\n{str(e).splitlines()[0]}", pytrace=False)
-            raise
-        yield b
-        b.close()
+def pw():
+    with sync_playwright() as p:  # один на модуль: второй sync_playwright внутри первого Playwright не даёт
+        yield p
+
+
+def launch(pw, *args):
+    try:
+        return pw.chromium.launch(args=list(args))
+    except PWError as e:
+        if "Executable doesn't exist" in str(e) or "playwright install" in str(e):
+            pytest.fail(f"{INSTALL_HINT}\n{str(e).splitlines()[0]}", pytrace=False)
+        raise
+
+
+@pytest.fixture(scope="module")
+def browser(pw):
+    b = launch(pw)
+    yield b
+    b.close()
 
 
 class Watch:
     """Страница, которая копит всё, что считается поломкой: ошибки консоли, необработанные исключения,
     ответы ≥400 своего сервера и попытки сходить наружу."""
 
-    def __init__(self, browser, base, lang="ru"):
-        self.base, self.errors, self.expected_404 = base, [], set()
+    def __init__(self, browser, base, lang="ru", stubs=None):
+        """stubs — {начало внешнего URL: тело JS}: локальные подмены внешних скриптов (GA на «проде»)."""
+        self.base, self.errors, self.expected_404, self.stubs = base, [], set(), stubs or {}
         self.ctx = browser.new_context(locale="en-US" if lang == "en" else "ru-RU",
                                        viewport={"width": 1280, "height": 900})
         self.ctx.route("**/*", self._route)
@@ -89,6 +99,9 @@ class Watch:
             return route.continue_()
         if url.startswith("https://accounts.google.com/gsi/client"):
             return route.fulfill(status=200, content_type="text/javascript", body=GSI_STUB)
+        for prefix, body in self.stubs.items():
+            if url.startswith(prefix):
+                return route.fulfill(status=200, content_type="text/javascript", body=body)
         # Cloudflare и GA подключаются только на gtd.serbito.rs — здесь любой внешний запрос это поломка
         self.errors.append(f"внешний запрос: {url}")
         return route.abort()
@@ -341,3 +354,214 @@ def test_click_anywhere_on_card_opens_it(watch):
     assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
     assert A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "someday"
     w.check("итог")
+
+
+# ── Согласие на cookie аналитики (SERBITO-319) ──
+import pages as P  # noqa: E402
+
+YEAR_MS = 365 * 86400 * 1000
+
+
+def consent_calls(w):
+    """Вызовы gtag('consent', …) по порядку: gtag() — это dataLayer.push, он есть на любом хосте."""
+    return w.page.evaluate("dataLayer.filter(a => a[0] === 'consent').map(a => [a[1], a[2]])")
+
+
+def all_kinds(v, **extra):
+    """Состояние Consent Mode: выбор — только про аналитику, рекламные разрешения всегда denied."""
+    return {"ad_storage": "denied", "analytics_storage": v, "ad_user_data": "denied",
+            "ad_personalization": "denied", **extra}
+
+
+def stored_choice(w):
+    return w.page.evaluate(f"JSON.parse(localStorage.getItem('{P.CONSENT_KEY}'))")
+
+
+def banner(w, what):
+    w.wait("#cc:not([hidden])", what)
+    assert w.page.is_visible("#cc"), what
+    return w.page.locator("#cc")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_consent_banner(watch, monkeypatch, lang):
+    """Первый визит — баннер на языке страницы и consent default «запрещено»; Принять/Отклонить — нужные
+    update, выбор с датой в localStorage и применяется в default при следующем визите; через 12 месяцев
+    спрашиваем снова; «Настройки cookie» в подвале каждой страницы и в меню приложения открывают баннер,
+    отказ стирает _ga*. Всё — с клавиатуры в том числе."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")  # баннер — только при заданном GA; gtag.js на localhost не грузится
+    t, home = P.CONSENT[lang], P.PATHS[(lang, "home")]
+    w = watch(lang)
+    w.goto(home)
+    cc = banner(w, f"[{lang}] баннер при первом визите")
+    assert t["text"] in cc.inner_text() and cc.get_attribute("aria-label") == t["label"]
+    assert cc.locator(f'a[href="{P.PATHS[(lang, "privacy")]}#cookies"]').inner_text() == t["more"]
+    assert consent_calls(w) == [["default", all_kinds("denied", wait_for_update=500)]]
+    assert stored_choice(w) is None
+
+    # С клавиатуры: баннер первый в порядке Tab — ссылка «Подробнее», затем «Принять»
+    w.page.keyboard.press("Tab")
+    w.page.keyboard.press("Tab")
+    assert w.page.evaluate("document.activeElement.textContent") == t["yes"]
+    w.page.keyboard.press("Enter")
+    assert consent_calls(w)[-1] == ["update", all_kinds("granted")]
+    assert w.page.is_hidden("#cc")
+    c = stored_choice(w)
+    assert c["v"] == "granted" and abs(c["t"] - w.page.evaluate("Date.now()")) < 60_000
+
+    # Вернулся — баннера нет, согласие сразу в default
+    w.page.reload()
+    w.wait('#signin a[href="/dev-login"]', f"[{lang}] перезагрузка")
+    assert not w.page.locator("#cc").count()
+    assert consent_calls(w) == [["default", all_kinds("granted", wait_for_update=500)]]
+
+    # «Настройки cookie» в подвале → баннер с фокусом на «Принять»; «Отклонить» стирает _ga*
+    w.page.evaluate("document.cookie = '_ga=GA1.1.1.1; path=/'; document.cookie = '_ga_TEST=GS1; path=/'; "
+                    "document.cookie = 'keep=1; path=/'")
+    w.page.click("footer [data-cc-open]")
+    banner(w, f"[{lang}] баннер из подвала")
+    assert w.page.evaluate("document.activeElement.dataset.cc") == "granted"
+    w.page.click('#cc [data-cc="denied"]')
+    assert consent_calls(w)[-1] == ["update", all_kinds("denied")]
+    assert stored_choice(w)["v"] == "denied" and w.page.is_hidden("#cc")
+    assert w.page.evaluate("document.cookie") == "keep=1"
+
+    # Выбор старше 12 месяцев — снова «запрещено» и баннер
+    w.page.evaluate(f"localStorage.setItem('{P.CONSENT_KEY}', "
+                    f"JSON.stringify({{v: 'granted', t: Date.now() - {YEAR_MS} - 1000}}))")
+    w.page.reload()
+    banner(w, f"[{lang}] баннер через 12 месяцев")
+    assert consent_calls(w) == [["default", all_kinds("denied", wait_for_update=500)]]
+    w.page.click('#cc [data-cc="denied"]')
+
+    # Подвал /about и /privacy
+    for page in ("about", "privacy"):
+        w.goto(P.PATHS[(lang, page)])
+        w.page.wait_for_load_state("load")
+        assert not w.page.locator("#cc").count(), page
+        w.page.click(f'footer a[data-cc-open]:text-is("{t["settings"]}")')
+        banner(w, f"[{lang}] {page}: баннер из подвала")
+        assert t["yes"] in w.page.inner_text("#cc")
+        w.page.click('#cc [data-cc="granted"]')
+        assert consent_calls(w)[-1] == ["update", all_kinds("granted")]
+
+    # Приложение: ссылка в меню; язык баннера — язык интерфейса (SPA меняет его после входа)
+    A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,%s)", (int(time.time()), lang))
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    w.page.click(f'nav a.ccl[data-cc-open]:text-is("{t["settings"]}")')
+    cc = banner(w, f"[{lang}] баннер из меню приложения")
+    assert t["text"] in cc.inner_text()
+    w.page.click('#cc [data-cc="denied"]')
+    assert consent_calls(w)[-1] == ["update", all_kinds("denied")] and w.page.is_hidden("#cc")
+    w.check(f"[{lang}] итог")
+
+
+def test_consent_without_storage(watch, monkeypatch):
+    """localStorage недоступен (приватный режим, запрет сайта): без ошибок, выбор работает на этой странице,
+    а при следующем визите баннер появляется снова."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    w = watch()
+    w.ctx.add_init_script("Object.defineProperty(window, 'localStorage', "
+                          "{get(){ throw new DOMException('blocked', 'SecurityError'); }})")
+    w.goto("/")
+    banner(w, "баннер без localStorage")
+    w.page.click('#cc [data-cc="granted"]')
+    assert consent_calls(w)[-1] == ["update", all_kinds("granted")] and w.page.is_hidden("#cc")
+    w.page.reload()
+    banner(w, "баннер снова")
+    assert consent_calls(w) == [["default", all_kinds("denied", wait_for_update=500)]]
+    w.check("итог")
+
+
+def test_no_consent_without_ga(watch):
+    """Self-hosted копия без GA: ни баннера, ни «Настройки cookie» — ни в подвале, ни в меню приложения."""
+    assert A.GA_ID == ""
+    w = watch()
+    w.goto("/")
+    w.wait('#signin a[href="/dev-login"]', "лендинг")
+    assert not w.page.locator("#cc, [data-cc-open]").count()
+    assert w.page.evaluate("typeof window.gtdConsent === 'undefined' && typeof window.dataLayer === 'undefined'")
+    smoke_user(w)
+    w.page.wait_for_timeout(300)  # баннер появился бы на DOMContentLoaded — ждём с запасом
+    assert not w.page.locator("#cc, nav a.ccl, [data-cc-open]").count()
+    w.check("итог")
+
+
+# Заглушка gtag.js: разбирает dataLayer, как настоящий тег, и ставит _ga и _ga_<ID> только при
+# analytics_storage = granted — host-only при cookie_domain 'none' в config, иначе на .serbito.rs (как GA
+# с cookie_domain auto). Хиты копит в __ga.hits: [событие, состояние согласия]
+GA_STANDIN = """(() => {
+  const st = {}, hits = [];
+  let dom = '; domain=serbito.rs';
+  window.__ga = {hits};
+  const cookie = () => { document.cookie = '_ga=GA1.1.1.1; path=/; max-age=63072000' + dom;
+                         document.cookie = '_ga_TEST=GS1.1.1; path=/; max-age=63072000' + dom; };
+  const handle = a => {
+    if(a[0] === 'consent') Object.assign(st, a[2]);
+    else if(a[0] === 'config' && a[2] && a[2].cookie_domain === 'none') dom = '';
+    else if(a[0] === 'event') hits.push([a[1], st.analytics_storage]);
+    if(st.analytics_storage === 'granted') cookie();
+  };
+  dataLayer.forEach(handle);
+  const push = dataLayer.push.bind(dataLayer);
+  dataLayer.push = (...xs) => { xs.forEach(handle); return push(...xs); };
+})();"""
+
+
+@pytest.fixture(scope="module")
+def prod_browser(pw):
+    """Chromium, у которого gtd.serbito.rs ведёт на локальный сервер: страницы с тегом GA — как на проде."""
+    b = launch(pw, "--host-resolver-rules=MAP gtd.serbito.rs 127.0.0.1")
+    yield b
+    b.close()
+
+
+def ga_cookies(w):
+    return sorted((c["name"], c["domain"]) for c in w.ctx.cookies() if c["name"].startswith("_ga"))
+
+
+def test_consent_on_prod_host(prod_browser, server, monkeypatch):
+    """Прод-хост с настоящим порядком тегов и заглушкой gtag.js: до «Принять» — только пинги «запрещено»
+    и ни одной cookie _ga; после — cookie есть и только на gtd.serbito.rs, события (about_view, task_capture)
+    уходят уже с согласием, без первого пинга «запрещено»; отказ из меню приложения стирает _ga* хоста
+    и старые _ga на .serbito.rs."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    base = "http://gtd.serbito.rs:" + server.rsplit(":", 1)[1]
+    w = Watch(prod_browser, base, stubs={"https://www.googletagmanager.com/gtag/js?id=G-TEST": GA_STANDIN,
+                                         "https://static.cloudflareinsights.com/beacon.min.js": ""})
+    try:
+        hits = lambda: w.page.evaluate("window.__ga ? __ga.hits : null")  # noqa: E731
+        w.goto("/")
+        banner(w, "прод: баннер")
+        w.page.wait_for_function("window.__ga && __ga.hits.length", timeout=WAIT_MS)
+        assert ["page_view", "denied"] in hits() and all(s == "denied" for _, s in hits())
+        assert ga_cookies(w) == []
+
+        w.page.click('#cc [data-cc="granted"]')
+        assert consent_calls(w)[-1] == ["update", all_kinds("granted")]  # рекламные — всё так же denied
+        assert ga_cookies(w) == [("_ga", "gtd.serbito.rs"), ("_ga_TEST", "gtd.serbito.rs")]  # host-only
+
+        w.goto("/en/about")
+        w.page.wait_for_function("window.__ga && __ga.hits.some(h => h[0] === 'about_view')", timeout=WAIT_MS)
+        assert not w.page.locator("#cc").count()
+        assert hits() == [["page_view", "granted"], ["about_view", "granted"]]
+
+        A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,'ru')", (int(time.time()),))
+        w.goto("/dev-login")
+        w.wait('nav > a.on[data-view="inbox"]', "прод: вход")
+        w.page.fill("#cap", "Проверить согласие")
+        w.page.press("#cap", "Enter")
+        w.page.wait_for_function("__ga.hits.some(h => h[0] === 'task_capture')", timeout=WAIT_MS)
+        assert all(s == "granted" for _, s in hits()) and ["page_view", "granted"] in hits()
+
+        # Старая cookie с .serbito.rs (до host-only) — тоже уйдёт при отказе; соседняя не-GA cookie — останется
+        w.ctx.add_cookies([{"name": "_ga", "value": "GA1.2.old", "domain": ".serbito.rs", "path": "/"},
+                           {"name": "other", "value": "1", "domain": ".serbito.rs", "path": "/"}])
+        w.page.click("nav a.ccl[data-cc-open]")
+        banner(w, "прод: баннер из меню")
+        w.page.click('#cc [data-cc="denied"]')
+        assert ga_cookies(w) == [] and [c["name"] for c in w.ctx.cookies() if c["name"] == "other"] == ["other"]
+        w.check("прод: итог")
+    finally:
+        w.close()

@@ -1733,14 +1733,14 @@ def get_item_by_num(num: int, request: Request, uid: int = Depends(current_user)
     return it
 
 
+# dataLayer, gtag() и consent default (Consent Mode v2) объявляет pages.CONSENT_HEAD — он всегда стоит перед этим тегом
 GA_SNIPPET = """<script async src="https://www.googletagmanager.com/gtag/js?id={id}"></script>
 <script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){{ dataLayer.push(arguments); }}
   gtag("js", new Date());
   // Страницы шлёт фронт сам (gaPage): только раздел вида /inbox и заголовок «GTD — раздел».
   // Ни названий задач, ни их номеров из /i/N, ни user_id — поэтому свой page_view выключен.
-  gtag("config", "{id}", {{ send_page_view: false }});
+  // cookie_domain 'none' — _ga только на gtd.serbito.rs, не общий .serbito.rs с соседними продуктами (SERBITO-319)
+  gtag("config", "{id}", {{ send_page_view: false, cookie_domain: "none" }});
 </script>"""
 
 
@@ -1748,7 +1748,12 @@ STATIC = os.path.join(os.path.dirname(__file__), "static")
 
 
 def ga_snippet(request: Request) -> str:
-    return GA_SNIPPET.format(id=GA_ID) if GA_ID and request.url.hostname == GA_HOST else ""
+    """GA не задан (self-hosted копия) — ни GA, ни баннера согласия. Задан — согласие на cookie (SERBITO-319)
+    на любом хосте, чтобы баннер был виден и локально, а за ним тег GA — только на боевом домене.
+    Порядок важен: consent default раньше gtag('config')."""
+    if not GA_ID:
+        return ""
+    return pages.CONSENT_HEAD + (GA_SNIPPET.format(id=GA_ID) if request.url.hostname == GA_HOST else "")
 
 
 def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLResponse:
@@ -1759,7 +1764,7 @@ def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLR
     page = page.replace('<html lang="ru">', f'<html lang="{lang}">')  # SPA потом поставит язык интерфейса
     if landing:
         page = (page.replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
-                .replace("<!--LANDING-->", pages.landing(lang)))
+                .replace("<!--LANDING-->", pages.landing(lang, consent=bool(GA_ID))))
     return HTMLResponse(page)
 
 

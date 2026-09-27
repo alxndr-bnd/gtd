@@ -116,6 +116,7 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 nav a.kb{outline:2px solid var(--ac);outline-offset:2px}  /* снаружи с зазором — видна и на синем активном */
 .draftnote{color:var(--warn);font-size:12.5px;margin-top:10px} .draftnote a{color:inherit}
 nav .keys{color:var(--mut);font-size:11.5px;line-height:1.6;margin:18px 10px 0}
+nav a.ccl{color:var(--mut);font-size:13px}  /* «Настройки cookie»: снова открывает баннер согласия (SERBITO-319, pages.CONSENT) */
 @media(max-width:700px){nav .keys{display:none}}
 .below{margin-top:56px} .below h3{font-size:17px;margin:0 0 4px} .below .hint{margin:0 0 12px}
 @media(max-width:700px){.hero{padding-top:8vh}.hero.solo{padding-top:calc(50vh - 150px)}}
@@ -203,6 +204,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "st_methods": "Способы входа", "st_methods_text": "Почта — {email} · Google — {google} · Telegram — {tg}",
   "sign_out": "Выйти", "menu": "Меню", "to_inbox": "На Inbox",
   "about": "📖 О GTD", "about_title": "Как это работает: метод GTD и разделы приложения", "about_url": "/about",
+  "cookie_settings": "Настройки cookie", "privacy_url": "/privacy",
   "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс",
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
   "all": "все", "back_projects": "← Проекты", "rename": "Переименовать", "delete": "Удалить",
@@ -282,6 +284,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "st_methods": "Sign-in methods", "st_methods_text": "Email — {email} · Google — {google} · Telegram — {tg}",
   "sign_out": "Sign out", "menu": "Menu", "to_inbox": "To Inbox",
   "about": "📖 About GTD", "about_title": "How it works: the GTD method and the app sections", "about_url": "/en/about",
+  "cookie_settings": "Cookie settings", "privacy_url": "/en/privacy",
   "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>← menu · → tasks · Esc clear",
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
@@ -588,6 +591,7 @@ function navHtml(){
     <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
     ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">${t('stats')}</a>`:''}
     <a href="${t('about_url')}" title="${t('about_title')}">${t('about')}</a>
+    ${window.gtdConsent ? `<a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>${t('cookie_settings')}</a>` : ''}
     <div class="navfoot"><div class="sep"></div>${user}</div>
     <div class="keys">${t('keys')}</div></nav>`;
 }
@@ -712,8 +716,9 @@ function reviewHtml(){
   <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
 }
 
-// ── Google Analytics: только раздел и обезличенные события. Сниппет сервер кладёт лишь на gtd.serbito.rs,
-// так что локально и на *.run.app ga()/gaPage() молча ничего не делают.
+// ── Google Analytics: только раздел и обезличенные события. gtag() и согласие на cookie сервер кладёт, только если
+// задан GA (pages.CONSENT_HEAD), а сам gtag.js — лишь на gtd.serbito.rs: на других хостах события остаются в dataLayer,
+// без GA ga()/gaPage() молча ничего не делают.
 function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, {...params, language:LANG}); }
 function gaPage(){
   if(typeof gtag !== 'function') return;
