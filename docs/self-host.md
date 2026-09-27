@@ -18,7 +18,8 @@ Stop with `docker compose down` (data stays in the `db` volume) or `docker compo
 
 ## Real setup
 
-Put settings in a `.env` file next to `docker-compose.yml` (Compose reads it automatically), then:
+Put settings in a `.env` file next to `docker-compose.yml` (Compose reads it automatically) — start from
+`cp .env.example .env` and remove `DEV=1`. Then:
 
 ```bash
 docker compose up -d --build

@@ -97,9 +97,9 @@ STATUSES = ("inbox", "next", "waiting", "someday", "reference", "done", "trash")
 # ───────────────────────── DB ─────────────────────────
 if not DATABASE_URL:
     raise RuntimeError(
-        "DATABASE_URL не задан. Локально: postgresql://gtd:ПАРОЛЬ@127.0.0.1:5433/gtd "
-        "(через cloud-sql-proxy). В Cloud Run: postgresql://gtd:ПАРОЛЬ@/gtd"
-        "?host=/cloudsql/serbito:europe-west1:serbitodb"
+        "DATABASE_URL не задан. Локально: своя база, postgresql://localhost/gtd "
+        "(cp .env.example .env; uvicorn … --env-file .env). Docker Compose задаёт его сам; "
+        "прод — docs/deploy-gcp.md"
     )
 
 # prepare_threshold=None: без серверных prepared statements. С ними миграция схемы под работающим
