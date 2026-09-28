@@ -1,7 +1,13 @@
 """Публичные страницы для гостей и поисковиков: лендинг на входе (/, /en/), «Как это работает»
-(/about, /en/about), политика конфиденциальности (/privacy, /en/privacy), SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
+(/about, /en/about), политика конфиденциальности (/privacy, /en/privacy), «Что нового» (/changes, /en/changes),
+SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
 Google индексирует его без JS. Маршруты — в app.py, здесь только содержимое; base — BASE_URL."""
+import html
 import json
+import os
+import re
+
+import changelog
 
 BOT_URL = "https://t.me/gtdsrbot"
 GTD_SITE = "https://gettingthingsdone.com"
@@ -44,7 +50,14 @@ ICONS = "\n".join([
 ])
 LANGS = ("ru", "en")
 PATHS = {("ru", "home"): "/", ("ru", "about"): "/about", ("en", "home"): "/en/", ("en", "about"): "/en/about",
-         ("ru", "privacy"): "/privacy", ("en", "privacy"): "/en/privacy"}
+         ("ru", "privacy"): "/privacy", ("en", "privacy"): "/en/privacy",
+         ("ru", "changes"): "/changes", ("en", "changes"): "/en/changes"}
+
+# Версия, которая сейчас работает (SERBITO-329): APP_VERSION ставит деплой из тега (v0.16.0 → 0.16.0),
+# локально и в self-hosted копии без него — «dev». Показывается в подвале, в меню приложения (/api/config)
+# и на /changes
+VERSION = re.sub(r"[^\w.+-]", "", os.getenv("APP_VERSION", "")).removeprefix("v")  # только безопасные символы
+VERSION_LABEL = f"v{VERSION}" if VERSION else "dev"
 
 # Другие проекты No Handoff: один список на оба языка (в README — тот же, с UTM для GitHub)
 PRODUCTS = [
@@ -111,6 +124,9 @@ PUBLIC_CSS = """<style>
 .pub kbd{font:12.5px ui-monospace,Menlo,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
 .pub footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--bd);color:var(--mut);font-size:13px}
 .pub footer ul{list-style:none;padding:0;margin:6px 0 14px} .pub footer li{margin:3px 0}
+.pub .rel h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap} .pub .rel h2 .note{font-weight:400}
+.pub .rel h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 4px}
+.pub .rel ul{margin:0;padding-left:20px} .pub .rel li{margin:4px 0}
 @media(max-width:700px){.pub .intro{grid-template-columns:1fr}.pub h1{font-size:25px}}
 </style>"""
 
@@ -292,8 +308,10 @@ def footer(lang: str, consent: bool = False) -> str:
     # Снова открыть баннер согласия (SERBITO-319); без JS — ссылка на раздел политики о cookie
     cookie = (f' · <a href="{PATHS[(lang, "privacy")]}#cookies" data-cc-open>{CONSENT[lang]["settings"]}</a>'
               if consent else "")
+    # «Что нового» и работающая версия (SERBITO-329)
+    changes = f' · <a href="{PATHS[(lang, "changes")]}">{t["changes"]}</a> · <span class="ver">{VERSION_LABEL}</span>'
     return (f'<footer><b>{t["other"]}</b><ul>{items}</ul>'
-            f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{contact}</p>'
+            f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{changes}{contact}</p>'
             f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a> · '
             f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a>{cookie}</p>'
             f'<p>{t["tm"]} <a href="{GTD_SITE}">gettingthingsdone.com</a></p></footer>')
@@ -633,8 +651,82 @@ def privacy(base: str, lang: str, ga: str) -> str:
 </html>"""
 
 
+# «Что нового» (SERBITO-329): история версий из CHANGELOG.md. Разбирается один раз при старте (формат и его
+# проверки — changelog.py и tests/test_changelog.py); [Unreleased] на сайт не попадает — только вышедшие версии
+RELEASES = changelog.released(changelog.load())
+CHANGELOG_URL = REPO_URL + "/blob/main/CHANGELOG.md"
+SEEN_KEY = "gtd-seen-version"  # localStorage: версия, которую человек уже видел на /changes (точка в меню SPA)
+T["ru"].update(changes="Что нового", changes_title="Что нового в GTD — история версий приложения Getting Things Done",
+               changes_desc="Что появилось и что исправлено в GTD онлайн: все версии приложения и Telegram-бота, "
+                            "новые сверху.")
+T["en"].update(changes="What's new", changes_title="What's new in GTD — release history of the Getting Things Done app",
+               changes_desc="What's new and what got fixed in GTD online: every version of the app and the Telegram "
+                            "bot, newest first.")
+CHANGES = {
+    "ru": {"lead": "Изменения GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
+           "dev": "Это локальная сборка (dev).",
+           "src": f'Тот же список на английском — <a href="{CHANGELOG_URL}">CHANGELOG.md</a> на GitHub.',
+           "sections": {"Added": "Новое", "Changed": "Изменено", "Fixed": "Исправлено", "Security": "Безопасность"},
+           "months": ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
+                      "октября", "ноября", "декабря")},
+    "en": {"lead": "What changed in GTD, version by version, newest first.", "now": "You are using {v}.",
+           "dev": "This is a local build (dev).",
+           "src": f'Also on GitHub: <a href="{CHANGELOG_URL}">CHANGELOG.md</a>.',
+           "sections": {"Added": "Added", "Changed": "Changed", "Fixed": "Fixed", "Security": "Security"},
+           "months": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
+                      "October", "November", "December")},
+}
+
+
+def human_date(day: str, lang: str) -> str:
+    y, m, d = (int(x) for x in day.split("-"))
+    return f"{d} {CHANGES[lang]['months'][m - 1]} {y}"
+
+
+def entry_html(text: str) -> str:
+    """Текст пункта: экранируем, `код` — в <code>. Другой разметки в CHANGELOG.md не ждём."""
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(text, quote=False))
+
+
+def release_html(r: changelog.Release, lang: str) -> str:
+    c, i = CHANGES[lang], 1 if lang == "ru" else 0
+    secs = "".join(f'<h3>{c["sections"][name]}</h3><ul>'
+                   + "".join(f"<li>{entry_html(e[i])}</li>" for e in r.sections[name]) + "</ul>"
+                   for name in changelog.SECTIONS if name in r.sections)
+    return (f'<section class="rel" id="v{r.version}"><h2>v{r.version} '
+            f'<span class="note">{human_date(r.date, lang)}</span></h2>{secs}</section>')
+
+
+def changes(base: str, lang: str, ga: str) -> str:
+    """Страница «Что нового» — такая же лёгкая, как /about. Открыл её — текущая версия считается увиденной."""
+    c, path = CHANGES[lang], PATHS[(lang, "changes")]
+    now = c["now"].format(v=VERSION_LABEL) if VERSION else c["dev"]
+    body = (f'<h1>{T[lang]["changes"]}</h1><p class="lead">{c["lead"]} {now}</p>'
+            + "".join(release_html(r, lang) for r in RELEASES) + f'<p class="note" style="margin-top:32px">{c["src"]}</p>')
+    title = json.dumps(f'GTD — {T[lang]["changes"]}', ensure_ascii=False)
+    track = (f"<script>try{{ localStorage.setItem('{SEEN_KEY}', '{VERSION_LABEL}'); }}catch(e){{}}\n"
+             "if(typeof gtag === 'function') gtag('event', 'page_view', "
+             f"{{page_location: location.origin + '{path}', page_title: {title}}});</script>")
+    return f"""<!doctype html>
+<html lang="{lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+{head(base, lang, "changes")}
+{ICONS}
+{ga}
+{CF_BEACON}
+{BASE_CSS}
+</head>
+<body>
+<div class="pub">{topbar(lang, "changes")}{body}{footer(lang, bool(ga))}</div>
+{track}
+</body>
+</html>"""
+
+
 def robots(base: str) -> str:
-    return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /en/",
+    return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /changes", "Allow: /en/",
                       *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/", "/i/")),
                       "", f"Sitemap: {base}/sitemap.xml", ""])
 
