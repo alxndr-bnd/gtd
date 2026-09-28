@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-28
+
 ### Added
 - A "What's new" page with the history of changes; the current version is shown at the bottom of every page and in the app menu.
   - RU: Страница «Что нового» с историей изменений; текущая версия — внизу каждой страницы и в меню приложения.
@@ -178,7 +180,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/alxndr-bnd/gtd/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/alxndr-bnd/gtd/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/alxndr-bnd/gtd/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/alxndr-bnd/gtd/compare/v0.13.0...v0.14.0
