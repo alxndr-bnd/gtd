@@ -140,30 +140,31 @@ def test_backfill_keeps_current_order(client, login):
     assert titles(client, "status=next") == ["первая", "вторая", "третья"]
     assert titles(client, f"status=all&project_id={pid}") == ["первая", "вторая", "третья"]
     new = client.post("/api/capture", json={"text": "новая #П"}).json()
-    assert titles(client, "status=next")[0] == titles(client, f"status=all&project_id={pid}")[0] == new["title"]
+    assert titles(client, "status=next")[-1] == titles(client, f"status=all&project_id={pid}")[-1] == new["title"]
 
 
-def test_new_and_moved_tasks_go_on_top(client, login):
+def test_new_and_moved_tasks_go_to_the_bottom(client, login):
+    """Как до ручного порядка: новые — в конец списка; перенесённая в другой список или проект — в его конец."""
     login(client)
     a = add(client, "a", "next")
     b = add(client, "b", "next")
-    assert titles(client, "status=next") == ["b", "a"]  # новые — сверху
+    assert titles(client, "status=next") == ["a", "b"]
+    assert move(client, b["id"], nxt=a["id"]).status_code == 200  # переставили вручную: b a
     c = add(client, "c")
     assert titles(client, "status=inbox") == ["c"]
     client.patch(f"/api/items/{c['id']}", json={"status": "next"})
-    assert titles(client, "status=next") == ["c", "b", "a"]  # перенесённая — наверх нового списка
-    client.patch(f"/api/items/{a['id']}", json={"title": "a", "status": "next"})  # тот же список — место прежнее
-    assert titles(client, "status=next") == ["c", "b", "a"]
+    assert titles(client, "status=next") == ["b", "a", "c"]  # перенесённая — в конец, ручной порядок цел
+    client.patch(f"/api/items/{b['id']}", json={"title": "b", "status": "next"})  # тот же список — место прежнее
+    assert titles(client, "status=next") == ["b", "a", "c"]
     pid = client.post("/api/projects", json={"title": "П"}).json()["id"]
     for it in (a, b):
         client.patch(f"/api/items/{it['id']}", json={"project_id": pid})
-    assert titles(client, f"status=all&project_id={pid}") == ["b", "a"]  # добавленная в проект — наверх проекта
+    assert titles(client, f"status=all&project_id={pid}") == ["a", "b"]  # в проект — в конец проекта
 
 
 def test_reorder_updates_one_row_and_persists(client, login):
     uid = login(client)
-    a, b, c, d = (add(client, t, "next")["id"] for t in "dcba")  # на экране: a b c d
-    a, b, c, d = d, c, b, a
+    a, b, c, d = (add(client, t, "next")["id"] for t in "abcd")
     assert titles(client, "status=next") == list("abcd")
     before = positions(uid)
     r = move(client, d, prev=a, nxt=b)
@@ -181,8 +182,7 @@ def test_reorder_updates_one_row_and_persists(client, login):
 
 def test_reorder_when_gap_is_exhausted(client, login):
     uid = login(client)
-    a, b, c = (add(client, t, "waiting")["id"] for t in "cba")
-    a, c = c, a
+    a, b, c = (add(client, t, "waiting")["id"] for t in "abc")
     A.run("update items set position=%s where id=%s", (1.0, a))
     A.run("update items set position=%s where id=%s", (math.nextafter(1.0, 2), b))  # между ними места нет
     A.run("update items set position=%s where id=%s", (5.0, c))
@@ -208,7 +208,7 @@ def test_reorder_checks_ownership_and_list(new_client, login):
     assert move(me, a, nxt=b, scope="project").status_code == 400  # задача без проекта
     assert me.post(f"/api/items/{a}/move", json={}).status_code == 200
     assert new_client().post(f"/api/items/{a}/move", json={}).status_code == 401
-    assert titles(me, "status=next") == ["b", "a"] and titles(other, "status=next") == ["чужая"]
+    assert titles(me, "status=next") == ["a", "b"] and titles(other, "status=next") == ["чужая"]
 
 
 def test_project_order_is_separate_from_list_order(client, login):
@@ -217,20 +217,22 @@ def test_project_order_is_separate_from_list_order(client, login):
     y = add(client, "y #П", "waiting")["id"]
     z = add(client, "z #П", "next")["id"]
     pid = client.get("/api/projects").json()[0]["id"]
-    assert titles(client, f"status=all&project_id={pid}") == ["z", "y", "x"]
-    assert move(client, x, nxt=z, scope="project").status_code == 200
-    assert titles(client, f"status=all&project_id={pid}") == ["x", "z", "y"]
-    assert titles(client, "status=next") == ["z", "x"]  # в Next — прежний порядок
+    assert titles(client, f"status=all&project_id={pid}") == ["x", "y", "z"]
+    assert move(client, z, nxt=x, scope="project").status_code == 200
+    assert titles(client, f"status=all&project_id={pid}") == ["z", "x", "y"]
+    assert titles(client, "status=next") == ["x", "z"]  # в Next — прежний порядок
     assert move(client, y, nxt=x, scope="list").status_code == 400  # waiting и next — разные списки
     assert move(client, y, nxt=x, scope="project").status_code == 200  # а проект у них общий
 
 
-def test_bot_next_button_puts_task_on_top(tg):
+def test_bot_next_button_puts_task_at_the_bottom(tg):
     from conftest import bot_message
-    bot_message("первая @дом")
     bot_message("разобрать потом")
+    bot_message("первая @дом")
     uid = A.row("select id from users where tg_id=777")["id"]
     iid = A.row("select id from items where user_id=%s and status='inbox'", (uid,))["id"]
     bot_callback(f"next:{iid}")
     assert [r["title"] for r in A.rows("select title from items where user_id=%s and status='next' "
-                                       "order by position", (uid,))] == ["разобрать потом", "первая"]
+                                       "order by position", (uid,))] == ["первая", "разобрать потом"]
+    bot_message("/next")
+    assert tg[-1][1]["text"].index("первая") < tg[-1][1]["text"].index("разобрать потом")  # /next — в том же порядке

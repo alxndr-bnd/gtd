@@ -721,12 +721,12 @@ def until(cond, what):
 def order_user(w, lang="ru"):
     uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) "
                 "returning id", (int(time.time()), lang))
-    a, b, c = (A.capture(uid, f"{t} @дом")["id"] for t in ("Третья", "Вторая", "Первая"))
+    a, b, c = (A.capture(uid, f"{t} @дом")["id"] for t in ("Первая", "Вторая", "Третья"))
     w.goto("/dev-login")
     w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
     w.page.click('nav > a[data-view="next"]')
     w.wait('nav > a.on[data-view="next"]', f"[{lang}] Next")
-    return uid, (c, b, a)  # на экране: Первая, Вторая, Третья — новые сверху
+    return uid, (a, b, c)  # на экране: Первая, Вторая, Третья — новые в конце
 
 
 @pytest.mark.parametrize("lang", ["ru", "en"])
