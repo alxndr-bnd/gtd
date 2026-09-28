@@ -21,8 +21,9 @@ To run your own copy on any Docker host, see [self-host.md](self-host.md) instea
 scripts/release_minor.sh "What changed" [new_file …]
 ```
 
-Tests → `git add -u` (new files only when listed explicitly) → commit → next tag `vX.Y.0` → push →
-GitHub Release with generated notes (skipped with a warning if `gh` is missing or fails).
+CHANGELOG.md `[Unreleased]` → `[X.Y.0] - today` (no entries — no release; see "Releasing" in the README) →
+tests → `git add -u` (new files only when listed explicitly) → commit → next tag `vX.Y.0` → push →
+GitHub Release with the version's English CHANGELOG entries (skipped with a warning if `gh` is missing or fails).
 Releases are cut from `main` only.
 
 The tag triggers `.github/workflows/deploy.yml`:
@@ -51,7 +52,8 @@ the tag. GCP auth is keyless (Workload Identity Federation) — no keys anywhere
 Configuration:
 
 - Non-secret env vars — `.github/deploy.env.yaml` (`BASE_URL`, `TZ`, `SMTP_USER`, `ADMIN_USER_IDS`,
-  `GA_MEASUREMENT_ID`). `SENTRY_RELEASE` is added from the tag (`v0.3.0` → `gtd@0.3.0`).
+  `GA_MEASUREMENT_ID`). Added from the tag: `SENTRY_RELEASE` (`v0.3.0` → `gtd@0.3.0`) and `APP_VERSION`
+  (`0.3.0`) — the version shown in the footer, the app menu and `/changes`.
 - Secrets — Secret Manager via `--set-secrets` in the workflow: `gtd-database-url`, `GOOGLE_CLIENT_ID`,
   `EMAIL_HOST_PASSWORD` (→ `SMTP_PASSWORD`), `gtd-sentry-dsn`, `gtd-cron-secret`, and
   `gtd-telegram-bot-token` (optional: while the secret has no enabled version, the service deploys without the bot).

@@ -241,6 +241,8 @@ def test_app_sections(watch, monkeypatch, lang):
     ("/i/1", 200, '#root .login a[href="/dev-login"]'),  # ссылка на задачу без входа — экран входа
     ("/about", 200, "body"),
     ("/en/about", 200, "body"),
+    ("/changes", 200, "section.rel"),
+    ("/en/changes", 200, "section.rel"),
     ("/no-such-page", 404, "body"),
     ("/en/no-such-page", 404, "body"),
 ])
@@ -249,6 +251,29 @@ def test_public_pages(watch, path, status, ready):
     w.goto(path, status)
     w.page.wait_for_load_state("load")
     w.wait(ready, path)
+
+
+def test_menu_whats_new_and_version(watch, monkeypatch):
+    """SERBITO-329: в меню — «Что нового» с работающей версией. Первый визит запоминает версию молча;
+    вышла новая — у ссылки точка, пока человек не откроет /changes."""
+    import pages as P
+    A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s)", (int(time.time()),))
+    w = watch("ru")
+    w.goto("/dev-login")
+    link = 'nav > a.changes[href="/changes"]'
+    w.wait(link, "меню: Что нового")
+    assert w.page.locator(link).inner_text().endswith("dev") and not w.page.locator(link + " .newdot").count()
+    assert w.page.evaluate("localStorage.getItem('gtd-seen-version')") == "dev"
+    monkeypatch.setattr(P, "VERSION", "0.99.0")  # «вышел релиз»
+    monkeypatch.setattr(P, "VERSION_LABEL", "v0.99.0")
+    w.page.reload()
+    w.wait(link + " .newdot", "точка: версия новее увиденной")
+    w.page.click(link)
+    w.wait("section.rel", "/changes из меню")
+    w.goto("/")
+    w.wait(link, "меню после /changes")
+    assert "v0.99.0" in w.page.locator(link).inner_text() and not w.page.locator(link + " .newdot").count()
+    w.check("меню: Что нового")
 
 
 @pytest.mark.parametrize("lang", ["ru", "en"])

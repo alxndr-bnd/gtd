@@ -1,4 +1,5 @@
-"""Публичные страницы: лендинг, «Как это работает», политика конфиденциальности, SEO-теги, robots.txt, sitemap.xml, noindex для /i/N."""
+"""Публичные страницы: лендинг, «Как это работает», политика конфиденциальности, «Что нового», SEO-теги, robots.txt,
+sitemap.xml, noindex для /i/N."""
 import json
 import os
 import re
@@ -10,7 +11,8 @@ import app as A
 import pages as P
 
 BASE = "http://localhost:8000"
-PUBLIC = {"/": "ru", "/about": "ru", "/en/": "en", "/en/about": "en", "/privacy": "ru", "/en/privacy": "en"}
+PUBLIC = {"/": "ru", "/about": "ru", "/en/": "en", "/en/about": "en", "/privacy": "ru", "/en/privacy": "en",
+          "/changes": "ru", "/en/changes": "en"}
 TM = {"ru": "GTD® и Getting Things Done® — товарные знаки David Allen Company. Сервис независимый и не связан с автором метода",
       "en": "GTD® and Getting Things Done® are trademarks of the David Allen Company"}
 
@@ -35,7 +37,8 @@ def test_public_page_seo_tags(client, path, lang):
     assert meta(h, "twitter:card") == "summary_large_image"
     # hreflang — пары ru/en и x-default на русскую версию
     pair = {"/": ("/", "/en/"), "/en/": ("/", "/en/"), "/about": ("/about", "/en/about"), "/en/about": ("/about", "/en/about"),
-            "/privacy": ("/privacy", "/en/privacy"), "/en/privacy": ("/privacy", "/en/privacy")}[path]
+            "/privacy": ("/privacy", "/en/privacy"), "/en/privacy": ("/privacy", "/en/privacy"),
+            "/changes": ("/changes", "/en/changes"), "/en/changes": ("/changes", "/en/changes")}[path]
     for hl, p in (("ru", pair[0]), ("en", pair[1]), ("x-default", pair[0])):
         assert f'<link rel="alternate" hreflang="{hl}" href="{BASE}{p}">' in h
     ld = json.loads(re.search(r'<script type="application/ld\+json">(.+?)</script>', h).group(1))
@@ -176,7 +179,7 @@ def test_robots(client):
     r = client.get("/robots.txt")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
     lines = r.text.splitlines()
-    for p in ("/", "/about", "/privacy", "/en/"):
+    for p in ("/", "/about", "/privacy", "/changes", "/en/"):
         assert f"Allow: {p}" in lines
     for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/", "/i/"):
         assert f"Disallow: {p}" in lines
@@ -238,3 +241,70 @@ def test_absolute_urls_follow_base_url(monkeypatch, client):
     assert '<link rel="canonical" href="https://gtd.example/en/about">' in h
     assert "https://gtd.example/og-en.png" in h
     assert "Sitemap: https://gtd.example/sitemap.xml" in client.get("/robots.txt").text
+
+
+# ── «Что нового» и версия (SERBITO-329) ──
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_changes_page_lists_releases_newest_first(client, lang):
+    h = client.get(P.PATHS[(lang, "changes")]).text
+    body = h[h.index("<h1>"):h.index("<footer>")]
+    assert ("<h1>Что нового</h1>" if lang == "ru" else "<h1>What's new</h1>") in body
+    versions = re.findall(r'<section class="rel" id="v([\d.]+)"><h2>v\1 ', body)
+    assert versions == [r.version for r in P.RELEASES] and versions[-1] == "0.1.0" and "Unreleased" not in body
+    assert ("27 сентября 2026" if lang == "ru" else "27 September 2026") in body
+    assert ("<h3>Исправлено</h3>" if lang == "ru" else "<h3>Fixed</h3>") in body
+    for r in P.RELEASES:  # каждый пункт — на языке страницы, и только на нём
+        for en, ru in r.entries:
+            assert P.entry_html(ru if lang == "ru" else en) in body
+            assert P.entry_html(en if lang == "ru" else ru) not in body
+    assert f'href="{P.CHANGELOG_URL}"' in body and "function loginScreen" not in h
+    # открыл страницу — текущая версия увидена: точка в меню приложения гаснет
+    assert f"localStorage.setItem('{P.SEEN_KEY}', '{P.VERSION_LABEL}')" in h
+
+
+@pytest.mark.parametrize("path, lang", PUBLIC.items())
+def test_footer_links_changes_and_shows_version(client, monkeypatch, path, lang):
+    monkeypatch.setattr(P, "VERSION", "0.16.0")
+    monkeypatch.setattr(P, "VERSION_LABEL", "v0.16.0")
+    h = client.get(path).text
+    foot = h[h.index("<footer>"):h.index("</footer>")]
+    link = "Что нового" if lang == "ru" else "What's new"
+    assert f'<a href="{P.PATHS[(lang, "changes")]}">{link}</a> · <span class="ver">v0.16.0</span>' in foot
+
+
+def test_version_comes_from_deploy_env(monkeypatch):
+    """APP_VERSION ставит deploy.yml из тега; локально его нет — «dev»."""
+    import importlib
+    try:
+        monkeypatch.setenv("APP_VERSION", "0.16.0")
+        assert importlib.reload(P).VERSION_LABEL == "v0.16.0"
+        monkeypatch.setenv("APP_VERSION", "v0.17.0<script>")
+        assert importlib.reload(P).VERSION_LABEL == "v0.17.0script"  # в HTML и JS — только безопасные символы
+        monkeypatch.delenv("APP_VERSION")
+        assert importlib.reload(P).VERSION_LABEL == "dev"
+    finally:
+        monkeypatch.delenv("APP_VERSION", raising=False)
+        importlib.reload(P)
+    deploy = open(os.path.join(os.path.dirname(P.__file__), ".github", "workflows", "deploy.yml")).read()
+    assert 'echo "APP_VERSION: \\"${GITHUB_REF_NAME#v}\\"" >> "$ENV_FILE"' in deploy
+
+
+def test_changes_page_says_which_version_runs(client, monkeypatch):
+    assert "Это локальная сборка (dev)." in client.get("/changes").text
+    monkeypatch.setattr(P, "VERSION", "0.16.0")
+    monkeypatch.setattr(P, "VERSION_LABEL", "v0.16.0")
+    assert "You are using v0.16.0." in client.get("/en/changes").text
+
+
+def test_config_reports_version(client, monkeypatch):
+    assert client.get("/api/config").json()["version"] == "dev"
+    monkeypatch.setattr(P, "VERSION_LABEL", "v0.16.0")
+    assert client.get("/api/config").json()["version"] == "v0.16.0"
+
+
+def test_app_menu_links_to_changes():
+    page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+    assert "href=\"${t('changes_url')}\"" in page and "${changesLink()}" in page
+    assert '"changes_url": "/changes"' in page and '"changes_url": "/en/changes"' in page
+    assert "localStorage.getItem('gtd-seen-version')" in page and P.SEEN_KEY == "gtd-seen-version"

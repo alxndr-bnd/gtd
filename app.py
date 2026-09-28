@@ -1581,7 +1581,8 @@ def config(request: Request):
     # lang — язык браузера по его Accept-Language (SPA шлёт этот запрос без своего заголовка): «Авто» на сайте
     return {"bot": BOT_USERNAME if TOKEN else "", "dev": DEV, "google": GOOGLE_CLIENT_ID,
             "email": bool(SMTP_PASSWORD or DEV), "user": bool(session_user(request)),
-            "lang": pages.pick_lang(request.headers.get("accept-language"))}
+            "lang": pages.pick_lang(request.headers.get("accept-language")),
+            "version": pages.VERSION_LABEL}  # работающая версия — в меню рядом с «Что нового» (SERBITO-329)
 
 
 @app.post("/tg/webhook")
@@ -1947,6 +1948,16 @@ def privacy_page(request: Request):
 @app.get("/en/privacy")
 def privacy_page_en(request: Request):
     return HTMLResponse(pages.privacy(BASE_URL, "en", ga_snippet(request)))
+
+
+@app.get("/changes")
+def changes_ru(request: Request):
+    return HTMLResponse(pages.changes(BASE_URL, "ru", ga_snippet(request)))
+
+
+@app.get("/en/changes")
+def changes_en(request: Request):
+    return HTMLResponse(pages.changes(BASE_URL, "en", ga_snippet(request)))
 
 
 @app.get("/robots.txt")
