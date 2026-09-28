@@ -99,10 +99,12 @@ jobs:
           else
             echo "::notice::gtd-telegram-bot-token пуст — деплой без Telegram-бота (scripts/setup_gcp.sh добавит токен)."
           fi
-          # Релиз для Sentry — из тега (v0.3.0 → gtd@0.3.0), к несекретным env из файла
+          # Версия из тега (v0.3.0 → 0.3.0), к несекретным env из файла: релиз для Sentry (gtd@0.3.0)
+          # и APP_VERSION — её видно в подвале сайта, в меню приложения и на /changes
           ENV_FILE="$RUNNER_TEMP/deploy.env.yaml"
           cp .github/deploy.env.yaml "$ENV_FILE"
           echo "SENTRY_RELEASE: \"gtd@${GITHUB_REF_NAME#v}\"" >> "$ENV_FILE"
+          echo "APP_VERSION: \"${GITHUB_REF_NAME#v}\"" >> "$ENV_FILE"
           COMMON=(
             --image "$IMAGE"
             --region "$REGION"

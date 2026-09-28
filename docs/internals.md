@@ -55,7 +55,11 @@ App sections: Inbox · Next (filter by @context) · Waiting · Calendar/reminder
 action) · Someday · Reference · Done · Weekly Review.
 
 Public pages are `pages.py`; the server renders the text (for search engines): landing for guests on `/` and
-`/en/`, “How it works” on `/about` and `/en/about`, `robots.txt`, `sitemap.xml`. Preview images `static/og*.png`
+`/en/`, “How it works” on `/about` and `/en/about`, privacy policy on `/privacy`, “What's new” on `/changes`
+(rendered from `CHANGELOG.md` via `changelog.py`, parsed once at startup), `robots.txt`, `sitemap.xml`.
+The running version (`APP_VERSION` from the deploy tag, else `dev`) is in every public footer and, via
+`/api/config`, in the app menu next to “What's new”; a dot marks a version not yet seen on `/changes`
+(localStorage `gtd-seen-version`). Preview images `static/og*.png`
 come from `scripts/og_image.py`. The logo is the “Inbox” mark (`pages.mark()`, color `#0F766E` — also the site
 accent); favicon and phone icons in `static/` are built by `scripts/icons.py`.
 Install to home screen — `/manifest.webmanifest` (`pages.manifest()`, description in the browser language), no

@@ -46,6 +46,7 @@ At least one sign-in method is required: email (SMTP), Google, or the Telegram b
 | `CRON_SECRET` | — | Secret for `POST /tasks/reminders`; needed only in webhook mode |
 | `ADMIN_USER_IDS` | — | Comma-separated account ids that see the in-app Statistics |
 | `SENTRY_DSN` | — | Send errors to your Sentry |
+| `APP_VERSION` | `dev` | Version shown in the footer, the app menu and `/changes`, e.g. `0.16.0` (the tag you built from) |
 | `DEV` | — | `1` = dev login and codes in the log. Local only |
 
 `GA_MEASUREMENT_ID` is ignored outside the reference domain, so self-hosted instances send nothing to Google Analytics.

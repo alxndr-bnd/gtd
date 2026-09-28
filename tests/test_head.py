@@ -8,8 +8,8 @@ import pytest
 
 import app as A
 
-PATHS = ["/", "/en/", "/about", "/en/about", "/privacy", "/en/privacy", "/i/1", "/manifest.webmanifest",
-         "/robots.txt", "/sitemap.xml", *("/" + name for name in A.ROOT_FILES)]
+PATHS = ["/", "/en/", "/about", "/en/about", "/privacy", "/en/privacy", "/changes", "/en/changes", "/i/1",
+         "/manifest.webmanifest",         "/robots.txt", "/sitemap.xml", *("/" + name for name in A.ROOT_FILES)]
 HTML = [(b"accept", b"text/html")]
 
 

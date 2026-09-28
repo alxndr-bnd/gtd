@@ -22,7 +22,8 @@ FastAPI + PostgreSQL, one container. English and Russian.
 - **Keyboard-first** web app, installable to the phone home screen.
 - **Privacy:** analytics never include task content, emails or user ids.
 
-Details for contributors: [docs/internals.md](docs/internals.md).
+Details for contributors: [docs/internals.md](docs/internals.md). What changed in each version:
+[CHANGELOG.md](CHANGELOG.md) (also on the site: [What's new](https://gtd.serbito.rs/en/changes)).
 
 ## Run locally
 
@@ -57,6 +58,21 @@ A temporary database in the local Postgres (`brew services start postgresql@17`,
 and dropped automatically; Telegram, Google and email are stubbed. `tests/test_browser_smoke.py` opens every
 section of the app and the public pages in headless Chromium and fails on any JS error. The release script runs
 the tests before tagging.
+
+## Releasing
+
+1. With every user-facing change, add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md):
+   `### Added` / `Changed` / `Fixed` / `Security`, one line `- English text` and right under it
+   `  - RU: Русский текст`. Write what users can now do or what got fixed — not commit messages.
+2. On `main`: `scripts/release_minor.sh "Commit message" [new_file …]`. It picks the next tag `vX.Y.0` and
+   **refuses to release** if `[Unreleased]` has no entries. Otherwise it renames `[Unreleased]` to
+   `## [X.Y.0] - <today>` (with a fresh empty `[Unreleased]` on top), runs the tests, commits everything
+   in one release commit, tags, pushes, and creates the GitHub Release with that version's English entries.
+3. The tag deploys ([docs/deploy-gcp.md](docs/deploy-gcp.md)) with `APP_VERSION` from the tag: the footer,
+   the app menu and `/changes` show it (`dev` when unset, e.g. locally).
+
+`/changes` and `/en/changes` render CHANGELOG.md, parsed once at startup by `changelog.py`;
+`tests/test_changelog.py` checks the format, both languages and that every tag has an entry.
 
 ## Deploy
 

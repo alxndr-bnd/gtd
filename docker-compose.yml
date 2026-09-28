@@ -46,6 +46,8 @@ services:
       CRON_SECRET: ${CRON_SECRET:-}
       ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Версия в подвале, меню и на /changes (например 0.16.0 — тег, с которого собран образ); пусто — «dev»
+      APP_VERSION: ${APP_VERSION:-}
 
   # Только при https BASE_URL (вебхук): в этом режиме напоминания будит внешний будильник.
   # Включается так: CRON_SECRET=… docker compose --profile https up -d
