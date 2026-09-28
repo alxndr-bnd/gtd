@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-28
+
 ### Security
 - Sign-in codes sent by email are better protected against guessing: after too many wrong codes, signing in with a code to that address is paused for 24 hours, and the number of code emails per day is limited.
   - RU: Коды входа из письма надёжнее защищены от подбора: после слишком многих неверных кодов вход по коду на этот адрес закрывается на сутки, а число писем с кодом в день ограничено.
@@ -196,7 +198,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/alxndr-bnd/gtd/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/alxndr-bnd/gtd/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/alxndr-bnd/gtd/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/alxndr-bnd/gtd/compare/v0.15.0...v0.16.0
