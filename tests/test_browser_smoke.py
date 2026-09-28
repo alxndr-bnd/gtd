@@ -633,3 +633,69 @@ def test_inbox_what_to_do_next(watch, lang):
     w.wait("#toast:not([hidden])", f"[{lang}] перенос")
     assert A.row("select status from items where id=%s", (wait,))["status"] == "next"
     w.check(f"[{lang}] итог")
+
+
+# ── Выполненные задачи в проекте (SERBITO-327) ──
+DONE_TEXT = {"ru": {"hide": "Скрыть выполненные", "list": "Выполненные — в списке", "section": "Выполненные — отдельно",
+                    "sec": "Выполненные (2)"},
+             "en": {"hide": "Hide completed", "list": "Show completed in the list", "section": "Show completed separately",
+                    "sec": "Completed (2)"}}
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_project_completed_modes(watch, lang):
+    """Три режима: скрыть; в списке (зачёркнутые, с галочкой); отдельно — открытые, затем свёрнутый блок
+    «Выполненные (N)», свежие сверху. Выбор запоминается в проекте и переживает перезагрузку."""
+    tx = DONE_TEXT[lang]
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) "
+                "returning id", (int(time.time()), lang))
+    now = int(time.time())
+    open_id = A.capture(uid, "Открытая #Кухня")["id"]
+    old = A.capture(uid, "Готова давно #Кухня")["id"]
+    fresh = A.capture(uid, "Готова только что #Кухня")["id"]
+    A.run("update items set status='done', completed_at=%s where id=%s", (now - 7200, old))
+    A.run("update items set status='done', completed_at=%s where id=%s", (now - 60, fresh))
+    pid = A.row("select id from projects where user_id=%s", (uid,))["id"]
+    w = watch(lang)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    w.page.click('nav > a[data-view="projects"]')
+    w.page.click("main .it.pj .t")
+    w.wait("main select.dmode", f"[{lang}] проект")
+    cards = lambda sel="main .it[data-id]": [int(x) for x in w.page.eval_on_selector_all(  # noqa: E731
+        sel, "els => els.map(e => e.dataset.id)")]
+    labels = w.page.eval_on_selector_all("main select.dmode option", "els => els.map(e => e.textContent)")
+    assert labels == [tx["hide"], tx["list"], tx["section"]]
+    assert w.page.input_value("main select.dmode") == "hide" and cards() == [open_id]  # новый проект — скрывает
+
+    w.page.select_option("main select.dmode", "list")
+    w.wait(f'main .it.done[data-id="{fresh}"]', f"[{lang}] в списке")
+    assert sorted(cards()) == sorted([open_id, old, fresh])
+    assert w.page.is_checked(f'main .it[data-id="{old}"] input[data-act="toggle"]')
+    assert w.page.evaluate(f"""getComputedStyle(document.querySelector('main .it[data-id="{old}"] .t'))
+                               .textDecorationLine""") == "line-through"
+    assert A.row("select done_mode from projects where id=%s", (pid,))["done_mode"] == "list"
+
+    w.page.select_option("main select.dmode", "section")
+    w.wait("main details.donesec", f"[{lang}] отдельно")
+    assert cards("main > .it[data-id]") == [open_id]
+    assert w.page.inner_text("main details.donesec summary") == tx["sec"]
+    assert not w.page.is_visible(f'main .it[data-id="{fresh}"]')  # блок свёрнут
+    w.page.click("main details.donesec summary")
+    assert cards("main details.donesec .it") == [fresh, old]  # свежие сверху
+    w.page.reload()  # после перезагрузки — снова Inbox: открываем проект заново
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка")
+    w.page.click('nav > a[data-view="projects"]')
+    w.page.click("main .it.pj .t")
+    w.wait("main details.donesec", f"[{lang}] после перезагрузки")
+    assert w.page.input_value("main select.dmode") == "section"
+
+    # Выполненная — рабочая карточка: снять галочку — вернуть в работу
+    w.page.click("main details.donesec summary")
+    w.page.click(f'main .it[data-id="{fresh}"] input[data-act="toggle"]')
+    w.wait(f'main > .it[data-id="{fresh}"]', f"[{lang}] вернулась в открытые")
+    assert A.row("select status from items where id=%s", (fresh,))["status"] == "next"
+    w.page.select_option("main select.dmode", "hide")
+    w.page.wait_for_function("!document.querySelector('main details.donesec')", timeout=WAIT_MS)
+    assert sorted(cards()) == sorted([open_id, fresh])
+    w.check(f"[{lang}] итог")

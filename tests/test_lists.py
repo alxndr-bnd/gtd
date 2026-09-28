@@ -1,4 +1,4 @@
-"""Списки задач: «Скоро срок» на экране Inbox (SERBITO-326)."""
+"""Списки задач: «Скоро срок» на экране Inbox (SERBITO-326), выполненные в проекте (SERBITO-327)."""
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -60,3 +60,51 @@ def test_due_window_is_three_days(client, login):
     at = {d: add(client, f"через {d} дн.", "next", int((today + timedelta(days=d)).timestamp()))["id"]
           for d in (0, 3, 4)}
     assert ids(client, "status=due") == [at[0], at[3]]
+
+
+# ── SERBITO-327: выполненные задачи в проекте ──
+
+def project_items(client, pid, done=False):
+    return {i["title"]: i["status"] for i in
+            client.get(f"/api/items?status=all&project_id={pid}{'&done=1' if done else ''}").json()}
+
+
+def test_existing_projects_keep_showing_completed_new_ones_hide(client, login):
+    """Миграция: проекты, что были до неё, остаются как были — выполненные в списке; новые их скрывают."""
+    uid = login(client)
+    A.run("alter table projects drop column done_mode")  # база до SERBITO-327
+    old = A.run("insert into projects(user_id,title,created) values(%s,'Старый',0) returning id", (uid,))
+    A.run(A.SCHEMA)  # старт новой версии
+    new = client.post("/api/projects", json={"title": "Новый"}).json()["id"]
+    via_capture = A.capture(uid, "задача #Из_захвата")["project_id"]
+    modes = {p["id"]: p["done_mode"] for p in client.get("/api/projects").json()}
+    assert modes == {old: "list", new: "hide", via_capture: "hide"}
+    A.run(A.SCHEMA)  # повторный старт ничего не меняет
+    assert {p["id"]: p["done_mode"] for p in client.get("/api/projects").json()} == modes
+
+
+def test_done_mode_persists_per_project(new_client, login):
+    c = new_client()
+    login(c)
+    a = c.post("/api/projects", json={"title": "А"}).json()["id"]
+    b = c.post("/api/projects", json={"title": "Б"}).json()["id"]
+    assert c.patch(f"/api/projects/{a}", json={"done_mode": "section"}).json()["done_mode"] == "section"
+    assert c.patch(f"/api/projects/{a}", json={"done_mode": "weird"}).status_code == 400
+    assert {p["id"]: p["done_mode"] for p in c.get("/api/projects").json()} == {a: "section", b: "hide"}
+    c.patch(f"/api/projects/{b}", json={"done_mode": "list"})
+    assert {p["id"]: p["done_mode"] for p in c.get("/api/projects").json()} == {a: "section", b: "list"}
+    other = new_client()
+    login(other, "bob@example.com")
+    assert other.patch(f"/api/projects/{a}", json={"done_mode": "list"}).status_code == 404
+    assert A.row("select done_mode from projects where id=%s", (a,))["done_mode"] == "section"
+
+
+def test_project_items_completed_only_on_request(client, login):
+    login(client)
+    pid = client.post("/api/projects", json={"title": "П"}).json()["id"]
+    for text, status in (("открытая", None), ("ждёт", "waiting"), ("готово", "done"), ("в корзине", "trash")):
+        it = client.post("/api/capture", json={"text": text}).json()
+        client.patch(f"/api/items/{it['id']}", json={"project_id": pid, **({"status": status} if status else {})})
+    assert project_items(client, pid) == {"открытая": "inbox", "ждёт": "waiting"}
+    assert project_items(client, pid, done=True) == {"открытая": "inbox", "ждёт": "waiting", "готово": "done"}
+    assert len(client.get("/api/items?status=all").json()) == 4  # Weekly Review — по-прежнему всё

@@ -64,6 +64,10 @@ button.sm:hover{color:var(--tx)}
 .onbi{padding:3px 0} .onbi span{color:var(--mut);font-size:13px} .onbi.ok b{text-decoration:line-through;color:var(--mut)}
 .hero.onbh{padding-top:32px}
 .pj{cursor:pointer} .pj .warn{color:var(--warn)}
+.it.done{background:none}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
+.pjh select.dmode{font-size:12.5px;font-weight:400;color:var(--mut);padding:3px 6px;border:1px solid var(--bd);border-radius:8px;
+  background:var(--card);vertical-align:middle;max-width:100%}
+.donesec{margin-top:18px} .donesec summary{cursor:pointer;color:var(--mut);font-weight:600;padding:6px 0;margin-bottom:6px}
 .rv{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .rv h3{margin:0 0 6px;font-size:15px} .rv a{color:var(--ac);cursor:pointer}
 dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);width:min(480px,94vw);padding:18px}
@@ -234,7 +238,10 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "rename_project": "Переименовать проект", "delete_project_q": "Удалить проект «{title}»?",
   "project_tasks": "В нём задач: {n}. Что с ними сделать?", "project_no_tasks": "Задач в нём нет.",
   "del_keep": "Удалить проект, задачи оставить без проекта", "del_all": "Удалить проект вместе с задачами ({n})",
-  "del_project": "Удалить проект"
+  "del_project": "Удалить проект",
+  "done_mode": {"label": "Выполненные задачи", "hide": "Скрыть выполненные", "list": "Выполненные — в списке",
+    "section": "Выполненные — отдельно"},
+  "done_section": "Выполненные ({n})"
 },
 "en": {
   "views": {"inbox": "📥 Inbox", "next": "⏭ Next", "waiting": "⏳ Waiting", "scheduled": "📅 Calendar / reminders",
@@ -316,7 +323,10 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "rename_project": "Rename project", "delete_project_q": "Delete project “{title}”?",
   "project_tasks": "Tasks in this project: {n}. What should happen to them?", "project_no_tasks": "There are no tasks in it.",
   "del_keep": "Delete the project, keep its tasks without a project", "del_all": "Delete the project with its tasks ({n})",
-  "del_project": "Delete project"
+  "del_project": "Delete project",
+  "done_mode": {"label": "Completed tasks", "hide": "Hide completed", "list": "Show completed in the list",
+    "section": "Show completed separately"},
+  "done_section": "Completed ({n})"
 }
 }
 </script>
@@ -383,7 +393,10 @@ async function load(){
     if(S.view==='account') S.me = await api('/me');
     else if(S.view==='stats') S.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) S.items=[];
-    else if(S.view==='projects') S.items = await api('/items?status=all&project_id='+S.pid);
+    else if(S.view==='projects'){  // выполненные сервер отдаёт, только если проект их показывает (SERBITO-327)
+      const pj = S.projects.find(p=>p.id===S.pid);
+      S.items = await api(`/items?status=all&project_id=${S.pid}${pj && doneMode(pj)!=='hide' ? '&done=1' : ''}`);
+    }
     else if(S.view!=='review') S.items = await api('/items?status='+S.view);
     else S.items = await api('/items?status=all');
     // Экран Inbox — что делать дальше (SERBITO-326): под входящими «Скоро срок» и Next
@@ -667,10 +680,9 @@ function render(){
           :`<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
       body = items.map(itemHtml).join('') + sec('due-soon', t('due_soon'), t('due_hint'), due)
         + sec('next-sec', VIEWS[1][1], HELP.next, next);
-    } else body = `${pj?`<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2>#${esc(pj.title)}
-      <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
-      <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}`}
-      ${chips}${items.map(itemHtml).join('') || emptyHtml(pj ? 'project' : S.view, pj ? pj.title : '')}`;
+    } else if(pj) body = projectHtml(pj, items);
+    else body = `<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}
+      ${chips}${items.map(itemHtml).join('') || emptyHtml(S.view)}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
   if(S.view==='account'){ mountGoogle(); mountTelegram(); }
@@ -681,6 +693,28 @@ function render(){
   if(S.sel!=null){ S.sel = Math.min(S.sel, cards().length-1); if(S.sel<0) S.sel = null; }  // выбор переживает перерисовку
   if(S.sel!=null || S.zone==='nav') selDraw();
 }
+
+// Выполненные задачи проекта (SERBITO-327): hide — не видны; list — на своём месте в списке, приглушённые
+// и зачёркнутые; section — открытые, затем сворачиваемый блок «Выполненные (N)», свежие сверху
+const DONE_MODES = ['hide', 'list', 'section'];
+const doneMode = p => DONE_MODES.includes(p?.done_mode) ? p.done_mode : 'hide';
+function projectHtml(pj, items){
+  const mode = doneMode(pj), open = items.filter(i => i.status!=='done');
+  const done = items.filter(i => i.status==='done').sort((a,b) => (b.completed_at||0) - (a.completed_at||0));
+  const shown = mode==='list' ? items : open;
+  const dmode = `<select class="dmode" data-act="donemode" data-pid="${pj.id}" aria-label="${t('done_mode.label')}" title="${t('done_mode.label')}">
+    ${DONE_MODES.map(m => `<option value="${m}" ${m===mode?'selected':''}>${t('done_mode.'+m)}</option>`).join('')}</select>`;
+  const sec = mode==='section' && done.length ? `<details class="donesec" data-done-of="${pj.id}" ${S.doneOpen[pj.id]?'open':''}>
+    <summary>${t('done_section', {n:done.length})}</summary>${done.map(itemHtml).join('')}</details>` : '';
+  return `<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
+      <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
+      <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button>${dmode}</h2>
+    ${shown.map(itemHtml).join('') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
+}
+S.doneOpen = {};  // блок «Выполненные» раскрыт — по проектам, до перезагрузки страницы
+document.addEventListener('toggle', e => {
+  const d = e.target; if(d.dataset?.doneOf) S.doneOpen[d.dataset.doneOf] = d.open;
+}, true);  // toggle не всплывает — ловим на погружении
 
 function projectsHtml(){
   return `<h2>${L.views.projects}</h2><div class="hint">${t('projects_hint')}</div>
@@ -966,6 +1000,11 @@ document.addEventListener('click', async e => {
   if(el.dataset.pid && el.classList.contains('pj')){ S.pid=+el.dataset.pid; return load(); }
 });
 document.addEventListener('change', async e => {
+  if(e.target.dataset.act==='donemode'){  // режим показа выполненных — запоминается в проекте на сервере
+    const pid = +e.target.dataset.pid, p = await projApi(pid, 'PATCH', {done_mode:e.target.value});
+    S.projects = S.projects.map(x => x.id===pid ? {...x, done_mode:p.done_mode} : x);
+    return load();
+  }
   if(e.target.dataset.act==='toggle'){
     const id = +e.target.closest('.it').dataset.id;
     await moveItem(id, e.target.checked ? 'done' : 'next');
@@ -1004,7 +1043,7 @@ document.addEventListener('mousedown', e => {
 // ── Навигация с клавиатуры. Список: ↑↓ — карточки, Enter — открыть, ← — в меню, Esc — снять выбор.
 // Меню: ↑↓ — пункты, Enter — открыть раздел, → / Esc — обратно к списку.
 // Пока печатаешь в поле, открыта карточка или подсказки @/# — стрелки не трогаем.
-const cards = () => [...document.querySelectorAll('main .it')];
+const cards = () => [...document.querySelectorAll('main .it')].filter(c => c.getClientRects().length);  // без свёрнутых
 const menu = () => [...document.querySelectorAll('nav > a[data-view]')];  // без «Выйти»: случайный Enter не разлогинит
 function selDraw(){
   const list = cards();

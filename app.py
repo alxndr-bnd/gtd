@@ -93,6 +93,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 COOKIE_SECURE = BASE_URL.startswith("https")
 
 STATUSES = ("inbox", "next", "waiting", "someday", "reference", "done", "trash")
+DONE_MODES = ("hide", "list", "section")  # как проект показывает выполненные задачи (SERBITO-327)
 
 # ───────────────────────── DB ─────────────────────────
 if not DATABASE_URL:
@@ -108,9 +109,8 @@ if not DATABASE_URL:
 _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5,
                        kwargs={"row_factory": dict_row, "prepare_threshold": None}, open=True)
 
-with _pool.connection() as _c:
-    _c.execute(
-        """
+# Схема и миграции: идемпотентны, выполняются при каждом старте
+SCHEMA = """
 create table if not exists users(
   id bigserial primary key, tg_id bigint unique, name text, created bigint);
 create table if not exists sessions(
@@ -162,8 +162,14 @@ create table if not exists activity(
 alter table users add column if not exists lang text;
 -- language_code из последнего апдейта Telegram: на нём «авто»-пользователю приходят напоминания (в них апдейта нет)
 alter table users add column if not exists tg_lang text;
+-- Выполненные задачи в проекте (SERBITO-327): hide — скрыть, list — в общем списке, section — отдельным блоком.
+-- Существующие проекты получают list — так они выглядели до этого; новые по умолчанию скрывают выполненные
+alter table projects add column if not exists done_mode text not null default 'list';
+alter table projects alter column done_mode set default 'hide';
 """
-    )
+
+with _pool.connection() as _c:
+    _c.execute(SCHEMA)
 
 
 def run(sql, args=()):
@@ -1638,7 +1644,8 @@ def due_cutoff(now: datetime | None = None) -> int:
 
 
 @app.get("/api/items")
-def list_items(status: str = "inbox", project_id: int | None = None, uid: int = Depends(current_user)):
+def list_items(status: str = "inbox", project_id: int | None = None, done: bool = False,
+               uid: int = Depends(current_user)):
     where, args = "i.user_id=%s", [uid]
     if status == "scheduled":
         where += " and i.remind_at is not null and i.status not in ('done','trash')"
@@ -1656,6 +1663,8 @@ def list_items(status: str = "inbox", project_id: int | None = None, uid: int = 
     if project_id:
         where += " and i.project_id=%s"
         args.append(project_id)
+        if status == "all":  # экран проекта: без корзины; выполненные — только если он их показывает (done=1)
+            where += " and i.status not in ('trash','done')" if not done else " and i.status<>'trash'"
     return rows(f"{ITEM_SQL} where {where} order by {order} limit 500", args)
 
 
@@ -1746,6 +1755,10 @@ def patch_project(pid: int, body: dict, request: Request, uid: int = Depends(cur
                for r in rows("select id, title from projects where user_id=%s", (uid,))):
             raise HTTPException(409, tr(req_lang(request, uid), "project_exists", title=title))
         run("update projects set title=%s where id=%s and user_id=%s", (title, pid, uid))
+    if "done_mode" in body:
+        if body["done_mode"] not in DONE_MODES:
+            raise HTTPException(400, "bad done_mode")
+        run("update projects set done_mode=%s where id=%s and user_id=%s", (body["done_mode"], pid, uid))
     if "status" in body:
         if body["status"] not in ("active", "done"):
             raise HTTPException(400, "bad status")
