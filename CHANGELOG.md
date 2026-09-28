@@ -16,6 +16,12 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+- Sign-in codes sent by email are better protected against guessing: after too many wrong codes, signing in with a code to that address is paused for 24 hours, and the number of code emails per day is limited.
+  - RU: Коды входа из письма надёжнее защищены от подбора: после слишком многих неверных кодов вход по коду на этот адрес закрывается на сутки, а число писем с кодом в день ограничено.
+- Error reports no longer include sign-in links, cookies or service secrets.
+  - RU: В отчёты об ошибках больше не попадают ссылки для входа, cookie и служебные секреты.
+
 ## [0.18.0] - 2026-09-28
 
 ### Added
