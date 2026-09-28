@@ -38,8 +38,7 @@ def pytest_sessionfinish(session, exitstatus):
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
     A.run("truncate users, sessions, login_tokens, projects, items, email_codes, tg_logins, merge_offers, "
-          "tg_email_links, activity restart identity")
-    A._hits.clear()
+          "tg_email_links, activity, auth_limits restart identity")
     A._seen_today.clear()
     monkeypatch.setattr(A, "TOKEN", "")
     monkeypatch.setattr(A, "BOT_USERNAME", "")
@@ -91,8 +90,8 @@ def login(mail):
         assert c.post("/api/auth/email/start", json={"email": email}).status_code == 200
         r = c.post("/api/auth/email/verify", json={"email": email, "code": last_code(mail), "link": link})
         assert r.status_code == 200, r.text
-        A.run("delete from email_codes")  # снять минутный кулдаун для следующего входа
-        A._hits.clear()
+        A.run("delete from email_codes")  # снять минутный кулдаун и лимиты для следующего входа
+        A.run("delete from auth_limits")
         return A.row("select id from users where email=%s", (email.strip().lower(),))["id"]
     return do
 

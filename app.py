@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import hmac
 import html
+import ipaddress
 import logging
 import os
 import re
@@ -73,19 +74,44 @@ def init_sentry() -> bool:
 
 
 BOT_TOKEN_RE = re.compile(r"bot\d+:[A-Za-z0-9_-]{20,}")
+# Значения параметров в URL: в них одноразовые токены входа (/auth?t=…), nonce и т.п. (SERBITO-346, GTD-2)
+QUERY_RE = re.compile(r"([?&][^=&#\s\"'?]+=)[^&#\s\"']+")
+# Какие заголовки запроса можно отдавать в Sentry. Остальные — нет: cookie с сессией, секрет вебхука Telegram
+# (X-Telegram-Bot-Api-Secret-Token), секрет крона (X-Cron-Secret), адреса клиента (XFF, CF-Connecting-IP)
+SENTRY_HEADERS = {"host", "user-agent", "accept", "accept-language", "content-type", "content-length",
+                  "origin", "referer"}
+FILTERED = "[Filtered]"
 
 
 def sentry_scrub(event, hint=None):
-    """Рекурсивно заменяет токен бота на «bot<redacted>» во всех строках события."""
+    """Чистит событие, транзакцию или breadcrumb перед отправкой в Sentry: токен бота → «bot<redacted>»,
+    значения параметров URL и сами секреты вебхука и крона → [Filtered] во всех строках; у запроса — только
+    безопасные заголовки, без cookie и query string."""
+    known = [x for x in (CRON_SECRET, TOKEN and webhook_secret()) if x]
+
     def clean(v):
         if isinstance(v, str):
-            return BOT_TOKEN_RE.sub("bot<redacted>", v)
+            v = QUERY_RE.sub(lambda m: m.group(1) + FILTERED, BOT_TOKEN_RE.sub("bot<redacted>", v))
+            for x in known:
+                v = v.replace(x, FILTERED)
+            return v
         if isinstance(v, dict):
             return {k: clean(x) for k, x in v.items()}
-        if isinstance(v, list):
+        if isinstance(v, (list, tuple)):
             return [clean(x) for x in v]
         return v
-    return clean(event)
+    event = clean(event)
+    req = event.get("request") if isinstance(event, dict) else None
+    if isinstance(req, dict):
+        for k in ("cookies", "env", "data"):
+            req.pop(k, None)
+        if req.get("query_string"):
+            qs = req["query_string"]
+            req["query_string"] = "&".join(p.split("=", 1)[0] + "=" + FILTERED for p in qs.split("&") if p) \
+                if isinstance(qs, str) else FILTERED
+        if isinstance(req.get("headers"), dict):
+            req["headers"] = {k: v for k, v in req["headers"].items() if k.lower() in SENTRY_HEADERS}
+    return event
 
 
 init_sentry()
@@ -182,6 +208,9 @@ update items i set ppos = x.p from (
   from items t where ppos is null) x
 where i.id = x.id;
 create index if not exists items_user_status_pos on items(user_id, status, position);
+-- Лимиты входа по коду (SERBITO-346): n событий (писем, неверных кодов, проверок) по ключу за окно с момента
+-- since. В базе, а не в памяти инстанса: общие для всех инстансов Cloud Run и переживают перезапуск
+create table if not exists auth_limits(key text primary key, n integer not null, since bigint not null);
 """
 
 with _pool.connection() as _c:
@@ -306,6 +335,9 @@ TEXTS = {
         "smtp_fail": "Не удалось отправить письмо — попробуй позже",
         "code_expired": "Код устарел — запроси новый",
         "code_wrong": "Неверный код",
+        "too_many_day": "Слишком много писем с кодом за сутки — попробуй завтра или войди другим способом",
+        "code_locked": "Слишком много неверных кодов — вход по коду на этот адрес закрыт на сутки. "
+                       "Войди другим способом или попробуй завтра",
         "merge_missing": "Аккаунт для объединения не найден",
         "merge_stale": "Предложение устарело — привяжи способ входа ещё раз",
         "google_off": "Вход через Google не настроен",
@@ -380,6 +412,9 @@ TEXTS = {
         "smtp_fail": "Couldn't send the email — try again later",
         "code_expired": "The code has expired — request a new one",
         "code_wrong": "Wrong code",
+        "too_many_day": "Too many sign-in codes requested today — try again tomorrow or sign in another way",
+        "code_locked": "Too many wrong codes — signing in with a code to this address is locked for 24 hours. "
+                       "Sign in another way or try again tomorrow",
         "merge_missing": "The account to merge wasn't found",
         "merge_stale": "This offer has expired — link the sign-in method again",
         "google_off": "Google sign-in isn't set up",
@@ -786,7 +821,7 @@ async def tg_email_start(chat, u, email, lang):
 
 async def tg_email_verify(chat, u, email, code, lang):
     try:
-        check_code(email, code)
+        check_code(email, code, f"tg:{u['tg_id']}")
     except AuthError as e:
         await tg("sendMessage", chat_id=chat, text=e.text(lang))
         return
@@ -1135,22 +1170,92 @@ def start_session(uid: int) -> RedirectResponse:
 # Google и код на почту с одинаковым адресом попадают в один аккаунт; Telegram привязывается из «Аккаунта».
 IDENTITIES = ("tg_id", "email", "google_sub")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_hits: dict[str, list[float]] = {}
+# Лимиты входа по коду (SERBITO-346). Код — 6 цифр, 10⁶ вариантов: без общего бюджета на адрес его можно
+# подобрать, перезапрашивая код и угадывая снова. «Отправитель» — IP на сайте или Telegram-аккаунт в боте
+DAY = 86400
+CODE_TRIES = 5                  # неверных попыток на один код — потом он сгорает
+EMAIL_FAILS = 20                # неверных кодов на адрес за сутки (переживает перезапрос кода) — потом блокировка
+EMAIL_SENDS = 10                # писем с кодом на один адрес за сутки — от засыпания ящика письмами
+SENDER_SENDS = ((5, 600), (30, DAY))  # писем с кодом от одного отправителя: за 10 минут и за сутки
+SENDER_GUESSES = (30, 600)      # проверок кода от одного отправителя за 10 минут (по всем адресам)
 
 
-def rate_ok(key: str, limit: int, window: int) -> bool:
-    """Скользящее окно в памяти инстанса — от массовой рассылки кодов, не от целевой атаки."""
-    now = time.time()
-    hits = [t for t in _hits.get(key, []) if t > now - window]
-    _hits[key] = hits
-    if len(hits) >= limit:
-        return False
-    hits.append(now)
-    return True
+def limit_hit(key: str, window: int) -> int:
+    """Атомарно засчитывает событие по ключу и возвращает, сколько их с начала окна (вместе с этим).
+    Окно фиксированное: начинается с первого события и через window секунд обнуляется. Один upsert —
+    параллельные запросы не проскочат мимо счётчика (строка блокируется на время обновления)."""
+    now = int(time.time())
+    return run("insert into auth_limits(key,n,since) values(%s,1,%s) on conflict(key) do update set "
+               "n = case when auth_limits.since > %s then auth_limits.n + 1 else 1 end, "
+               "since = case when auth_limits.since > %s then auth_limits.since else excluded.since end "
+               "returning n", (key, now, now - window, now - window))
+
+
+def limit_count(key: str, window: int) -> int:
+    r = row("select n from auth_limits where key=%s and since>%s", (key, int(time.time()) - window))
+    return r["n"] if r else 0
+
+
+# Откуда пришёл запрос (SERBITO-346). Модель доверия:
+# - Каждый прокси ДОПИСЫВАЕТ в конец X-Forwarded-For адрес, от которого получил запрос; всё левее пишет сам
+#   клиент и может подделать. Поэтому клиент — самый правый адрес после того, как справа пропущены наши
+#   собственные прокси. Левый край заголовка не читаем никогда.
+# - Прод — Cloud Run с domain mapping: Google Front End дописывает реальный адрес клиента, а к контейнеру
+#   подключается с link-local 169.254.x.x. За внешним балансировщиком Google добавил бы справа ещё и свой
+#   адрес («клиент, балансировщик»): прокси GFE (35.191.0.0/16, 130.211.0.0/22) и link-local пропускаем, адрес
+#   правила балансировщика (или своего reverse proxy с публичным IP) задаётся в TRUSTED_PROXIES.
+# - Заголовок читаем, только если само соединение пришло от прокси: loopback, частная или link-local сеть,
+#   TRUSTED_PROXIES. uvicorn, открытый наружу без прокси, берёт адрес соединения — XFF клиента игнорируется.
+# - Cloudflare: сейчас DNS only, запросы идут мимо него. CF-Connecting-IP верим, только если найденный адрес
+#   клиента — из сетей Cloudflare, т.е. запрос действительно пришёл через его прокси; иначе этот заголовок
+#   подделывается так же, как XFF. Список сетей — https://www.cloudflare.com/ips/
+def _nets(cidrs) -> tuple:
+    return tuple(ipaddress.ip_network(c.strip(), strict=False) for c in cidrs if c.strip())
+
+
+TRUSTED_PROXIES = _nets(os.getenv("TRUSTED_PROXIES", "").split(","))
+GOOGLE_PROXIES = _nets(["35.191.0.0/16", "130.211.0.0/22"])
+CLOUDFLARE = _nets([
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+    "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17",
+    "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+    "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32",
+    "2a06:98c0::/29", "2c0f:f248::/32"])
+
+
+def _ip(s: str):
+    try:
+        return ipaddress.ip_address(s.strip())
+    except ValueError:
+        return None
+
+
+def _within(ip, nets) -> bool:
+    return any(ip.version == n.version and ip in n for n in nets)
 
 
 def client_ip(request: Request) -> str:
-    return request.headers.get("x-forwarded-for", request.client.host if request.client else "").split(",")[0].strip()
+    """Адрес клиента для лимитов — по модели доверия выше."""
+    peer = request.client.host if request.client else ""
+    ip = _ip(peer)
+    if not ip or not (ip.is_private or ip.is_loopback or ip.is_link_local or _within(ip, TRUSTED_PROXIES)):
+        return peer
+    for hop in reversed(",".join(request.headers.getlist("x-forwarded-for")).split(",")):
+        a = _ip(hop)
+        if a is None:
+            break
+        ip = a
+        if not (a.is_loopback or a.is_link_local or _within(a, GOOGLE_PROXIES + TRUSTED_PROXIES)):
+            break
+    if _within(ip, CLOUDFLARE):
+        ip = _ip(request.headers.get("cf-connecting-ip", "")) or ip
+    return str(ip)
+
+
+def ip_key(ip: str) -> str:
+    """Ключ лимита по IP. IPv6 — целиком /64: столько адресов у абонента обычно есть, по одному — не лимит."""
+    a = _ip(ip)
+    return str(ipaddress.ip_network(f"{a}/64", strict=False)) if a and a.version == 6 else ip
 
 
 class AuthError(Exception):
@@ -1310,19 +1415,27 @@ def send_email(to: str, subject: str, body: str):
 
 
 def send_code(email: str, rate_key: str, lang: str = "ru"):
-    """Одноразовый код на почту (письмо — на языке lang). Кулдаун минута на адрес, 5 писем за 10 минут на rate_key."""
+    """Одноразовый код на почту (письмо — на языке lang). Кулдаун минута на адрес; лимиты писем на адрес
+    и на отправителя rate_key («ip:…» или «tg:…») — см. SENDER_SENDS, EMAIL_SENDS."""
     if len(email) > 254 or not EMAIL_RE.match(email):
         raise AuthError(400, "bad_email")
     if not (SMTP_PASSWORD or DEV):
         raise AuthError(400, "email_off")
     now = int(time.time())
+    if limit_count("fail:" + email, DAY) >= EMAIL_FAILS:
+        raise AuthError(429, "code_locked")  # новый код всё равно не примем — и письмо не шлём
     prev = row("select sent from email_codes where email=%s", (email,))
     if prev and prev["sent"] > now - 60:
         raise AuthError(429, "code_cooldown")
-    if not rate_ok(rate_key, 5, 600):
-        raise AuthError(429, "too_many")
+    for (limit, window), key in zip(SENDER_SENDS, ("send:", "send-day:")):
+        if limit_hit(key + rate_key, window) > limit:
+            raise AuthError(429, "too_many" if window < DAY else "too_many_day")
+    if limit_hit("mail-day:" + email, DAY) > EMAIL_SENDS:
+        raise AuthError(429, "too_many_day")
     code = f"{secrets.randbelow(10 ** 6):06d}"
     run("delete from email_codes where expires<%s", (now,))
+    run("delete from auth_limits where since<%s", (now - DAY,))
+    # Новый код — новые CODE_TRIES попыток; суточный бюджет адреса (fail:…) при этом не обнуляется
     run("insert into email_codes(email,code_hash,expires,attempts,sent) values(%s,%s,%s,0,%s) "
         "on conflict(email) do update set code_hash=excluded.code_hash, expires=excluded.expires, "
         "attempts=0, sent=excluded.sent", (email, code_hash(email, code), now + 600, now))
@@ -1337,15 +1450,34 @@ def send_code(email: str, rate_key: str, lang: str = "ru"):
         raise AuthError(502, "smtp_fail")
 
 
-def check_code(email: str, code: str):
-    """Сверяет код; 5 неверных попыток — и код сгорает. Верный код одноразовый."""
-    r = row("select * from email_codes where email=%s and expires>%s", (email, int(time.time())))
-    if not r or r["attempts"] >= 5:
-        raise AuthError(400, "code_expired")
+def check_code(email: str, code: str, rate_key: str):
+    """Сверяет код. Каждый шаг — атомарный запрос, так что параллельные догадки не обходят лимиты:
+    не больше CODE_TRIES попыток на код, EMAIL_FAILS неверных на адрес за сутки (потом вход по коду на адрес
+    закрыт), SENDER_GUESSES проверок от отправителя. Верный код одноразовый."""
+    now = int(time.time())
+    limit, window = SENDER_GUESSES
+    if limit_hit("guess:" + rate_key, window) > limit:
+        raise AuthError(429, "too_many")
+    # Попытка засчитывается до сравнения и только если она ещё есть: update … where attempts<N returning
+    r = row("update email_codes set attempts=attempts+1 where email=%s and expires>%s and attempts<%s "
+            "returning code_hash", (email, now, CODE_TRIES))
+    if not r:
+        raise AuthError(429, "code_locked") if limit_count("fail:" + email, DAY) >= EMAIL_FAILS \
+            else AuthError(400, "code_expired")
+    # Бюджет адреса тоже резервируем до сравнения: сравнений не больше EMAIL_FAILS, сколько бы их ни шло разом
+    fails = limit_hit("fail:" + email, DAY)
+    if fails > EMAIL_FAILS:
+        run("delete from email_codes where email=%s", (email,))
+        raise AuthError(429, "code_locked")
     if not hmac.compare_digest(r["code_hash"], code_hash(email, code)):
-        run("update email_codes set attempts=attempts+1 where email=%s", (email,))
+        if fails >= EMAIL_FAILS:
+            run("delete from email_codes where email=%s", (email,))
+            raise AuthError(429, "code_locked")
         raise AuthError(400, "code_wrong")
-    run("delete from email_codes where email=%s", (email,))
+    run("update auth_limits set n=n-1 where key=%s and n>0", ("fail:" + email,))  # верный код — не неудача
+    # Удаляем именно этот код: из двух одновременных верных попыток войдёт одна
+    if not run("delete from email_codes where email=%s and code_hash=%s returning 1", (email, r["code_hash"])):
+        raise AuthError(400, "code_expired")
 
 
 def link_response(res: dict, what: str, lang: str):
@@ -1381,7 +1513,7 @@ def auth_google(body: dict, request: Request):
 @app.post("/api/auth/email/start")
 def auth_email_start(body: dict, request: Request):
     try:
-        send_code((body.get("email") or "").strip().lower(), "ip:" + client_ip(request), req_lang(request))
+        send_code((body.get("email") or "").strip().lower(), "ip:" + ip_key(client_ip(request)), req_lang(request))
     except AuthError as e:
         raise auth_fail(e, request)
     return {"ok": True}
@@ -1391,7 +1523,7 @@ def auth_email_start(body: dict, request: Request):
 def auth_email_verify(body: dict, request: Request):
     email = (body.get("email") or "").strip().lower()
     try:
-        check_code(email, (body.get("code") or "").strip())
+        check_code(email, (body.get("code") or "").strip(), "ip:" + ip_key(client_ip(request)))
     except AuthError as e:
         raise auth_fail(e, request)
     uid = session_user(request) if body.get("link") else None
