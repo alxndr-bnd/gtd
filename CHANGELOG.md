@@ -16,6 +16,14 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+- The Inbox now shows what to do next: tasks that are overdue or due in the next 3 days, then your Next actions. Overdue dates are marked in red.
+  - RU: Во «Входящих» теперь видно, что делать дальше: просроченные задачи и задачи со сроком в ближайшие 3 дня, а за ними — Next. Просроченные даты выделены красным.
+- Choose how a project shows completed tasks: hide them, keep them in the list, or show them in a separate collapsible section.
+  - RU: В проекте можно выбрать, как показывать выполненные задачи: скрыть, оставить в списке или вынести в отдельный сворачиваемый блок.
+- Reorder tasks by drag and drop in Inbox, Next, Waiting, Someday and projects — with the mouse, by holding a task on a phone, or with Alt+↑/↓.
+  - RU: Задачи можно переставлять перетаскиванием во «Входящих», Next, Waiting, Someday и в проектах — мышью, долгим нажатием на телефоне или Alt+↑/↓.
+
 ## [0.17.0] - 2026-09-28
 
 ### Added
