@@ -613,17 +613,17 @@ def test_inbox_what_to_do_next(watch, lang):
     assert sorted(section_ids(w, "next-sec")) == sorted([plain, later])  # просроченный next не повторяется
     assert tx["over"] in w.page.inner_text(f'main .due-soon .it[data-id="{over}"] .due.over')
     assert not w.page.locator(f'main .it[data-id="{wait}"] .due.over').count()
-    assert not w.page.locator("main .hero ~ .it").count()
+    assert not w.page.locator("main .hero ~ .dnd").count()  # во Inbox пусто
 
     # 3. Во Inbox есть задачи, одна из них со сроком — она во Inbox, а не в «Скоро срок»
     inb = A.capture(uid, "Во входящих со сроком")["id"]
     A.run("update items set remind_at=%s where id=%s", (now + 600, inb))
     w.page.reload()
-    w.wait(f'main > .it[data-id="{inb}"]', f"[{lang}] задача во Inbox")
+    w.wait(f'main > .dnd > .it[data-id="{inb}"]', f"[{lang}] задача во Inbox")
     assert not w.page.locator("main .inbox-empty").count()
     assert inb not in section_ids(w, "due-soon") and section_ids(w, "due-soon") == [over, wait]
-    order = w.page.eval_on_selector_all("main > .it, main > .below", "els => els.map(e => e.className)")
-    assert order[0].startswith("it") and "due-soon" in order[1] and "next-sec" in order[2]
+    order = w.page.eval_on_selector_all("main > .dnd, main > .below", "els => els.map(e => e.className)")
+    assert order[0] == "dnd" and "due-soon" in order[1] and "next-sec" in order[2]
 
     # Карточки — обычные: клик открывает, кнопки работают
     w.page.click(f'main .due-soon .it[data-id="{over}"]', position={"x": 4, "y": 4})
@@ -678,7 +678,7 @@ def test_project_completed_modes(watch, lang):
 
     w.page.select_option("main select.dmode", "section")
     w.wait("main details.donesec", f"[{lang}] отдельно")
-    assert cards("main > .it[data-id]") == [open_id]
+    assert cards("main > .dnd > .it[data-id]") == [open_id]
     assert w.page.inner_text("main details.donesec summary") == tx["sec"]
     assert not w.page.is_visible(f'main .it[data-id="{fresh}"]')  # блок свёрнут
     w.page.click("main details.donesec summary")
@@ -693,9 +693,135 @@ def test_project_completed_modes(watch, lang):
     # Выполненная — рабочая карточка: снять галочку — вернуть в работу
     w.page.click("main details.donesec summary")
     w.page.click(f'main .it[data-id="{fresh}"] input[data-act="toggle"]')
-    w.wait(f'main > .it[data-id="{fresh}"]', f"[{lang}] вернулась в открытые")
+    w.wait(f'main > .dnd > .it[data-id="{fresh}"]', f"[{lang}] вернулась в открытые")
     assert A.row("select status from items where id=%s", (fresh,))["status"] == "next"
     w.page.select_option("main select.dmode", "hide")
     w.page.wait_for_function("!document.querySelector('main details.donesec')", timeout=WAIT_MS)
     assert sorted(cards()) == sorted([open_id, fresh])
     w.check(f"[{lang}] итог")
+
+
+# ── Ручной порядок (SERBITO-328) ──
+def screen_order(w, sel="main .dnd > .it[data-id]"):
+    return [int(x) for x in w.page.eval_on_selector_all(sel, "els => els.map(e => e.dataset.id)")]
+
+
+def db_order(uid, status):
+    return [r["id"] for r in A.rows("select id from items where user_id=%s and status=%s order by position",
+                                    (uid, status))]
+
+
+def until(cond, what):
+    deadline = time.monotonic() + WAIT_MS / 1000
+    while not cond():
+        assert time.monotonic() < deadline, what
+        time.sleep(0.05)
+
+
+def order_user(w, lang="ru"):
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) "
+                "returning id", (int(time.time()), lang))
+    a, b, c = (A.capture(uid, f"{t} @дом")["id"] for t in ("Третья", "Вторая", "Первая"))
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    w.page.click('nav > a[data-view="next"]')
+    w.wait('nav > a.on[data-view="next"]', f"[{lang}] Next")
+    return uid, (c, b, a)  # на экране: Первая, Вторая, Третья — новые сверху
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_drag_to_reorder_with_mouse(watch, lang):
+    """Мышью: потянуть карточку вниз — она встаёт на новое место, порядок сохраняется на сервере и
+    переживает перезагрузку; перетаскивание карточку не открывает, обычный клик — открывает."""
+    w = watch(lang)
+    uid, (first, second, third) = order_user(w, lang)
+    assert screen_order(w) == [first, second, third]
+    src = w.page.locator(f'main .it[data-id="{first}"]').bounding_box()
+    dst = w.page.locator(f'main .it[data-id="{third}"]').bounding_box()
+    x = src["x"] + src["width"] * 0.6  # по пустому месту строки заголовка, мимо ссылки #N
+    w.page.mouse.move(x, src["y"] + 14)
+    w.page.mouse.down()
+    w.page.mouse.move(x, dst["y"] + dst["height"] - 4, steps=12)
+    assert w.page.locator("main .it.dragging").count() == 1
+    w.page.mouse.up()
+    assert screen_order(w) == [second, third, first]
+    until(lambda: db_order(uid, "next") == [second, third, first], "порядок не сохранился на сервере")
+    w.page.wait_for_timeout(300)
+    assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
+    w.page.reload()
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка")
+    w.page.click('nav > a[data-view="next"]')
+    w.wait('main .dnd > .it', f"[{lang}] Next после перезагрузки")
+    assert screen_order(w) == [second, third, first]
+    # С фильтром @контекста — тот же список, перестановка работает
+    w.page.click('main .chip[data-ctx="дом"]')
+    w.page.click(f'main .it[data-id="{second}"]', position={"x": 4, "y": 4})  # обычный клик — открывает
+    w.wait("#dlg[open] #ef", f"[{lang}] карточка по клику")
+    w.check(f"[{lang}] итог")
+
+
+def touch(w, sel, kind, dy=0):
+    """Синтетическое касание: PointerEvent с pointerType touch в точке карточки (dy — смещение по вертикали)."""
+    w.page.eval_on_selector(sel, """(el, [kind, dy]) => {
+      const r = el.getBoundingClientRect(), x = r.left + r.width - 40, y = r.top + 12 + dy;
+      const target = kind === 'pointerdown' ? el : document.elementFromPoint(x, y) || el;
+      target.dispatchEvent(new PointerEvent(kind, {bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch',
+        isPrimary: true, button: kind === 'pointermove' ? -1 : 0, clientX: x, clientY: y}));
+    }""", [kind, dy])
+
+
+def test_touch_long_press_drags_quick_swipe_scrolls(watch):
+    """Палец: сразу повёл — это прокрутка, карточка не двигается; удержал ~0,35 с — перетаскивание."""
+    w = watch()
+    uid, (first, second, third) = order_user(w)
+    card = f'main .it[data-id="{first}"]'
+    step = w.page.locator(f'main .it[data-id="{second}"]').bounding_box()["y"] - w.page.locator(card).bounding_box()["y"]
+    touch(w, card, "pointerdown")
+    touch(w, card, "pointermove", 30)  # до удержания — прокрутка
+    w.page.wait_for_timeout(450)
+    assert not w.page.locator("main .it.dragging").count()
+    touch(w, card, "pointerup", 30)
+    assert screen_order(w) == [first, second, third]
+
+    touch(w, card, "pointerdown")
+    w.page.wait_for_timeout(450)  # удержание
+    assert w.page.locator("main .it.dragging").count() == 1
+    touch(w, card, "pointermove", step * 1.6)
+    touch(w, card, "pointerup", step * 1.6)
+    assert screen_order(w) == [second, first, third]
+    until(lambda: db_order(uid, "next") == [second, first, third], "порядок не сохранился на сервере")
+    w.check("итог")
+
+
+def test_keyboard_reorder(watch):
+    """Alt+↑↓ на выбранной карточке — на одну позицию; в списке и в проекте; порядок сохраняется."""
+    w = watch()
+    uid, (first, second, third) = order_user(w)
+    w.page.locator("#cap").press("ArrowDown")  # из поля захвата — к первой карточке
+    w.page.keyboard.press("Alt+ArrowDown")
+    w.page.keyboard.press("Alt+ArrowDown")
+    assert screen_order(w) == [second, third, first]
+    assert w.page.get_attribute("main .it.sel", "data-id") == str(first)  # выбор едет вместе с карточкой
+    w.page.keyboard.press("Alt+ArrowDown")  # уже внизу — ничего
+    w.page.keyboard.press("Alt+ArrowUp")
+    assert screen_order(w) == [second, first, third]
+    until(lambda: db_order(uid, "next") == [second, first, third], "порядок не сохранился на сервере")
+    until(lambda: w.page.evaluate("moving") == 0, "очередь сохранения")
+
+    # Проект: свой порядок, та же клавиша
+    extra = A.capture(uid, "задача #Ремонт")
+    pid = extra["project_id"]
+    A.run("update items set status='waiting' where id=%s", (extra["id"],))  # не в Next: там порядок проверяем ниже
+    A.run("update items set project_id=%s where id in (%s,%s)", (pid, first, second))
+    w.page.click('nav > a[data-view="projects"]')
+    w.page.click("main .it.pj .t")
+    w.wait('main .dnd[data-scope="project"] > .it', "проект")
+    proj = screen_order(w)
+    w.page.locator("#cap").press("ArrowDown")
+    w.page.keyboard.press("Alt+ArrowDown")
+    want = [proj[1], proj[0], *proj[2:]]
+    assert screen_order(w) == want
+    until(lambda: [r["id"] for r in A.rows("select id from items where project_id=%s order by ppos", (pid,))] == want,
+          "порядок проекта не сохранился")
+    assert db_order(uid, "next") == [second, first, third]  # порядок Next не тронут
+    w.check("итог")

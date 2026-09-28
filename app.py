@@ -166,6 +166,22 @@ alter table users add column if not exists tg_lang text;
 -- Существующие проекты получают list — так они выглядели до этого; новые по умолчанию скрывают выполненные
 alter table projects add column if not exists done_mode text not null default 'list';
 alter table projects alter column done_mode set default 'hide';
+-- Ручной порядок (SERBITO-328): position — место задачи в её списке (status), ppos — в её проекте; меньше — выше.
+-- Дробные числа с зазором 1024: перестановка меняет одну строку (середина между соседями). Бэкфилл сохраняет
+-- прежний порядок — по времени создания, старые сверху; новые задачи дальше встают сверху (min − 1024)
+alter table items add column if not exists position double precision;
+alter table items add column if not exists ppos double precision;
+update items i set position = x.p from (
+  select id, coalesce((select min(position) from items m where m.user_id = t.user_id), 0)
+             - 1024 * row_number() over (partition by user_id order by created desc, id desc) p
+  from items t where position is null) x
+where i.id = x.id;
+update items i set ppos = x.p from (
+  select id, coalesce((select min(ppos) from items m where m.user_id = t.user_id), 0)
+             - 1024 * row_number() over (partition by user_id order by created desc, id desc) p
+  from items t where ppos is null) x
+where i.id = x.id;
+create index if not exists items_user_status_pos on items(user_id, status, position);
 """
 
 with _pool.connection() as _c:
@@ -532,6 +548,11 @@ def parse_task(uid: int, raw: str) -> dict:
     return {"title": title or raw.strip(), "context": ctx, "project_id": proj_id, "remind_at": remind}
 
 
+# Позиция «наверх» (SERBITO-328): выше самой верхней задачи списка (status) или проекта. Параметры: user_id, значение
+TOP_POS = "(select coalesce(min(position), 0) - 1024 from items where user_id=%s and status=%s)"
+TOP_PPOS = "(select coalesce(min(ppos), 0) - 1024 from items where user_id=%s and project_id=%s)"
+
+
 def capture(uid: int, raw: str, source: str = "web") -> dict:
     """Умный захват: текст [@контекст] [#проект] [когда] -> задача."""
     track(uid, "telegram" if source == "telegram" else "web")
@@ -540,10 +561,11 @@ def capture(uid: int, raw: str, source: str = "web") -> dict:
     status = "next" if (ctx or proj_id) else "inbox"
     iid = run(
         # Номер — из счётчика пользователя, атомарно в одной команде (изменяющий подзапрос — только в WITH)
+        # Новая задача — наверх своего списка и своего проекта
         "with seq as (update users set item_seq=item_seq+1 where id=%s returning item_seq) "
-        "insert into items(user_id,num,title,status,project_id,context,remind_at,source,created) "
-        "select %s, seq.item_seq, %s,%s,%s,%s,%s,%s,%s from seq returning id",
-        (uid, uid, title, status, proj_id, ctx, remind, source, int(time.time())),
+        "insert into items(user_id,num,title,status,project_id,context,remind_at,source,created,position,ppos) "
+        f"select %s, seq.item_seq, %s,%s,%s,%s,%s,%s,%s,{TOP_POS},{TOP_PPOS} from seq returning id",
+        (uid, uid, title, status, proj_id, ctx, remind, source, int(time.time()), uid, status, uid, proj_id),
     )
     return item_get(uid, iid)
 
@@ -843,7 +865,8 @@ async def handle_message(msg):
         await tg_email_start(chat, u, arg.strip().lower(), lang)
     elif cmd in ("/inbox", "/next"):
         st = cmd[1:]
-        its = rows(ITEM_SQL + "where i.user_id=%s and i.status=%s order by i.created limit 20", (u["id"], st))
+        its = rows(ITEM_SQL + "where i.user_id=%s and i.status=%s order by i.position nulls first, i.id desc limit 20",
+                   (u["id"], st))
         body = "\n".join(f"{item_ref(i)} {html.escape(i['title'])} {html.escape(describe(i, lang))}".strip()
                          for i in its) or tr(lang, "empty")
         await tg("sendMessage", chat_id=chat, text=f"{st.upper()}:\n{body}", **HTML_MSG)
@@ -923,7 +946,7 @@ async def handle_callback(cb):
         run("update items set remind_at=%s, reminded=0 where id=%s", (int(time.time()) + 3600, iid))
         note = tr(lang, "cb_snooze")
     elif act == "next":
-        run("update items set status='next' where id=%s", (iid,))
+        run(f"update items set status='next', position={TOP_POS} where id=%s and status<>'next'", (u["id"], "next", iid))
         note = tr(lang, "cb_next")
     await tg("answerCallbackQuery", callback_query_id=cb["id"], text=note)
     if msg:
@@ -1656,7 +1679,7 @@ def list_items(status: str = "inbox", project_id: int | None = None, done: bool 
         args.append(due_cutoff())
         order = "i.remind_at, i.id"
     else:
-        order = "i.completed_at desc" if status == "done" else "i.created"
+        order = "i.completed_at desc" if status == "done" else "i.position nulls first, i.id desc"
         if status != "all":
             where += " and i.status=%s"
             args.append(status)
@@ -1665,6 +1688,7 @@ def list_items(status: str = "inbox", project_id: int | None = None, done: bool 
         args.append(project_id)
         if status == "all":  # экран проекта: без корзины; выполненные — только если он их показывает (done=1)
             where += " and i.status not in ('trash','done')" if not done else " and i.status<>'trash'"
+            order = "i.ppos nulls first, i.id desc"  # свой порядок у проекта
     return rows(f"{ITEM_SQL} where {where} order by {order} limit 500", args)
 
 
@@ -1705,10 +1729,79 @@ def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
             v = str(v).lstrip("@").lower()
         if k == "project_id" and v and not row("select 1 from projects where id=%s and user_id=%s", (v, uid)):
             raise HTTPException(404, "project not found")
+        # Перенос в другой список или проект — наверх в нём (SERBITO-328)
+        if k == "status" and v != cur["status"]:
+            sets.append(f"position={TOP_POS}")
+            args += [uid, v]
+        if k == "project_id" and v and v != cur["project_id"]:
+            sets.append(f"ppos={TOP_PPOS}")
+            args += [uid, v]
         sets.append(f"{k}=%s")
         args.append(v or None if k in ("context", "project_id", "remind_at") else v)
     if sets:
         run(f"update items set {', '.join(sets)} where id=%s and user_id=%s", (*args, iid, uid))
+    return item_get(uid, iid)
+
+
+MOVE_SCOPES = {"list": ("position", "status"), "project": ("ppos", "project_id")}
+
+
+def _between(prev, nxt, col):
+    """Позиция между соседями: середина; у края — на 1024 дальше. None — места нет (зазор исчерпан,
+    позиции совпали или соседи не по порядку): список надо перенумеровать."""
+    a, b = prev and prev[col], nxt and nxt[col]
+    if (prev and a is None) or (nxt and b is None):
+        return None
+    if prev and nxt:
+        m = (a + b) / 2
+        return m if a < m < b else None
+    return b - 1024 if nxt else a + 1024
+
+
+@app.post("/api/items/{iid}/move")
+def move_item(iid: int, body: dict, uid: int = Depends(current_user)):
+    """Ручной порядок (SERBITO-328): задачу поставили между prev (над ней) и next (под ней) — соседями на экране,
+    в списке (scope=list) или в проекте (scope=project). Обычно меняется одна строка — позиция задачи."""
+    scope = body.get("scope", "list")
+    if scope not in MOVE_SCOPES:
+        raise HTTPException(400, "bad scope")
+    col, key = MOVE_SCOPES[scope]
+    it = item_get(uid, iid)
+    if not it:
+        raise HTTPException(404)
+    if it[key] is None:
+        raise HTTPException(400, "no project")
+
+    def neighbours():
+        got = {}
+        for side in ("prev", "next"):
+            v = body.get(side)
+            if v is None:
+                continue
+            if not isinstance(v, int) or v == iid:
+                raise HTTPException(400, "bad " + side)
+            n = item_get(uid, v)  # чужая задача не найдётся
+            if not n:
+                raise HTTPException(404)
+            if n[key] != it[key]:
+                raise HTTPException(400, "not in the same " + scope)
+            got[side] = n
+        return got.get("prev"), got.get("next")
+
+    prev, nxt = neighbours()
+    if not prev and not nxt:
+        return it
+    pos = _between(prev, nxt, col)
+    if pos is None:  # редко: перенумеровать список с зазорами в текущем порядке и попробовать ещё раз
+        run(f"update items i set {col} = x.rn * 1024 from (select id, row_number() over "
+            f"(order by {col} nulls first, id desc) rn from items where user_id=%s and {key}=%s) x "
+            "where i.id = x.id", (uid, it[key]))
+        prev, nxt = neighbours()
+        pos = _between(prev, nxt, col)
+        if pos is None:  # соседи не по порядку — экран устарел
+            raise HTTPException(409, "stale order")
+    track(uid, "web")
+    run(f"update items set {col}=%s where id=%s and user_id=%s", (pos, iid, uid))
     return item_get(uid, iid)
 
 

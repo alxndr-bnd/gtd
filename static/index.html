@@ -64,7 +64,11 @@ button.sm:hover{color:var(--tx)}
 .onbi{padding:3px 0} .onbi span{color:var(--mut);font-size:13px} .onbi.ok b{text-decoration:line-through;color:var(--mut)}
 .hero.onbh{padding-top:32px}
 .pj{cursor:pointer} .pj .warn{color:var(--warn)}
-.it.done{background:none}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
+.it.done{background:none}
+/* Перетаскивание (SERBITO-328): поднятая карточка — с тенью поверх соседей */
+.dnd > .it.dragging{position:relative;z-index:5;box-shadow:0 10px 28px #0003;border-color:var(--ac);cursor:grabbing;transition:none}
+body.dnd-on,body.dnd-on *{-webkit-user-select:none;user-select:none;cursor:grabbing}
+@media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
 .pjh select.dmode{font-size:12.5px;font-weight:400;color:var(--mut);padding:3px 6px;border:1px solid var(--bd);border-radius:8px;
   background:var(--card);vertical-align:middle;max-width:100%}
 .donesec{margin-top:18px} .donesec summary{cursor:pointer;color:var(--mut);font-weight:600;padding:6px 0;margin-bottom:6px}
@@ -123,7 +127,7 @@ nav .keys{color:var(--mut);font-size:11.5px;line-height:1.6;margin:18px 10px 0}
 nav a.ccl{color:var(--mut);font-size:13px}  /* «Настройки cookie»: снова открывает баннер согласия (SERBITO-319, pages.CONSENT) */
 @media(max-width:700px){nav .keys{display:none}}
 .below{margin-top:56px} .below h3{font-size:17px;margin:0 0 4px} .below .hint{margin:0 0 12px}
-.it + .below,.below + .below{margin-top:32px}  /* под задачами Inbox — ближе: это продолжение того же экрана */
+.dnd + .below,.below + .below{margin-top:32px}  /* под задачами Inbox — ближе: это продолжение того же экрана */
 .hero .inbox-empty{font-weight:600;margin:0 0 4px}
 @media(max-width:700px){.hero{padding-top:8vh}.hero.solo{padding-top:calc(50vh - 150px)}}
 .aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:var(--on-ac)}
@@ -213,7 +217,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "sign_out": "Выйти", "menu": "Меню", "to_inbox": "На Inbox",
   "about": "📖 О GTD", "about_title": "Как это работает: метод GTD и разделы приложения", "about_url": "/about",
   "cookie_settings": "Настройки cookie", "privacy_url": "/privacy",
-  "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>← меню · → задачи · Esc сброс",
+  "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>Alt+↑↓ переставить<br>← меню · → задачи · Esc сброс",
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
   "all": "все", "back_projects": "← Проекты", "rename": "Переименовать", "delete": "Удалить",
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.",
@@ -298,7 +302,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "sign_out": "Sign out", "menu": "Menu", "to_inbox": "To Inbox",
   "about": "📖 About GTD", "about_title": "How it works: the GTD method and the app sections", "about_url": "/en/about",
   "cookie_settings": "Cookie settings", "privacy_url": "/en/privacy",
-  "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>← menu · → tasks · Esc clear",
+  "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>Alt+↑↓ reorder<br>← menu · → tasks · Esc clear",
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action.",
@@ -651,6 +655,7 @@ const capHtml = () => `<div class="cap"><div class="capw"><textarea id="cap" row
   <button class="pri icon" data-act="capture" aria-label="${t('cap_add')}" title="${t('cap_add')}">${ICON_INBOX}</button></div>`;
 
 function render(){
+  if(DND.on){ DND.rerender = true; return; }  // идёт перетаскивание — перерисуем, когда карточку отпустят
   let body='', hero='';
   const live = l => (l||[]).filter(i => !S.pendingDel.has(i.id));
   S.items = live(S.items); S.nextItems = live(S.nextItems); S.dueItems = live(S.dueItems);
@@ -673,16 +678,16 @@ function render(){
       // со сроком остаются в своём списке, задача из «Скоро срок» не повторяется в Next
       const onb = onbHtml(), due = S.dueItems.filter(i => i.status!=='inbox'), dueIds = new Set(due.map(i => i.id));
       const next = S.nextItems.filter(i => !dueIds.has(i.id));
-      const sec = (cls, title, hint, list) => list.length
-        ? `<section class="below ${cls}"><h3>${title}</h3><div class="hint">${hint}</div>${list.map(itemHtml).join('')}</section>` : '';
+      const sec = (cls, title, hint, list, cards = list.map(itemHtml).join('')) => list.length
+        ? `<section class="below ${cls}"><h3>${title}</h3><div class="hint">${hint}</div>${cards}</section>` : '';
       hero = `${onb}<section class="hero ${onb?'onbh':items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
         ${items.length?`<div class="hint">${HELP.inbox}</div>`
           :`<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
-      body = items.map(itemHtml).join('') + sec('due-soon', t('due_soon'), t('due_hint'), due)
-        + sec('next-sec', VIEWS[1][1], HELP.next, next);
+      body = dndHtml(items) + sec('due-soon', t('due_soon'), t('due_hint'), due)  // «Скоро срок» — по дате, не переставляется
+        + sec('next-sec', VIEWS[1][1], HELP.next, next, dndHtml(next));
     } else if(pj) body = projectHtml(pj, items);
     else body = `<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}
-      ${chips}${items.map(itemHtml).join('') || emptyHtml(S.view)}`;
+      ${chips}${(DND_VIEWS.includes(S.view) ? dndHtml(items) : items.map(itemHtml).join('')) || emptyHtml(S.view)}`;
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
   if(S.view==='account'){ mountGoogle(); mountTelegram(); }
@@ -709,12 +714,113 @@ function projectHtml(pj, items){
   return `<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button>${dmode}</h2>
-    ${shown.map(itemHtml).join('') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
+    ${dndHtml(shown, 'project') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
 }
 S.doneOpen = {};  // блок «Выполненные» раскрыт — по проектам, до перезагрузки страницы
 document.addEventListener('toggle', e => {
   const d = e.target; if(d.dataset?.doneOf) S.doneOpen[d.dataset.doneOf] = d.open;
 }, true);  // toggle не всплывает — ловим на погружении
+
+// ── Ручной порядок (SERBITO-328). Карточки в .dnd переставляются: мышью — потянуть по вертикали (по горизонтали —
+// это выделение текста), пальцем — удержать ~0,35 с и вести (сразу повёл — это прокрутка), с клавиатуры — Alt+↑↓
+// на выбранной карточке. Сервер хранит порядок списка (scope=list) и проекта (project) отдельно; перетаскивание
+// не открывает карточку, обычный клик — открывает (SERBITO-299).
+const DND_VIEWS = ['inbox', 'next', 'waiting', 'someday'];
+const dndHtml = (list, scope = 'list') => list.length ? `<div class="dnd" data-scope="${scope}">${list.map(itemHtml).join('')}</div>` : '';
+const DND = {}, DRAG_PX = 6, HOLD_MS = 350, EDGE_PX = 70;
+let moveQ = Promise.resolve(), moving = 0;
+// Порядок уходит на сервер по одному (иначе быстрые Alt+↓ посчитались бы от устаревших соседей); экран уже
+// переставлен — перечитываем данные, когда очередь опустела
+function dndSave(el){
+  const id = +el.dataset.id, nb = x => x?.dataset.id ? +x.dataset.id : null;
+  const body = {prev:nb(el.previousElementSibling), next:nb(el.nextElementSibling), scope:el.parentElement.dataset.scope};
+  moving++;
+  moveQ = moveQ.then(() => api(`/items/${id}/move`, 'POST', body)).catch(() => {})
+    .finally(() => { if(--moving===0) load(); });
+}
+const dndOrder = box => [...box.children].map(c => c.dataset.id).join();
+function dndReset(){
+  clearTimeout(DND.timer);
+  if(DND.on){
+    DND.el.classList.remove('dragging'); DND.el.style.transform = '';
+    document.body.classList.remove('dnd-on'); DND.endAt = performance.now();
+  }
+  for(const k of ['el','box','on','timer']) delete DND[k];
+  if(DND.rerender){ DND.rerender = false; render(); }
+}
+function dndStart(){
+  const el = DND.el; if(!el || !el.isConnected) return dndReset();
+  Object.assign(DND, {on:true, cy:DND.y, was:dndOrder(DND.box), grab:DND.y - el.getBoundingClientRect().top});
+  el.classList.add('dragging'); document.body.classList.add('dnd-on');
+  getSelection().removeAllRanges();
+  try{ el.setPointerCapture(DND.pid); }catch{}
+  if(DND.touch) navigator.vibrate?.(15);
+  requestAnimationFrame(dndScroll);
+}
+// Карточка идёт за указателем; соседи уступают место, когда он пересёк их середину
+function dndFollow(){
+  const el = DND.el, mid = c => { const r = c.getBoundingClientRect(); return r.top + r.height/2; };
+  let c;
+  while((c = el.previousElementSibling) && DND.cy < mid(c)) el.parentElement.insertBefore(el, c);
+  while((c = el.nextElementSibling) && DND.cy > mid(c)) el.parentElement.insertBefore(el, c.nextElementSibling);
+  el.style.transform = '';
+  el.style.transform = `translateY(${DND.cy - DND.grab - el.getBoundingClientRect().top}px)`;
+  if(!DND.touch) getSelection().removeAllRanges();  // мышь могла начать выделять текст до порога
+}
+function dndScroll(){  // у края окна список прокручивается сам
+  if(!DND.on) return;
+  const v = DND.cy < EDGE_PX ? DND.cy - EDGE_PX : DND.cy > innerHeight - EDGE_PX ? DND.cy - innerHeight + EDGE_PX : 0;
+  if(v){ scrollBy(0, v / 4); dndFollow(); }
+  requestAnimationFrame(dndScroll);
+}
+document.addEventListener('pointerdown', e => {
+  const el = e.target.closest('main .dnd > .it[data-id]');
+  if(!el || e.button !== 0 || DND.el || e.target.closest('a,button,input,select,textarea,label') || $('#dlg').open) return;
+  Object.assign(DND, {el, box:el.parentElement, x:e.clientX, y:e.clientY, pid:e.pointerId, touch:e.pointerType==='touch'});
+  if(DND.touch) DND.timer = setTimeout(dndStart, HOLD_MS);
+});
+document.addEventListener('pointermove', e => {
+  if(!DND.el || e.pointerId !== DND.pid) return;
+  if(!DND.on){
+    const dx = Math.abs(e.clientX - DND.x), dy = Math.abs(e.clientY - DND.y);
+    if(DND.touch){ if(Math.hypot(dx, dy) > 10) dndReset(); return; }  // палец поехал раньше — это прокрутка
+    if(dx > DRAG_PX && dx >= dy) return dndReset();  // по горизонтали — выделение текста
+    if(dy <= DRAG_PX) return;
+    dndStart();
+  }
+  DND.cy = e.clientY; dndFollow(); e.preventDefault();
+});
+function dndEnd(e){
+  if(!DND.el || e.pointerId !== DND.pid) return;
+  const {el, box, on, was} = DND;
+  dndReset();
+  if(!on) return;
+  if(e.type==='pointercancel') return render();  // жест отняла система — вернуть как было
+  if(dndOrder(box) !== was) dndSave(el);
+}
+document.addEventListener('pointerup', dndEnd);
+document.addEventListener('pointercancel', dndEnd);
+// Пока держим карточку, страница под пальцем не прокручивается и не всплывает меню долгого нажатия
+document.addEventListener('touchmove', e => { if(DND.on) e.preventDefault(); }, {passive:false});
+document.addEventListener('contextmenu', e => { if(DND.el && DND.touch) e.preventDefault(); });
+// Клик, которым закончилось перетаскивание, карточку не открывает
+document.addEventListener('click', e => {
+  if(performance.now() - (DND.endAt ?? -1e9) < 300){ e.stopPropagation(); e.preventDefault(); }
+}, true);
+// Alt+↑↓ — переставить выбранную карточку на одну позицию в её списке
+function reorderKey(e){
+  if(!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || !['ArrowUp','ArrowDown'].includes(e.key)) return false;
+  if($('#dlg').open || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || S.zone==='nav' || S.sel==null) return false;
+  const el = cards()[S.sel], box = el?.parentElement;
+  if(!box?.classList.contains('dnd')) return false;
+  e.preventDefault();
+  const up = e.key==='ArrowUp', sib = up ? el.previousElementSibling : el.nextElementSibling;
+  if(!sib) return true;
+  box.insertBefore(el, up ? sib : sib.nextElementSibling);
+  S.sel += up ? -1 : 1; selDraw();
+  dndSave(el);
+  return true;
+}
 
 function projectsHtml(){
   return `<h2>${L.views.projects}</h2><div class="hint">${t('projects_hint')}</div>
@@ -1120,6 +1226,7 @@ document.addEventListener('keydown', e => {
   }
   if(e.key==='Escape' && $('nav.open')) return closeDrawer();
   if(captureKey(e)) return;
+  if(reorderKey(e)) return;
   if(navKey(e)) return;
   if(e.key!=='Enter') return;
   if(e.target.id==='cap'){ e.preventDefault(); capture(); }  // Enter — добавить, а не перенос строки
