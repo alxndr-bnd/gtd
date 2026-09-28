@@ -1627,12 +1627,27 @@ def onboarding(uid: int, by_status: dict) -> dict:
     return {**steps, "hidden": u["checklist_hidden"] or all(steps.values())}
 
 
+DUE_DAYS = 3  # «Скоро срок» на экране Inbox (SERBITO-326): сегодня и ещё три дня вперёд
+
+
+def due_cutoff(now: datetime | None = None) -> int:
+    """Граница «Скоро срок»: полночь в часовом поясе приложения (TZ) после третьего дня от сегодняшнего.
+    Сегодня понедельник — попадает всё до конца четверга; просроченное — всегда."""
+    day = (now or datetime.now(TZ)).astimezone(TZ).date() + timedelta(days=DUE_DAYS + 1)
+    return int(datetime.combine(day, dtime(0), TZ).timestamp())
+
+
 @app.get("/api/items")
 def list_items(status: str = "inbox", project_id: int | None = None, uid: int = Depends(current_user)):
     where, args = "i.user_id=%s", [uid]
     if status == "scheduled":
         where += " and i.remind_at is not null and i.status not in ('done','trash')"
         order = "i.remind_at"
+    elif status == "due":
+        # remind_at — срок задачи. Сначала просроченные (самые давние выше), потом ближайшие
+        where += " and i.remind_at is not null and i.remind_at < %s and i.status not in ('done','trash')"
+        args.append(due_cutoff())
+        order = "i.remind_at, i.id"
     else:
         order = "i.completed_at desc" if status == "done" else "i.created"
         if status != "all":

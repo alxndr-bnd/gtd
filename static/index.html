@@ -14,8 +14,8 @@ if(location.hostname==='gtd.serbito.rs'){
 }
 </script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706}
-@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18;--ok:#3ec97b;--warn:#f0a03c}}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706;--bad:#c62828}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18;--ok:#3ec97b;--warn:#f0a03c;--bad:#f07070}}
 :focus-visible{outline:2px solid var(--ac);outline-offset:1px} input:focus,textarea:focus,select:focus{outline:2px solid var(--ac);outline-offset:-1px}  /* фокус — в цвет логотипа, а не синий браузерный */
 *{accent-color:var(--ac)}
 *{box-sizing:border-box}
@@ -51,7 +51,7 @@ button.sm:hover{color:var(--tx)}
 .it[data-id]{cursor:pointer;transition:border-color .12s}
 @media(hover:hover){.it[data-id]:hover{border-color:var(--mut)}}
 .meta{color:var(--mut);font-size:12.5px;margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
-.meta .due{color:var(--warn)}
+.meta .due{color:var(--warn)} .meta .due.over{color:var(--bad);font-weight:600}
 .act{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .chip{padding:3px 10px;border:1px solid var(--bd);border-radius:99px;font-size:13px;cursor:pointer;color:var(--mut)}
@@ -119,6 +119,8 @@ nav .keys{color:var(--mut);font-size:11.5px;line-height:1.6;margin:18px 10px 0}
 nav a.ccl{color:var(--mut);font-size:13px}  /* «Настройки cookie»: снова открывает баннер согласия (SERBITO-319, pages.CONSENT) */
 @media(max-width:700px){nav .keys{display:none}}
 .below{margin-top:56px} .below h3{font-size:17px;margin:0 0 4px} .below .hint{margin:0 0 12px}
+.it + .below,.below + .below{margin-top:32px}  /* под задачами Inbox — ближе: это продолжение того же экрана */
+.hero .inbox-empty{font-weight:600;margin:0 0 4px}
 @media(max-width:700px){.hero{padding-top:8vh}.hero.solo{padding-top:calc(50vh - 150px)}}
 .aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:var(--on-ac)}
 .aco small{opacity:.7;margin-left:6px}
@@ -160,7 +162,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "scheduled": "Задачи с напоминанием — по времени.", "someday": "Когда-нибудь / может быть.",
     "reference": "Материалы без действия.", "done": "Выполнено."},
   "empty": {
-    "inbox": ["Inbox пуст 🎉 Запиши всё, что крутится в голове, — разберёшь потом", "позвонить маме завтра в 10:00"],
+    "inbox": ["Запиши всё, что крутится в голове, — разберёшь потом", "позвонить маме завтра в 10:00"],
     "next": ["Шаги, которые можно сделать сразу. Из Inbox — кнопкой «→ Next» или сразу с @контекстом", "купить батарейки @магазин"],
     "waiting": ["Что ждёшь от других: ответ, посылку, решение. Из Inbox — кнопкой «→ Waiting»", "Марко пришлёт смету на ремонт"],
     "scheduled": ["Задачи со временем — бот напомнит о них в Telegram. Время пиши прямо в тексте", "отчёт в пятницу в 15:00"],
@@ -170,6 +172,8 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "done": ["Отметь задачу галочкой — она окажется здесь", ""],
     "project": ["В проекте пока нет задач — допиши к задаче его #название", "заказать образцы #{p}"]},
   "empty_default": "Пусто 🎉",
+  "inbox_empty": "Входящие пусты 🎉",
+  "due_soon": "⏰ Скоро срок", "due_hint": "Просроченные и на ближайшие 3 дня — из всех списков", "overdue": "просрочено",
   "ex": "Например: «{ex}»",
   "onb": [["capture", "Запиши 3 мысли", "в поле ниже или боту, не разбирая"],
     ["process", "Разбери Inbox", "реши, что делать с задачей: → Next, → Waiting, → Someday…"],
@@ -240,7 +244,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "scheduled": "Tasks with a reminder, by time.", "someday": "Someday / maybe.",
     "reference": "Material with no action.", "done": "Completed."},
   "empty": {
-    "inbox": ["Inbox is empty 🎉 Write down everything on your mind — sort it out later", "call mom tomorrow at 10:00"],
+    "inbox": ["Write down everything on your mind — sort it out later", "call mom tomorrow at 10:00"],
     "next": ["Steps you can take right away. From the Inbox, press “→ Next”, or add an @context right away", "buy batteries @store"],
     "waiting": ["What you're waiting for from others: a reply, a parcel, a decision. From the Inbox, press “→ Waiting”", "Marko sends the renovation quote"],
     "scheduled": ["Tasks with a time — the bot reminds you in Telegram. Just type the time in the task", "report on friday at 3pm"],
@@ -250,6 +254,8 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "done": ["Tick a task off and it lands here", ""],
     "project": ["No tasks in this project yet — add its #name to a task", "order samples #{p}"]},
   "empty_default": "Empty 🎉",
+  "inbox_empty": "Inbox is empty 🎉",
+  "due_soon": "⏰ Due soon", "due_hint": "Overdue or due in the next 3 days, from all lists", "overdue": "overdue",
   "ex": "For example: “{ex}”",
   "onb": [["capture", "Capture 3 thoughts", "in the field below or to the bot, no sorting yet"],
     ["process", "Clarify your Inbox", "decide what each task needs: → Next, → Waiting, → Someday…"],
@@ -380,10 +386,9 @@ async function load(){
     else if(S.view==='projects') S.items = await api('/items?status=all&project_id='+S.pid);
     else if(S.view!=='review') S.items = await api('/items?status='+S.view);
     else S.items = await api('/items?status=all');
-    // Пустой Inbox — показываем под ним Next, чтобы было с чем работать дальше
-    S.items = S.items.filter(i => !S.pendingDel.has(i.id));
-    S.nextItems = (S.view==='inbox' && !S.items.length) ? await api('/items?status=next') : [];
-    S.nextItems = S.nextItems.filter(i => !S.pendingDel.has(i.id));
+    // Экран Inbox — что делать дальше (SERBITO-326): под входящими «Скоро срок» и Next
+    [S.dueItems, S.nextItems] = S.view==='inbox'
+      ? await Promise.all([api('/items?status=due'), api('/items?status=next')]) : [[], []];
     render();
     await openDeepLink();
   }catch(e){ if(e.message==='auth') return loginScreen(); console.error(e); }
@@ -596,6 +601,10 @@ function navHtml(){
     <div class="keys">${t('keys')}</div></nav>`;
 }
 
+// Срок прошёл, а задача не закрыта — красным и словом «просрочено» (не только цветом)
+const overdue = it => it.remind_at && it.remind_at < Date.now()/1000 && !['done','trash'].includes(it.status);
+const dueHtml = it => overdue(it) ? `<span class="due over">⏰ ${fmtTs(it.remind_at)} · ${t('overdue')}</span>`
+  : `<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`;
 function itemHtml(it){
   const acts = [];
   if(it.status==='inbox') acts.push(['next','→ Next'],['waiting','→ Waiting'],['someday','→ Someday'],['reference','→ Ref'],['trash','🗑']);
@@ -606,7 +615,7 @@ function itemHtml(it){
   return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}">
     <input type="checkbox" data-act="toggle" ${it.status==='done'?'checked':''}>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
-      <div class="meta">${it.remind_at?`<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`:''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
+      <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" data-act="mv" data-st="${s}" ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
     </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}</div>`;
 }
@@ -630,8 +639,8 @@ const capHtml = () => `<div class="cap"><div class="capw"><textarea id="cap" row
 
 function render(){
   let body='', hero='';
-  S.items = S.items.filter(i => !S.pendingDel.has(i.id));
-  S.nextItems = (S.nextItems||[]).filter(i => !S.pendingDel.has(i.id));
+  const live = l => (l||[]).filter(i => !S.pendingDel.has(i.id));
+  S.items = live(S.items); S.nextItems = live(S.nextItems); S.dueItems = live(S.dueItems);
   if(S.view==='review') body = reviewHtml();
   else if(S.view==='account') body = accountHtml();
   else if(S.view==='stats') body = statsHtml();
@@ -646,13 +655,18 @@ function render(){
     }
     const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
     if(S.view==='inbox'){
-      // Inbox — точка входа: поле захвата по центру экрана, задачи под ним (пустой инбокс — ровно посередине)
-      const next = S.nextItems || [], onb = onbHtml();
-      hero = `${onb}<section class="hero ${onb?'onbh':items.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
-        <div class="hint">${items.length?HELP.inbox:`${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}`}</div></section>`;
-      body = items.length ? items.map(itemHtml).join('')
-        : next.length ? `<section class="below"><h3>${VIEWS[1][1]}</h3><div class="hint">${HELP.next}</div>
-            ${next.map(itemHtml).join('')}</section>` : '';
+      // Inbox — точка входа: поле захвата по центру экрана, задачи под ним (пустой инбокс — ровно посередине).
+      // Ниже — что делать дальше: «Скоро срок», затем Next. Каждая задача на экране один раз: входящие
+      // со сроком остаются в своём списке, задача из «Скоро срок» не повторяется в Next
+      const onb = onbHtml(), due = S.dueItems.filter(i => i.status!=='inbox'), dueIds = new Set(due.map(i => i.id));
+      const next = S.nextItems.filter(i => !dueIds.has(i.id));
+      const sec = (cls, title, hint, list) => list.length
+        ? `<section class="below ${cls}"><h3>${title}</h3><div class="hint">${hint}</div>${list.map(itemHtml).join('')}</section>` : '';
+      hero = `${onb}<section class="hero ${onb?'onbh':items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
+        ${items.length?`<div class="hint">${HELP.inbox}</div>`
+          :`<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
+      body = items.map(itemHtml).join('') + sec('due-soon', t('due_soon'), t('due_hint'), due)
+        + sec('next-sec', VIEWS[1][1], HELP.next, next);
     } else body = `${pj?`<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2>#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button></h2>`:`<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}`}
@@ -755,7 +769,7 @@ function toastEnd(commit){
 }
 async function toastUndo(){ const tt = toastEnd(false); if(tt?.undo) await tt.undo(); load(); }
 addEventListener('pagehide', () => toastEnd(true));  // закрыли вкладку — отложенное удаление всё равно выполнится
-const findItem = id => S.items.concat(S.nextItems||[]).find(i => i.id===id);
+const findItem = id => S.items.concat(S.dueItems||[], S.nextItems||[]).find(i => i.id===id);
 async function moveItem(id, status){
   const it = findItem(id); if(!it) return;
   const prev = it.status;
@@ -784,7 +798,7 @@ const ITEM_FIELDS = ['title','notes','status','project_id','context','remind'];
 // У каждой задачи своя ссылка /i/<номер>: открытая карточка отражается в адресе, закрыли — вернулись на /
 const itemLink = it => `${location.origin}/i/${it.num}`;
 function openEdit(id, found){
-  const it = found || S.items.concat(S.nextItems||[]).find(i=>i.id===id); if(!it) return;
+  const it = found || findItem(id); if(!it) return;
   const d = $('#dlg');
   history.replaceState(null, '', `/i/${it.num}`);
   d.onclose = () => { acClose(); if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };

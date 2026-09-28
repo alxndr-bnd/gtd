@@ -295,7 +295,9 @@ def test_card_title_suggestions(watch):
     w.page.click(f'main .it[data-id="{ids["inbox"]}"] .t')
     w.wait("#dlg[open] #ef", "карточка")
     title = w.page.locator('#ef [name="title"]')
-    title.press("End")
+    # Курсор в конец. Не клавишей End: Chromium на macOS при прокручиваемой странице (под Inbox теперь
+    # ещё и Next, SERBITO-326) прокручивает ею страницу, а не двигает курсор
+    title.evaluate("el => el.setSelectionRange(el.value.length, el.value.length)")
     title.type(" #Про")
     w.wait('#ef .ac:not([hidden]) .aco:has-text("#Проект Альфа")', "подсказка #")
     title.press("Enter")  # выбирает подсказку, а не отправляет карточку
@@ -565,3 +567,69 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
         w.check("прод: итог")
     finally:
         w.close()
+
+
+# ── Экран Inbox: что делать дальше (SERBITO-326) ──
+INBOX_TEXT = {"ru": {"empty": "Входящие пусты", "due": "Скоро срок", "next": "Next", "over": "просрочено"},
+              "en": {"empty": "Inbox is empty", "due": "Due soon", "next": "Next", "over": "overdue"}}
+
+
+def section_ids(w, cls):
+    return [int(x) for x in w.page.eval_on_selector_all(f"main .{cls} .it[data-id]", "els => els.map(e => e.dataset.id)")]
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_inbox_what_to_do_next(watch, lang):
+    """Три состояния: пусто совсем (сообщение, поле по центру); Inbox пуст — сообщение, затем «Скоро срок»
+    и Next; во Inbox есть задачи — они, затем те же блоки. «Скоро срок» — перед Next, просроченные первыми
+    и помечены; задача не повторяется ни в Next, ни (если она во Inbox) в «Скоро срок». Карточки рабочие."""
+    tx = INBOX_TEXT[lang]
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) "
+                "returning id", (int(time.time()), lang))  # без чек-листа: с ним поле не по центру
+    w = watch(lang)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    # 1. Ничего нет
+    assert w.page.locator("main .hero.solo").count()
+    assert tx["empty"] in w.page.inner_text("main .hero .inbox-empty")
+    assert w.page.locator("main .hero .hint .ex, main .hero .hint").count()  # подсказка с примером осталась
+    assert not w.page.locator("main .below").count()
+
+    # 2. Inbox пуст, есть сроки и Next
+    now = int(time.time())
+    mk = lambda text, status, remind=None: A.run(  # noqa: E731
+        "update items set status=%s, remind_at=%s where id=%s returning id",
+        (status, remind, A.capture(uid, text)["id"]))
+    plain = mk("Просто next", "next")
+    later = mk("Next через 10 дней", "next", now + 10 * 86400)
+    over = mk("Просроченный next", "next", now - 7200)
+    wait = mk("Ждать до завтра", "waiting", now + 86400)
+    w.page.reload()
+    w.wait("main .due-soon .it", f"[{lang}] «Скоро срок»")
+    assert not w.page.locator("main .hero.solo").count() and tx["empty"] in w.page.inner_text("main .inbox-empty")
+    heads = w.page.eval_on_selector_all("main .below h3", "els => els.map(e => e.textContent)")
+    assert len(heads) == 2 and tx["due"] in heads[0] and tx["next"] in heads[1]  # «Скоро срок» — перед Next
+    assert section_ids(w, "due-soon") == [over, wait]
+    assert sorted(section_ids(w, "next-sec")) == sorted([plain, later])  # просроченный next не повторяется
+    assert tx["over"] in w.page.inner_text(f'main .due-soon .it[data-id="{over}"] .due.over')
+    assert not w.page.locator(f'main .it[data-id="{wait}"] .due.over').count()
+    assert not w.page.locator("main .hero ~ .it").count()
+
+    # 3. Во Inbox есть задачи, одна из них со сроком — она во Inbox, а не в «Скоро срок»
+    inb = A.capture(uid, "Во входящих со сроком")["id"]
+    A.run("update items set remind_at=%s where id=%s", (now + 600, inb))
+    w.page.reload()
+    w.wait(f'main > .it[data-id="{inb}"]', f"[{lang}] задача во Inbox")
+    assert not w.page.locator("main .inbox-empty").count()
+    assert inb not in section_ids(w, "due-soon") and section_ids(w, "due-soon") == [over, wait]
+    order = w.page.eval_on_selector_all("main > .it, main > .below", "els => els.map(e => e.className)")
+    assert order[0].startswith("it") and "due-soon" in order[1] and "next-sec" in order[2]
+
+    # Карточки — обычные: клик открывает, кнопки работают
+    w.page.click(f'main .due-soon .it[data-id="{over}"]', position={"x": 4, "y": 4})
+    w.wait("#dlg[open] #ef", f"[{lang}] карточка из «Скоро срок»")
+    w.page.click('#ef [data-act="cancel"]')
+    w.page.click(f'main .due-soon .it[data-id="{wait}"] [data-act="mv"][data-st="next"]')
+    w.wait("#toast:not([hidden])", f"[{lang}] перенос")
+    assert A.row("select status from items where id=%s", (wait,))["status"] == "next"
+    w.check(f"[{lang}] итог")
