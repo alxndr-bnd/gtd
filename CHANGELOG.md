@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-28
+
 ### Added
 - The Inbox now shows what to do next: tasks that are overdue or due in the next 3 days, then your Next actions. Overdue dates are marked in red.
   - RU: Во «Входящих» теперь видно, что делать дальше: просроченные задачи и задачи со сроком в ближайшие 3 дня, а за ними — Next. Просроченные даты выделены красным.
@@ -188,7 +190,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/alxndr-bnd/gtd/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/alxndr-bnd/gtd/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/alxndr-bnd/gtd/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/alxndr-bnd/gtd/compare/v0.14.0...v0.15.0
