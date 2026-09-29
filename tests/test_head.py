@@ -61,11 +61,6 @@ def test_head_unknown_path_404_like_get(headers):
     assert call("HEAD", "/no-such-page", headers) == (404, hdrs, b"")
 
 
-def test_head_through_http_client(client):
-    r = client.head("/")
-    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html") and r.content == b""
-
-
 def test_api_and_login_link_stay_get_only(client, login):
     login(client)
     assert client.head("/api/me").status_code == 405

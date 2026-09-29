@@ -304,7 +304,7 @@ def test_config_reports_version(client, monkeypatch):
 
 
 def test_app_menu_links_to_changes():
+    """Ссылка, точка новой версии и ключ localStorage — в браузере (test_menu_whats_new_and_version, RU);
+    здесь — только адреса для обоих языков."""
     page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
-    assert "href=\"${t('changes_url')}\"" in page and "${changesLink()}" in page
     assert '"changes_url": "/changes"' in page and '"changes_url": "/en/changes"' in page
-    assert "localStorage.getItem('gtd-seen-version')" in page and P.SEEN_KEY == "gtd-seen-version"

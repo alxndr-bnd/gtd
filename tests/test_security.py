@@ -18,13 +18,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app as A
-from conftest import bot_message
+from conftest import bot_message, texts
 
 ROOT = Path(__file__).resolve().parent.parent
-
-
-def texts_of(sent):
-    return [p.get("text", "") for m, p in sent if m in ("sendMessage", "editMessageText")]
 
 
 # ── GTD-5: сессии ──
@@ -123,7 +119,7 @@ def test_api_body_must_be_json(client, login):
 
 def test_auth_form_post_rejected_cross_site(client, tg):
     bot_message("/login")
-    tok = re.search(r"/auth\?t=(\S+)", texts_of(tg)[-1]).group(1)
+    tok = re.search(r"/auth\?t=(\S+)", texts(tg)[-1]).group(1)
     assert client.post("/auth", data={"t": tok}, headers={"origin": "https://evil.example"}).status_code == 403
     assert A.row("select count(*) n from login_tokens")["n"] == 1  # токен не сожжён
 
@@ -140,7 +136,7 @@ def test_webhook_not_subject_to_origin_check(client, tg):
 def test_auth_link_page_warns_about_account_switch(client, login, tg):
     login(client, "alice@example.com")
     bot_message("/login", tg_id=888, name="Mallory")
-    tok = re.search(r"/auth\?t=(\S+)", texts_of(tg)[-1]).group(1)
+    tok = re.search(r"/auth\?t=(\S+)", texts(tg)[-1]).group(1)
     page = client.get("/auth", params={"t": tok}).text
     assert "Mallory" in page and "a***@example.com" in page and "переключит" in page
     assert client.get("/api/me").json()["email"] == "alice@example.com"  # пока не нажата кнопка — всё как было
@@ -148,7 +144,7 @@ def test_auth_link_page_warns_about_account_switch(client, login, tg):
 
 def test_auth_link_page_escapes_name(client, tg):
     bot_message("/login", name="<img src=x onerror=alert(1)>")
-    tok = re.search(r"/auth\?t=(\S+)", texts_of(tg)[-1]).group(1)
+    tok = re.search(r"/auth\?t=(\S+)", texts(tg)[-1]).group(1)
     page = client.get("/auth", params={"t": tok}).text
     assert "<img src=x" not in page and "&lt;img src=x" in page
 

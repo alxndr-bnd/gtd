@@ -295,12 +295,14 @@ def test_telegram_fallback_deep_link(watch, monkeypatch, lang):
     w.goto("/en/" if lang == "en" else "/")
     w.wait('#signin button.tgfb[data-act="tglogin"]', f"[{lang}] вход: кнопка Telegram")
     assert w.page.is_visible("#signin .tgfb") and not w.page.locator(".tgw script").count()
-    w.page.click('#signin [data-act="tglogin"]')
+    # Опрос (POST) уходит сразу после старта входа и отвечает без ошибок — ждём его ответ, а не таймер
+    with w.page.expect_response(lambda r: r.url.endswith("/api/auth/tg/poll")) as poll:
+        w.page.click('#signin [data-act="tglogin"]')
+    assert poll.value.ok and poll.value.json()["status"] == "pending"
     w.wait(f"#tgst {link}", f"[{lang}] вход: ссылка в бота")
-    # Число для сверки в боте (GTD-3) — то самое, что сохранено для этого входа; опрос (POST) идёт без ошибок
+    # Число для сверки в боте (GTD-3) — то самое, что сохранено для этого входа
     code = w.page.inner_text("#tgst .tgcode")
     assert A.row("select code from tg_logins order by expires desc limit 1")["code"] == int(code)
-    w.page.wait_for_timeout(2500)
 
     A.run("insert into users(name,created,lang) values('Smoke',%s,%s)", (int(time.time()), lang))
     w.goto("/dev-login")
@@ -807,10 +809,11 @@ def order_user(w, lang="ru"):
     return uid, (a, b, c)  # на экране: Первая, Вторая, Третья — новые в конце
 
 
-@pytest.mark.parametrize("lang", ["ru", "en"])
-def test_drag_to_reorder_with_mouse(watch, lang):
+def test_drag_to_reorder_with_mouse(watch):
     """Мышью: потянуть карточку вниз — она встаёт на новое место, порядок сохраняется на сервере и
-    переживает перезагрузку; перетаскивание карточку не открывает, обычный клик — открывает."""
+    переживает перезагрузку; перетаскивание карточку не открывает, обычный клик — открывает.
+    Один язык: перетаскивание от языка не зависит, EN-экраны Next — в test_app_sections."""
+    lang = "ru"
     w = watch(lang)
     uid, (first, second, third) = order_user(w, lang)
     assert screen_order(w) == [first, second, third]

@@ -94,6 +94,19 @@ def last_code(outbox) -> str:
     return re.search(r"\b(\d{6})\b", outbox[-1][2]).group(1)
 
 
+def email_start(c, email, **kw):
+    return c.post("/api/auth/email/start", json={"email": email}, **kw)
+
+
+def email_verify(c, email, code, link=False, **kw):
+    return c.post("/api/auth/email/verify", json={"email": email, "code": code, "link": link}, **kw)
+
+
+def texts(sent):
+    """Тексты сообщений бота (новые и отредактированные) из заглушки tg."""
+    return [p.get("text", "") for m, p in sent if m in ("sendMessage", "editMessageText")]
+
+
 @pytest.fixture
 def login(mail):
     """login(client, email) — вход по коду из письма; возвращает id пользователя."""

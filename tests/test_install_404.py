@@ -9,12 +9,8 @@ import pages as P
 BROWSER = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
 
-@pytest.mark.parametrize("accept_language, lang", [
-    (None, "ru"), ("ru-RU,ru;q=0.9,en;q=0.8", "ru"), ("en-US,en;q=0.9,ru;q=0.8", "en"), ("en-GB", "en"),
-    # правило языка SERBITO-259: сербский кириллицей — русский, латиницей и прочие языки — английский
-    ("sr-RS,sr;q=0.9,en;q=0.8,ru;q=0.7", "ru"), ("sr-Latn-RS", "en"), ("de-DE,de;q=0.9", "en"),
-    ("en;q=0,ru", "ru"), ("en;q=bad", "ru"),
-])
+# Правило выбора языка (SERBITO-259) — в test_i18n::test_accept_language; здесь — что манифест им пользуется
+@pytest.mark.parametrize("accept_language, lang", [(None, "ru"), ("en-US,en;q=0.9,ru;q=0.8", "en")])
 def test_manifest(client, accept_language, lang):
     r = client.get("/manifest.webmanifest", headers={"accept-language": accept_language} if accept_language else {})
     assert r.status_code == 200 and r.headers["content-type"] == "application/manifest+json"

@@ -4,15 +4,7 @@ import time
 import pytest
 
 import app as A
-from conftest import bot_callback, bot_message, last_code, tg_confirm, tg_poll, tg_start
-
-
-def email_start(c, email):
-    return c.post("/api/auth/email/start", json={"email": email})
-
-
-def email_verify(c, email, code, link=False):
-    return c.post("/api/auth/email/verify", json={"email": email, "code": code, "link": link})
+from conftest import bot_callback, bot_message, email_start, email_verify, last_code, tg_confirm, tg_poll, tg_start
 
 
 # ── Почта ──

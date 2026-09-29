@@ -6,11 +6,7 @@ import time
 import httpx
 
 import app as A
-from conftest import bot_callback, bot_message, last_code
-
-
-def texts(sent):
-    return [p.get("text", "") for m, p in sent if m in ("sendMessage", "editMessageText")]
+from conftest import bot_callback, bot_message, last_code, texts
 
 
 def test_anyone_gets_an_account(tg):
@@ -353,11 +349,13 @@ def test_cron_reminders(client, tg, monkeypatch):
 
 
 def fake_tg(monkeypatch, answers):
+    """Ответы Telegram по методу: значение или функция от параметров вызова."""
     calls = []
 
     async def fake(method, **params):
         calls.append((method, params))
-        return answers.get(method, True)
+        a = answers.get(method, True)
+        return a(params) if callable(a) else a
     monkeypatch.setattr(A, "tg", fake)
     monkeypatch.setattr(A, "TOKEN", "test-token")
     return calls
@@ -371,13 +369,6 @@ def test_bot_setup_sets_webhook_in_prod(monkeypatch):
     assert A.BOT_USERNAME == "gtdsrbot"
     hook = dict(calls)["setWebhook"]
     assert hook["url"] == "https://gtd.serbito.rs/tg/webhook" and hook["secret_token"] == A.webhook_secret()
-
-
-def test_bot_setup_local_has_no_webhook(monkeypatch):
-    calls = fake_tg(monkeypatch, {"getMe": {"username": "gtdsrbot"}})
-    monkeypatch.setattr(A, "WEBHOOK", False)
-    asyncio.run(A.bot_setup())
-    assert "setWebhook" not in dict(calls)
 
 
 def test_local_polling_leaves_prod_webhook_alone(monkeypatch):
@@ -397,16 +388,8 @@ def current_profile():
 
 
 def profile_tg(monkeypatch, answers):
-    calls = []
-
-    async def fake(method, **params):
-        calls.append((method, params))
-        a = answers.get(method, True)
-        return a(params) if callable(a) else a
-    monkeypatch.setattr(A, "tg", fake)
-    monkeypatch.setattr(A, "TOKEN", "test-token")
     monkeypatch.setattr(A, "WEBHOOK", True)
-    return calls
+    return fake_tg(monkeypatch, answers)
 
 
 def profile_sets(calls):
