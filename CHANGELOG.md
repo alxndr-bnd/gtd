@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-29
+
 ### Security
 - Signing in with the Telegram bot now asks you to tap the number shown on the website, and the bot shows which browser and IP address asked — someone else's link can't get into your account with one tap.
   - RU: Вход через Telegram-бота теперь просит нажать число, показанное на сайте, а бот показывает, из какого браузера и с какого IP пришёл запрос, — чужая ссылка не откроет твой аккаунт одним нажатием.
@@ -210,7 +212,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/alxndr-bnd/gtd/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/alxndr-bnd/gtd/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/alxndr-bnd/gtd/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/alxndr-bnd/gtd/compare/v0.16.0...v0.17.0
