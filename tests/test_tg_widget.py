@@ -93,7 +93,7 @@ def test_widget_login_existing_user(client, tg):
     assert widget(client, signed()).status_code == 200
     assert A.row("select count(*) n from users")["n"] == 1
     assert [i["title"] for i in client.get("/api/items?status=all").json()] == ["задача из бота"]
-    assert A.row("select user_id from sessions")["user_id"] == uid
+    assert A.row("select user_id from user_sessions")["user_id"] == uid
 
 
 def test_widget_rejected_payload_gives_no_session(client, tg):

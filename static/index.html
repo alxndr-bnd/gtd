@@ -198,8 +198,11 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "merge_yes": "🔗 Объединить в один", "merge_no": "Не сейчас",
   "email_ph": "Почта", "code_ph": "Код из письма", "confirm": "Подтвердить", "sign_in": "Войти",
   "code_sent": "Код отправлен на {email}, действует 10 минут",
-  "open_tg": "Открыть Telegram", "tg_hint": "В боте нажми «Start», затем «Подтвердить» — страница обновится сама.",
-  "tg_expired": "Время вышло — нажми кнопку ещё раз",
+  "open_tg": "Открыть Telegram", "tg_hint": "В боте нажми «Start», затем кнопку с этим числом — страница обновится сама.",
+  "tg_code": "Число для бота:", "tg_expired": "Время вышло — нажми кнопку ещё раз",
+  "tg_denied": "Число не совпало — вход отменён. Нажми кнопку ещё раз",
+  "sessions": "Сеансы", "sessions_text": "Открыто в браузерах и на устройствах: {n}.",
+  "logout_all": "Выйти на всех устройствах", "logout_all_q": "Выйти из аккаунта на всех устройствах, включая это?",
   "account": "👤 Аккаунт", "account_short": "Аккаунт", "account_hint": "Любой привязанный способ открывает этот же аккаунт.",
   "linked": "✅ Привязан", "not_configured": "Не настроен на сервере",
   "email": "Почта", "email_linked": "✅ {email} — вход по одноразовому коду", "email_none": "Не привязана",
@@ -284,8 +287,11 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "merge_yes": "🔗 Merge into one", "merge_no": "Not now",
   "email_ph": "Email", "code_ph": "Code from the email", "confirm": "Confirm", "sign_in": "Sign in",
   "code_sent": "Code sent to {email}, valid for 10 minutes",
-  "open_tg": "Open Telegram", "tg_hint": "In the bot, tap “Start”, then “Confirm” — this page updates by itself.",
-  "tg_expired": "Time's up — press the button again",
+  "open_tg": "Open Telegram", "tg_hint": "In the bot, tap “Start”, then the button with this number — this page updates by itself.",
+  "tg_code": "Number for the bot:", "tg_expired": "Time's up — press the button again",
+  "tg_denied": "The number didn't match — sign-in cancelled. Press the button again",
+  "sessions": "Sessions", "sessions_text": "Signed in on browsers and devices: {n}.",
+  "logout_all": "Sign out on all devices", "logout_all_q": "Sign out of this account on all devices, including this one?",
   "account": "👤 Account", "account_short": "Account", "account_hint": "Any linked method opens this same account.",
   "linked": "✅ Linked", "not_configured": "Not set up on the server",
   "email": "Email", "email_linked": "✅ {email} — sign in with a one-time code", "email_none": "Not linked",
@@ -544,7 +550,9 @@ async function tgWidgetAuth(user){
 async function tgStart(){
   try{
     const d = await authPost('tg/start', {link:linking()});
-    $('#tgst').innerHTML = `<p><a href="${esc(d.url)}" target="_blank" rel="noopener"><button class="pri">${t('open_tg')}</button></a></p>
+    // Число сверки (SERBITO-360): в боте из трёх кнопок верна та, что показана здесь
+    $('#tgst').innerHTML = `<p>${t('tg_code')} <b class="tgcode" style="font-size:22px;letter-spacing:2px">${esc(d.code)}</b></p>
+      <p><a href="${esc(d.url)}" target="_blank" rel="noopener"><button class="pri">${t('open_tg')}</button></a></p>
       ${t('tg_hint')}`;
     tgPoll(d.nonce);
   }catch(err){ authMsg(err.message); }
@@ -552,10 +560,13 @@ async function tgStart(){
 
 async function tgPoll(nonce){
   clearTimeout(S.tgTimer);
-  const r = await fetch('/api/auth/tg/poll?nonce='+encodeURIComponent(nonce), {headers:hdrs()}).then(r=>r.json()).catch(()=>({status:'pending'}));
+  // POST, nonce в теле: в журналы запросов он не попадает
+  const r = await fetch('/api/auth/tg/poll', {method:'POST', headers:hdrs(true), body:JSON.stringify({nonce})})
+    .then(r=>r.json()).catch(()=>({status:'pending'}));
   if(r.status==='ok'){ ga(linking() ? 'link_method' : 'login', {method:'telegram'}); return load(); }
   if(r.status==='merge') return mergeOffer(r);
   if(r.status==='expired') return authMsg(t('tg_expired'));
+  if(r.status==='denied') return authMsg(t('tg_denied'));
   S.tgTimer = setTimeout(()=>tgPoll(nonce), 2000);
 }
 
@@ -573,6 +584,8 @@ function accountHtml(){
     <div style="margin-top:14px">${t('lang_label')}</div>
     <div class="seg">${langs.map(([k, name])=>`<button class="${(m.lang||'')===k?'on':''}" data-act="lang" data-l="${k}" ${k?`lang="${k}"`:''}>${name}</button>`).join('')}</div>
     <div class="hint" style="margin:6px 0 0">${t('lang_hint')}</div></div>
+  <div class="rv"><h3>${t('sessions')}</h3>${t('sessions_text', {n:m.sessions||1})}
+    <div class="row" style="justify-content:flex-start;margin-top:8px"><button data-act="logoutall">${t('logout_all')}</button></div></div>
   <div class="msg" id="authmsg"></div>`;
 }
 
@@ -948,6 +961,8 @@ const draft = {
   get(k){ try{ return JSON.parse(localStorage.getItem('gtd-draft:'+k)); }catch{ return null; } },
   set(k, v){ try{ localStorage.setItem('gtd-draft:'+k, JSON.stringify(v)); }catch{} },
   del(k){ try{ localStorage.removeItem('gtd-draft:'+k); }catch{} },
+  // Выход: черновики задач не должны достаться следующему человеку за этим компьютером (SERBITO-360, GTD-14)
+  clear(){ try{ Object.keys(localStorage).filter(k => k.startsWith('gtd-draft:')).forEach(k => localStorage.removeItem(k)); }catch{} },
 };
 const ITEM_FIELDS = ['title','notes','status','project_id','context','remind'];
 
@@ -1106,7 +1121,11 @@ document.addEventListener('click', async e => {
   if(act==='undo') return toastUndo();
   if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
-  if(act==='logout'){ await api('/logout','POST'); S.me = null; return location.assign(LANG==='en' ? '/en/' : '/'); }  // на лендинг: его текст — с сервера
+  if(act==='logout'){ draft.clear(); await api('/logout','POST'); S.me = null; return location.assign(LANG==='en' ? '/en/' : '/'); }  // на лендинг: его текст — с сервера
+  if(act==='logoutall'){
+    if(!confirm(t('logout_all_q'))) return;
+    draft.clear(); await api('/logout/all','POST'); S.me = null; return location.assign(LANG==='en' ? '/en/' : '/');
+  }
   if(act==='lang'){  // явный выбор (или «Авто») — сильнее входа на /en/: подсказку и адрес /en/ забываем
     S.me = await api('/me','PATCH',{lang:el.dataset.l || null}); langHint.del();
     if(pathEn()) history.replaceState(null, '', '/');

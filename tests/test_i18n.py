@@ -9,7 +9,7 @@ import pytest
 
 import app as A
 import pages as P
-from conftest import bot_callback, bot_message, last_code
+from conftest import bot_callback, bot_message, last_code, tg_confirm, tg_start
 
 CYR = re.compile(r"[А-Яа-яЁё]")
 EN = {"accept-language": "en-US,en;q=0.9"}
@@ -118,13 +118,15 @@ def test_bot_login_link_opens_english_app(client, tg, new_client):
     link = texts(tg)[-1]
     assert link.startswith("Sign-in link") and link.endswith("&lang=en")
     tok = re.search(r"/auth\?t=([^&\s]+)", link).group(1)
-    r = client.get("/auth", params={"t": tok, "lang": "en"}, follow_redirects=False)
+    page = client.get("/auth", params={"t": tok, "lang": "en"})
+    assert '<html lang="en">' in page.text and "Sign in to the account" in page.text and 'name="lang" value="en"' in page.text
+    r = client.post("/auth", data={"t": tok, "lang": "en"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/en/"
     # явный русский в «Аккаунте» важнее языка Telegram
     A.run("update users set lang='ru'")
     bot_message("/login", lang="en")
     tok = re.search(r"/auth\?t=([^&\s]+)", texts(tg)[-1]).group(1)
-    r = new_client().get("/auth", params={"t": tok, "lang": "en"}, follow_redirects=False)
+    r = new_client().post("/auth", data={"t": tok, "lang": "en"}, follow_redirects=False)
     assert r.headers["location"] == "/" and texts(tg)[-1].startswith("Вход")
 
 
@@ -193,7 +195,8 @@ def test_bot_lists_and_done_in_english(tg):
     num = A.row("select num from items")["num"]
     bot_message(f"/done {num}", lang="en")
     assert texts(tg)[-1] == f'✅ Done: <a href="http://localhost:8000/i/{num}">#{num}</a> task'
-    asyncio.run(A.handle_message({"chat": {"id": 777}, "from": {"id": 777, "language_code": "en"}, "photo": [{}]}))
+    asyncio.run(A.handle_message({"chat": {"id": 777, "type": "private"}, "from": {"id": 777, "language_code": "en"},
+                                  "photo": [{}]}))
     assert texts(tg)[-1] == "I only understand text for now."
 
 
@@ -210,11 +213,12 @@ def test_bot_email_flow_in_english(tg, mail):
 
 
 def test_bot_tg_login_confirm_in_english(client, tg):
-    nonce = client.post("/api/auth/tg/start", json={}).json()["nonce"]
-    bot_message(f"/start {nonce}", tg_id=555, lang="en")
+    d = tg_start(client)
+    bot_message(f"/start {d['nonce']}", tg_id=555, lang="en")
     assert texts(tg)[-1].startswith("Confirm: sign in to GTD in your browser?")
-    assert tg[-1][1]["reply_markup"]["inline_keyboard"][0][0]["text"] == "✅ Confirm"
-    bot_callback(f"tgok:{nonce}", tg_id=555, lang="en")
+    assert "Tap the number shown on the website" in texts(tg)[-1]
+    assert str(d["code"]) in [b["text"] for b in tg[-1][1]["reply_markup"]["inline_keyboard"][0]]
+    tg_confirm(d, tg_id=555, lang="en")
     assert texts(tg)[-1] == "✅ Sign-in confirmed — go back to your browser"
     bot_message("/start stale", tg_id=556, lang="en")
     assert texts(tg)[-1] == "This link has expired — press the button on the website again."

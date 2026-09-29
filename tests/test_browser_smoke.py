@@ -107,6 +107,14 @@ class Watch:
         return route.abort()
 
     def _console(self, msg):
+        # Нарушения CSP в режиме report-only Chromium пишет уровнем info — ловим по тексту: смоук проверяет, что
+        # политика (app.CSP_REPORT_ONLY) пропускает всё, что страницы реально грузят (SERBITO-360, GTD-9)
+        if "Content Security Policy" in msg.text:
+            # Кроме eval без адреса скрипта: это сам Playwright — строковый предикат wait_for_function
+            if msg.text.startswith("Evaluating a string as JavaScript") and not msg.location.get("url"):
+                return
+            self.errors.append(f"CSP: {msg.text} @ {msg.location.get('url')}")
+            return
         if msg.type != "error":
             return
         # Единственный ожидаемый шум: Chromium пишет в консоль «Failed to load resource … 404» для самой
@@ -289,6 +297,10 @@ def test_telegram_fallback_deep_link(watch, monkeypatch, lang):
     assert w.page.is_visible("#signin .tgfb") and not w.page.locator(".tgw script").count()
     w.page.click('#signin [data-act="tglogin"]')
     w.wait(f"#tgst {link}", f"[{lang}] вход: ссылка в бота")
+    # Число для сверки в боте (GTD-3) — то самое, что сохранено для этого входа; опрос (POST) идёт без ошибок
+    code = w.page.inner_text("#tgst .tgcode")
+    assert A.row("select code from tg_logins order by expires desc limit 1")["code"] == int(code)
+    w.page.wait_for_timeout(2500)
 
     A.run("insert into users(name,created,lang) values('Smoke',%s,%s)", (int(time.time()), lang))
     w.goto("/dev-login")
@@ -300,6 +312,47 @@ def test_telegram_fallback_deep_link(watch, monkeypatch, lang):
     w.page.click('main [data-act="tglogin"]')
     w.wait(f"main #tgst {link}", f"[{lang}] account: ссылка в бота")
     w.check(f"[{lang}] итог")
+
+
+def test_sign_out_erases_drafts(watch):
+    """GTD-14: несохранённые черновики (поле захвата, карточка) живут в localStorage — после выхода их там нет,
+    следующий человек за этим компьютером их не увидит. Прочее (язык, согласие cookie) — остаётся."""
+    uid = A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s) returning id", (int(time.time()),))
+    A.capture(uid, "Задача")
+    w = watch("ru")
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    w.page.fill("#cap", "недописанная мысль")
+    w.page.click("main .it .t")
+    w.wait("#dlg[open] #ef", "карточка")
+    w.page.fill('#ef [name="notes"]', "черновик заметки")
+    w.page.keyboard.press("Escape")
+    keys = "Object.keys(localStorage).filter(k => k.startsWith('gtd-draft:')).sort()"
+    assert len(w.page.evaluate(keys)) == 2
+    w.page.click("nav .navfoot button.user")
+    w.page.click('nav .navfoot .umenu a[data-act="logout"]')
+    w.wait('#signin a[href="/dev-login"]', "лендинг после выхода")
+    assert w.page.evaluate(keys) == [] and w.page.evaluate("localStorage.getItem('gtd-seen-version')") == "dev"
+    w.check("выход")
+
+
+def test_sign_out_everywhere_from_account(watch):
+    """GTD-5: «Выйти на всех устройствах» в «Аккаунте» — после подтверждения гаснут все сессии, и эта тоже."""
+    uid = A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s) returning id", (int(time.time()),))
+    other = watch("ru")
+    other.goto("/dev-login")  # второй браузер того же аккаунта
+    w = watch("ru")
+    w.goto("/dev-login")
+    w.page.click("nav .navfoot button.user")
+    w.page.click('nav .navfoot .umenu a[data-view="account"]')
+    w.wait('main [data-act="logoutall"]', "аккаунт: кнопка")
+    assert "Открыто в браузерах и на устройствах: 2." in w.page.inner_text("main")
+    w.page.once("dialog", lambda d: d.accept())
+    w.page.click('main [data-act="logoutall"]')
+    w.wait('#signin a[href="/dev-login"]', "лендинг после выхода везде")
+    assert A.row("select count(*) n from user_sessions where user_id=%s", (uid,))["n"] == 0
+    w.check("выход везде")
+    other.check("второй браузер")
 
 
 def smoke_user(w, lang="ru"):

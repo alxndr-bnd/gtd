@@ -16,6 +16,18 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+- Signing in with the Telegram bot now asks you to tap the number shown on the website, and the bot shows which browser and IP address asked — someone else's link can't get into your account with one tap.
+  - RU: Вход через Telegram-бота теперь просит нажать число, показанное на сайте, а бот показывает, из какого браузера и с какого IP пришёл запрос, — чужая ссылка не откроет твой аккаунт одним нажатием.
+- A sign-in link from /login in the bot opens a page that shows whose account it is, and signs you in only when you press the button.
+  - RU: Ссылка входа из /login в боте открывает страницу, где видно, чей это аккаунт, и входит только по кнопке.
+- Sessions end after 90 days without visits, and "Sign out on all devices" in Account signs you out everywhere at once. Signing out also erases unsaved drafts in this browser.
+  - RU: Сессия заканчивается через 90 дней без заходов, а «Выйти на всех устройствах» в «Аккаунте» выходит отовсюду сразу. При выходе стираются и несохранённые черновики в этом браузере.
+- The bot no longer answers in group chats, so sign-in links and tasks never show up there.
+  - RU: Бот больше не отвечает в групповых чатах — ссылки входа и задачи туда не попадают.
+- Stronger protection against requests from other websites and against a flood of sign-in emails; security headers on every page.
+  - RU: Защита от запросов с чужих сайтов и от потока писем с кодом входа стала строже; на всех страницах — заголовки безопасности.
+
 ## [0.19.0] - 2026-09-28
 
 ### Security

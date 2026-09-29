@@ -117,6 +117,7 @@ PUBLIC_CSS = """<style>
 .pub .steps li{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px}
 .pub .steps b{display:block;font-size:17px;margin-bottom:4px}
 .pub .steps .where{display:block;color:var(--mut);font-size:13px;margin-top:6px}
+.pub button.btn{border:0;font-family:inherit;font-size:inherit;cursor:pointer}
 .pub .btn{display:inline-block;padding:10px 18px;border-radius:10px;background:var(--ac);color:var(--on-ac);text-decoration:none;font-weight:600}
 .pub .ex{list-style:none;padding:0} .pub .ex li{margin:6px 0}
 .pub q{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
@@ -493,7 +494,7 @@ def about(base: str, lang: str, ga: str) -> str:
 # Политика конфиденциальности (SERBITO-282). Каждое утверждение сверено с app.py и index.html — меняешь, что
 # хранится или куда уходит, правь и этот текст. Адрес для запросов о данных — только здесь, больше нигде
 PRIVACY_EMAIL = "alexander.bondarchuk@gmail.com"
-PRIVACY_DATE = {"ru": "27 сентября 2026", "en": "27 September 2026"}
+PRIVACY_DATE = {"ru": "29 сентября 2026", "en": "29 September 2026"}
 T["ru"].update(privacy="Конфиденциальность", privacy_title="Политика конфиденциальности — GTD онлайн",
                privacy_desc="Какие данные хранит GTD онлайн, что получает аналитика, как дать или отозвать "
                             "согласие на cookie, кто обрабатывает данные и как удалить аккаунт.")
@@ -518,10 +519,12 @@ PRIVACY = {
 задача — с сайта или от бота.</li>
 <li><b>Счётчик активности</b>: за каждый день и канал (сайт или бот) — сколько было действий. Без текста задач
 и без IP-адресов.</li>
-<li><b>Вход</b>: cookie <code>sid</code> (httpOnly, 90 дней) держит тебя в аккаунте, выход удаляет сессию.
-Ссылки и коды входа живут 10 минут, коды из писем хранятся только в виде хеша.</li>
-<li><b>Только в браузере</b> (localStorage): выбранный язык, ещё не сохранённые черновики и твой выбор
-в баннере cookie.</li>
+<li><b>Вход</b>: cookie <code>sid</code> (httpOnly) держит тебя в аккаунте; сессия истекает через 90 дней без
+заходов, в базе — только её хеш. Выход удаляет сессию, «Выйти на всех устройствах» — все. Ссылки и коды входа
+живут 10 минут, коды из писем хранятся только в виде хеша. Вход через бота на эти же 10 минут запоминает IP
+и название браузера — чтобы показать их в Telegram при подтверждении.</li>
+<li><b>Только в браузере</b> (localStorage): выбранный язык, ещё не сохранённые черновики (стираются при выходе)
+и твой выбор в баннере cookie.</li>
 </ul>
 <h2>Аналитика</h2>
 <ul class="ex">
@@ -577,10 +580,13 @@ Google account ID, email and name from Google. Plus settings: interface language
 the site or the bot.</li>
 <li><b>Activity counter</b>: per day and channel (site or bot) — how many actions you made. No task text,
 no IP addresses.</li>
-<li><b>Sign-in</b>: the <code>sid</code> cookie (httpOnly, 90 days) keeps you signed in; signing out deletes
-the session. Sign-in links and codes last 10 minutes; email codes are stored only as a hash.</li>
-<li><b>In your browser only</b> (localStorage): your language choice, unsaved drafts and your answer
-to the cookie banner.</li>
+<li><b>Sign-in</b>: the <code>sid</code> cookie (httpOnly) keeps you signed in; a session expires after 90 days
+without visits, and we store only its hash. Signing out deletes the session, “Sign out on all devices” deletes
+all of them. Sign-in links and codes last 10 minutes; email codes are stored only as a hash. Signing in through
+the bot keeps the IP address and browser name for the same 10 minutes, to show them in Telegram when you
+confirm.</li>
+<li><b>In your browser only</b> (localStorage): your language choice, unsaved drafts (erased when you sign out)
+and your answer to the cookie banner.</li>
 </ul>
 <h2>Analytics</h2>
 <ul class="ex">
@@ -817,6 +823,49 @@ def not_found(lang: str) -> str:
 def auth_stale(lang: str, bot: str = "") -> str:
     h, text, go, open_bot = AUTH_STALE[lang]
     return notice(lang, h, text, go, (f"https://t.me/{bot}", open_bot) if bot else None)
+
+
+# Вход по ссылке из бота — только кнопкой (SERBITO-360, GTD-7): видно, в чей аккаунт, и чужую ссылку можно узнать
+AUTH_CONFIRM = {
+    "ru": ("Вход в GTD", "Войти в аккаунт <b>{who}</b>? Ссылку присылает бот на команду /login. Если ты её "
+           "не запрашивал — закрой страницу: кто-то пытается подсунуть тебе свой аккаунт.",
+           "Сейчас в этом браузере открыт другой аккаунт — <b>{cur}</b>. Вход переключит на <b>{who}</b>.",
+           "Войти", "Отмена"),
+    "en": ("Sign in to GTD", "Sign in to the account <b>{who}</b>? The bot sends this link in reply to /login. "
+           "If you didn't ask for it, close this page: someone may be trying to slip you their account.",
+           "Another account is signed in in this browser — <b>{cur}</b>. Signing in switches to <b>{who}</b>.",
+           "Sign in", "Cancel"),
+}
+
+
+def auth_confirm(lang: str, who: str, token: str, link_lang: str = "", current: str = "") -> str:
+    """Страница /auth?t=…: в чей аккаунт вход и кнопка «Войти» (POST /auth). current — аккаунт, уже открытый
+    в этом браузере, если он другой."""
+    h, text, switch, go, cancel = AUTH_CONFIRM[lang]
+    who, cur = html.escape(who or "?"), html.escape(current)
+    note = f'<p class="note">{switch.format(cur=cur, who=who)}</p>' if current else ""
+    home = PATHS[(lang, "home")]
+    return f"""<!doctype html>
+<html lang="{lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{h} — {SITE_NAME}</title>
+{ICONS}
+{BASE_CSS}
+{PUBLIC_CSS}
+</head>
+<body>
+<div class="pub"><div class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></div>
+<h1>{h}</h1>
+<p class="lead">{text.format(who=who)}</p>
+{note}
+<form method="post" action="/auth"><input type="hidden" name="t" value="{html.escape(token)}">
+<input type="hidden" name="lang" value="{html.escape(link_lang)}">
+<p><button class="btn" type="submit">{go}</button>&emsp;<a href="{home}">{cancel}</a></p></form></div>
+</body>
+</html>"""
 
 
 def notice(lang: str, h: str, text: str, go: str, link: tuple | None) -> str:

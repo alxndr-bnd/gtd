@@ -51,8 +51,10 @@ the tag. GCP auth is keyless (Workload Identity Federation) — no keys anywhere
 
 Configuration:
 
-- Non-secret env vars — `.github/deploy.env.yaml` (`BASE_URL`, `TZ`, `SMTP_USER`, `ADMIN_USER_IDS`,
-  `GA_MEASUREMENT_ID`). Added from the tag: `SENTRY_RELEASE` (`v0.3.0` → `gtd@0.3.0`) and `APP_VERSION`
+- Non-secret env vars — `.github/deploy.env.yaml` (`BASE_URL`, `TZ`, `GA_MEASUREMENT_ID`). The repo is public,
+  so `SMTP_USER` (Brevo SMTP login) and `ADMIN_USER_IDS` come from GitHub repository secrets of the same names
+  (Settings → Secrets and variables → Actions); the workflow checks them before the build and appends them to
+  the env file. Added from the tag: `SENTRY_RELEASE` (`v0.3.0` → `gtd@0.3.0`) and `APP_VERSION`
   (`0.3.0`) — the version shown in the footer, the app menu and `/changes`.
 - Secrets — Secret Manager via `--set-secrets` in the workflow: `gtd-database-url`, `GOOGLE_CLIENT_ID`,
   `EMAIL_HOST_PASSWORD` (→ `SMTP_PASSWORD`), `gtd-sentry-dsn`, `gtd-cron-secret`, and
@@ -117,8 +119,10 @@ on the free plan the 300 emails/day limit covers both projects.
 - **Sentry** — `nohandoff/gtd`, DSN in secret `gtd-sentry-dsn`, release `gtd@X.Y.Z` from the tag.
 - **Google Analytics 4** — Serbito account → property `gtd.serbito.rs` (`G-CP9WBRWGD6`, `GA_MEASUREMENT_ID`).
   The tag loads only on the production domain.
-- **Statistics** in the app — for the owner only: `ADMIN_USER_IDS` in `.github/deploy.env.yaml`
-  (account id, not email; production owner is id 3).
+- **Statistics** in the app — for the owner only: GitHub secret `ADMIN_USER_IDS` (account ids, not emails).
+- **Logs** — on Cloud Run every line is JSON with `severity` (`LOG_FORMAT`), so Logs Explorer filters and
+  log-based alerts work by level. Sign-in email volume: an `ERROR` at 80 % of `EMAIL_DAILY_CAP` and when it's
+  reached (also in Sentry) — the Brevo quota is shared with serbito.
 - **Cloudflare Web Analytics** — visits, no cookies.
 
 What these may and may not collect: see [internals.md](internals.md#analytics).

@@ -31,7 +31,7 @@ def test_capture_from_telegram(tg):
 
 
 def test_non_text_message(tg):
-    asyncio.run(A.handle_message({"chat": {"id": 777}, "from": {"id": 777}, "photo": [{}]}))
+    asyncio.run(A.handle_message({"chat": {"id": 777, "type": "private"}, "from": {"id": 777}, "photo": [{}]}))
     assert texts(tg)[-1] == "Пока понимаю только текст."
 
 
@@ -97,8 +97,14 @@ def test_login_link(tg, client):
     bot_message("/login")
     tok = re.search(r"/auth\?t=(\S+)", texts(tg)[-1]).group(1)
     r = client.get("/auth", params={"t": tok}, follow_redirects=False)
+    # Ссылка сама не входит (GTD-7): страница с именем аккаунта и кнопкой; токен ещё жив
+    assert r.status_code == 200 and "Tom" in r.text and 'action="/auth"' in r.text
+    assert r.headers["cache-control"] == "no-store" and r.headers["referrer-policy"] == "no-referrer"
+    assert "sid" not in r.cookies and client.get("/api/me").status_code == 401
+    r = client.post("/auth", data={"t": tok}, follow_redirects=False)
     assert r.status_code == 303 and client.get("/api/me").json()["tg"] is True
-    assert client.get("/auth", params={"t": tok}).status_code == 400  # одноразовая
+    assert client.post("/auth", data={"t": tok}).status_code == 400  # одноразовая
+    assert client.get("/auth", params={"t": tok}).status_code == 400
 
 
 def test_login_link_expires(tg, client, monkeypatch):
@@ -324,7 +330,8 @@ def test_email_merge_declined(tg, mail, login, new_client):
 # ── вебхук и будильник: в проде бот не опрашивает Telegram и инстанс может спать ──
 
 def test_webhook_requires_secret(client, tg):
-    upd = {"update_id": 1, "message": {"chat": {"id": 777}, "from": {"id": 777, "first_name": "Tom"}, "text": "из вебхука"}}
+    upd = {"update_id": 1, "message": {"chat": {"id": 777, "type": "private"}, "from": {"id": 777, "first_name": "Tom"},
+                                       "text": "из вебхука"}}
     assert client.post("/tg/webhook", json=upd).status_code == 403
     assert client.post("/tg/webhook", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": "nope"}).status_code == 403
     r = client.post("/tg/webhook", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": A.webhook_secret()})

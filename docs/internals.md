@@ -8,15 +8,25 @@ Sign-up is open: the first sign-in by any method creates an account.
 
 - **Google** — Sign in with Google; the ID token is checked via `oauth2.googleapis.com/tokeninfo`.
 - **Email** — a 6-digit code over SMTP. Valid 10 minutes, 5 attempts, resend after a minute,
-  at most 5 emails per 10 minutes per IP. Without `SMTP_PASSWORD` and with `DEV=1` the code goes to the server log.
-- **Telegram** — button on the site → bot → “Confirm”; the page picks up the confirmation itself.
-  `/login` in the bot works too.
+  at most 5 emails per 10 minutes per IP, and `EMAIL_DAILY_CAP` emails a day in total. Without `SMTP_PASSWORD` and with `DEV=1` the code goes to the server log.
+- **Telegram** — button on the site → bot → tap the number the site shows (one of three buttons; a wrong one
+  cancels). The bot message says which browser and IP asked and, for linking, which account. Only the browser
+  that started (cookie `tgl`) can pick up the session. On gtd.serbito.rs desktop — the Telegram Login Widget
+  (a signature is valid 10 minutes and once). `/login` in the bot sends a link to a page that shows whose account
+  it opens and signs in only with its button (POST).
+- **Sessions** — cookie `sid`; the database keeps only its SHA-256. Expire after 90 days without activity
+  (sliding). Sign out deletes the session and the cookie; “Sign out on all devices” in “👤 Account” deletes all.
+- **Requests** — state-changing `/api/*` and `POST /auth` must be same-origin (`Sec-Fetch-Site`/`Origin`);
+  `/api/*` bodies must be `application/json`. Every response carries security headers; the CSP is report-only
+  for now (reports go to Sentry when `SENTRY_DSN` is set). `/docs` and `/openapi.json` exist only with `DEV=1`.
+- **Bot** answers only in private chats.
 
 Google and an email code for the same address are one account. Other methods are linked under
 “👤 Account” or in the bot: `/email you@example.com` → code by email → send the code to the bot.
 
 If a sign-in method already belongs to another account: an empty one is taken over silently (and we move
-into the account with data if ours is empty and nothing is lost); one with tasks — we offer to **merge**
+into the account with data if ours is empty and nothing is lost — except when linking Telegram via the bot
+link, where the person confirming isn't the one in the browser); one with tasks — we offer to **merge**
 (a button on the web, “🔗 Merge” in the bot). Only the initiator confirms. The merge is one transaction:
 tasks, projects (same-name projects are joined), sessions and missing sign-in methods move into one account.
 

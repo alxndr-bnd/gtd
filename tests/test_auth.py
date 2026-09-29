@@ -1,8 +1,10 @@
 """Аккаунты: вход по коду на почту, Google, Telegram и привязка способов входа друг к другу."""
+import time
+
 import pytest
 
 import app as A
-from conftest import bot_callback, bot_message, last_code
+from conftest import bot_callback, bot_message, last_code, tg_confirm, tg_poll, tg_start
 
 
 def email_start(c, email):
@@ -17,7 +19,7 @@ def email_verify(c, email, code, link=False):
 
 def test_email_signup_normalizes_address(client, mail, login):
     login(client, "  Alice@Example.COM ")
-    assert client.get("/api/me").json() == {"name": "alice", "email": "alice@example.com", "tg": False, "google": False, "undo_seconds": 30, "lang": None, "admin": False}
+    assert client.get("/api/me").json() == {"name": "alice", "email": "alice@example.com", "tg": False, "google": False, "undo_seconds": 30, "lang": None, "admin": False, "sessions": 1}
     assert mail[-1][0] == "alice@example.com" and "Код входа" in mail[-1][1]
 
 
@@ -101,7 +103,7 @@ def google(monkeypatch):
 def test_google_signup_and_bad_token(client, google):
     assert client.post("/api/auth/google", json={"credential": "bad"}).status_code == 400
     assert client.post("/api/auth/google", json={"credential": "good-alice"}).status_code == 200
-    assert client.get("/api/me").json() == {"name": "Alice", "email": "alice@example.com", "tg": False, "google": True, "undo_seconds": 30, "lang": None, "admin": False}
+    assert client.get("/api/me").json() == {"name": "Alice", "email": "alice@example.com", "tg": False, "google": True, "undo_seconds": 30, "lang": None, "admin": False, "sessions": 1}
 
 
 def test_google_joins_email_account(new_client, login, google):
@@ -131,9 +133,9 @@ def test_google_verify_checks_claims(monkeypatch):
 
 
 def test_google_link_sets_email_if_missing(client, tg, google):
-    d = client.post("/api/auth/tg/start", json={}).json()
-    bot_callback(f"tgok:{d['nonce']}")
-    client.get("/api/auth/tg/poll", params={"nonce": d["nonce"]})
+    d = tg_start(client)
+    tg_confirm(d)
+    tg_poll(client, d["nonce"])
     assert client.post("/api/auth/google", json={"credential": "good-alice", "link": True}).json() == {"ok": True}
     me = client.get("/api/me").json()
     assert me["tg"] and me["google"] and me["email"] == "alice@example.com"
@@ -142,20 +144,22 @@ def test_google_link_sets_email_if_missing(client, tg, google):
 # ── Telegram ──
 
 def test_tg_login_requires_confirmation(client, tg):
-    d = client.post("/api/auth/tg/start", json={}).json()
-    assert d["url"] == f"https://t.me/gtd_test_bot?start={d['nonce']}"
-    assert client.get("/api/auth/tg/poll", params={"nonce": d["nonce"]}).json()["status"] == "pending"
+    d = tg_start(client)
+    assert d["url"] == f"https://t.me/gtd_test_bot?start={d['nonce']}" and 10 <= d["code"] <= 99
+    assert tg_poll(client, d["nonce"])["status"] == "pending"
 
     bot_message(f"/start {d['nonce']}")
-    kb = tg[-1][1]["reply_markup"]["inline_keyboard"][0][0]
-    assert kb["callback_data"] == f"tgok:{d['nonce']}"
-    assert A.row("select count(*) n from users")["n"] == 0  # до «Подтвердить» аккаунта нет
+    buttons = tg[-1][1]["reply_markup"]["inline_keyboard"][0]
+    # Сверка числом (GTD-3): три разных числа, одно из них — с сайта
+    assert len({b["text"] for b in buttons}) == 3 and str(d["code"]) in [b["text"] for b in buttons]
+    assert {b["callback_data"] for b in buttons} == {f"tgok:{d['nonce']}:{b['text']}" for b in buttons}
+    assert A.row("select count(*) n from users")["n"] == 0  # до подтверждения аккаунта нет
 
-    bot_callback(f"tgok:{d['nonce']}")
-    r = client.get("/api/auth/tg/poll", params={"nonce": d["nonce"]})
+    tg_confirm(d)
+    r = client.post("/api/auth/tg/poll", json={"nonce": d["nonce"]})
     assert r.json()["status"] == "ok" and "sid" in r.cookies
     assert client.get("/api/me").json()["tg"] is True
-    assert client.get("/api/auth/tg/poll", params={"nonce": d["nonce"]}).json()["status"] == "expired"
+    assert tg_poll(client, d["nonce"])["status"] == "expired"
 
 
 def test_tg_login_disabled_without_bot(client):
@@ -163,26 +167,110 @@ def test_tg_login_disabled_without_bot(client):
 
 
 def test_tg_expired_link(client, tg):
-    d = client.post("/api/auth/tg/start", json={}).json()
+    d = tg_start(client)
     A.run("update tg_logins set expires=0")
     bot_message(f"/start {d['nonce']}")
     assert "устарела" in tg[-1][1]["text"]
-    assert client.get("/api/auth/tg/poll", params={"nonce": d["nonce"]}).json()["status"] == "expired"
+    assert tg_poll(client, d["nonce"])["status"] == "expired"
+
+
+# ── Фишинг ссылки в бота (SERBITO-360, GTD-3) ──
+
+def test_tg_prompt_shows_who_and_where(client, tg):
+    client.headers["user-agent"] = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                                    "(KHTML, like Gecko) Chrome/140.0 Safari/537.36")
+    d = tg_start(client)
+    bot_message(f"/start {d['nonce']}")
+    text = tg[-1][1]["text"]
+    assert "Запрос из браузера: Chrome, macOS, IP testclient." in text and "чужая попытка" in text
+
+
+def test_tg_wrong_number_cancels(client, tg):
+    d = tg_start(client)
+    tg_confirm(d, code=d["code"] % 89 + 10 if d["code"] != 99 else 10)  # любое другое число
+    assert tg[-1][1]["text"].startswith("Число не совпало")
+    assert tg_poll(client, d["nonce"])["status"] == "denied"
+    tg_confirm(d)  # верное число после неверного уже не спасает: попытка одна
+    assert "устарела" in tg[-1][1]["text"]
+    assert A.row("select count(*) n from users")["n"] == 0 and "sid" not in client.cookies
+
+
+def test_tg_links_from_before_number_matching_are_stale(client, tg):
+    """Вход, начатый до выкатки (строка без числа), не подтверждается ни ссылкой, ни старой кнопкой."""
+    d = tg_start(client)
+    A.run("update tg_logins set code=null")
+    bot_message(f"/start {d['nonce']}")
+    assert "устарела" in tg[-1][1]["text"]
+    bot_callback(f"tgok:{d['nonce']}")  # кнопка «Подтвердить» прежней версии
+    assert "устарела" in tg[-1][1]["text"] and A.row("select count(*) n from users")["n"] == 0
+
+
+def test_tg_session_only_for_starting_browser(new_client, tg):
+    """nonce из ссылки попал к другому браузеру — сессию он не заберёт: нужна cookie tgl того, кто начал."""
+    mine, other = new_client(), new_client()
+    d = tg_start(mine)
+    tg_confirm(d)
+    assert tg_poll(other, d["nonce"])["status"] == "expired" and "sid" not in other.cookies
+    other.cookies.set("tgl", "guess", path="/api/auth/tg")
+    assert tg_poll(other, d["nonce"])["status"] == "expired"
+    assert tg_poll(mine, d["nonce"])["status"] == "ok" and mine.get("/api/me").status_code == 200
+
+
+def test_tg_confirm_is_single_use(client, tg):
+    d = tg_start(client)
+    tg_confirm(d)
+    tg_confirm(d, tg_id=888)  # второе нажатие (или чужое) — ссылка уже использована
+    assert "устарела" in tg[-1][1]["text"] and A.row("select count(*) n from users")["n"] == 1
+
+
+def test_tg_start_rate_limited(client, tg):
+    for _ in range(A.TG_STARTS[0]):
+        tg_start(client)
+    assert client.post("/api/auth/tg/start", json={}).status_code == 429
+
+
+def test_tg_link_prompt_names_account_and_warns_about_merge(new_client, login, tg):
+    c = new_client()
+    login(c, "alice@example.com")
+    bot_message("задача из бота", tg_id=888)
+    d = tg_start(c, link=True)
+    bot_message(f"/start {d['nonce']}", tg_id=888)
+    text = tg[-1][1]["text"]
+    assert "привязать этот Telegram к аккаунту GTD a***@example.com" in text
+    assert "уже есть свой аккаунт с задачами (1)" in text
+
+
+def test_tg_link_never_auto_merges(new_client, login, tg, mail):
+    """Злоумышленник с пустым аккаунтом присылает ссылку привязки; жертва с задачами подтверждает. Раньше
+    пустой аккаунт вместе с сессией злоумышленника молча переезжал в аккаунт жертвы. Теперь — только
+    предложение объединить в браузере, аккаунты не тронуты."""
+    victim = A.tg_user(888, "Victim")["id"]
+    A.capture(victim, "секрет жертвы")
+    attacker = new_client()
+    evil = login(attacker, "evil@example.com")
+    d = tg_start(attacker, link=True)
+    tg_confirm(d, tg_id=888)
+    r = tg_poll(attacker, d["nonce"])
+    assert r["status"] == "merge"
+    assert A.row("select count(*) n from users")["n"] == 2 and A.row("select tg_id from users where id=%s", (evil,))["tg_id"] is None
+    assert attacker.get("/api/items?status=all").json() == []
 
 
 def test_link_tg_absorbs_empty_account(new_client, login, tg):
     c = new_client()
     uid = login(c)
     tom = A.tg_user(777, "Tom")["id"]  # пустой аккаунт Тома, у него открыта веб-сессия
-    A.run("insert into sessions(token,user_id,created) values('tom-sid',%s,0)", (tom,))
     tom_web = new_client()
     tom_web.cookies.set("sid", "tom-sid")
+    A.run("insert into user_sessions(token_hash,user_id,created,seen) values(%s,%s,0,%s)",
+          (A.token_hash("tom-sid"), tom, int(time.time())))
+    assert tom_web.get("/api/me").status_code == 200
 
-    d = c.post("/api/auth/tg/start", json={"link": True}).json()
+    d = tg_start(c, link=True)
     bot_message(f"/start {d['nonce']}")
     assert "привязать" in tg[-1][1]["text"]
-    bot_callback(f"tgok:{d['nonce']}")
-    assert c.get("/api/auth/tg/poll", params={"nonce": d["nonce"]}).json()["status"] == "ok"
+    tg_confirm(d)
+    assert tg_poll(c, d["nonce"])["status"] == "ok"
     assert A.row("select tg_id from users where id=%s", (uid,))["tg_id"] == 777
     assert A.row("select id from users where id=%s", (tom,)) is None
     assert tom_web.get("/api/me").status_code == 401  # сессии поглощённого аккаунта погашены
@@ -229,9 +317,9 @@ def test_empty_account_moves_into_existing_one(new_client, login, tg, mail):
     carol_id = login(carol, "carol@example.com")
     carol.post("/api/capture", json={"text": "важное"})
     fresh = new_client()  # пустой аккаунт, вошедший через Telegram — терять ему нечего
-    d = fresh.post("/api/auth/tg/start", json={}).json()
-    bot_callback(f"tgok:{d['nonce']}", tg_id=555)
-    fresh.get("/api/auth/tg/poll", params={"nonce": d["nonce"]})
+    d = tg_start(fresh)
+    tg_confirm(d, tg_id=555)
+    tg_poll(fresh, d["nonce"])
 
     email_start(fresh, "carol@example.com")
     assert email_verify(fresh, "carol@example.com", last_code(mail), link=True).json() == {"ok": True}
@@ -257,10 +345,10 @@ def test_link_tg_of_busy_account_offers_merge_in_browser(new_client, login, tg):
     c.post("/api/capture", json={"text": "моё"})
     bot_message("задача из бота", tg_id=888)  # у Telegram 888 свой аккаунт с задачей
 
-    d = c.post("/api/auth/tg/start", json={"link": True}).json()
-    bot_callback(f"tgok:{d['nonce']}", tg_id=888)
+    d = tg_start(c, link=True)
+    tg_confirm(d, tg_id=888)
     assert "подтверди объединение" in tg[-1][1]["text"]
-    r = c.get("/api/auth/tg/poll", params={"nonce": d["nonce"]}).json()
+    r = tg_poll(c, d["nonce"])
     assert r["status"] == "merge" and r["items"] == 1
     assert c.post("/api/auth/merge", json={"token": r["merge"]}).json() == {"ok": True}
     assert A.row("select tg_id from users where id=%s", (alice,))["tg_id"] == 888
