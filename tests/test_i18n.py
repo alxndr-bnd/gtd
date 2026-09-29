@@ -33,6 +33,7 @@ def test_lang_of(code, lang):
 @pytest.mark.parametrize("header, lang", [
     ("en-US,en;q=0.9,ru;q=0.8", "en"), ("ru,en;q=0.9", "ru"), ("de-DE,de;q=0.9,ru;q=0.5", "en"),
     ("fr;q=0.5,uk;q=0.8", "ru"), ("en;q=0,ru", "ru"), ("", "ru"), (None, "ru"),
+    ("sr-RS,sr;q=0.9,en;q=0.8,ru;q=0.7", "ru"), ("sr-Latn-RS", "en"), ("en;q=bad", "ru"),
 ])
 def test_accept_language(header, lang):
     assert P.pick_lang(header) == lang
@@ -335,10 +336,10 @@ def test_ui_language_mechanism():
     assert "'Accept-Language': LANG" in INDEX  # сервер отвечает на языке интерфейса
 
 
-@pytest.mark.parametrize("header, lang", [(None, "ru"), ("ru-RU,ru;q=0.9", "ru"), ("en-US,en;q=0.9", "en"),
-                                          ("de-DE", "en"), ("sr-Latn-RS", "en"), ("uk-UA", "ru")])
+@pytest.mark.parametrize("header, lang", [(None, "ru"), ("en-US,en;q=0.9", "en")])
 def test_config_reports_browser_language(client, header, lang):
-    """«Авто» на сайте: язык браузера по его Accept-Language, тем же правилом, что у бота и писем."""
+    """«Авто» на сайте: язык браузера по его Accept-Language, тем же правилом, что у бота и писем
+    (само правило — test_accept_language и test_lang_of)."""
     assert client.get("/api/config", headers={"accept-language": header} if header else {}).json()["lang"] == lang
 
 
