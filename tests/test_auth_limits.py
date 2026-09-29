@@ -7,18 +7,10 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 import app as A
-from conftest import last_code
+from conftest import email_start, email_verify, last_code
 
 EN = {"Accept-Language": "en"}
 CF_EDGE = "104.16.0.5"
-
-
-def email_start(c, email, **kw):
-    return c.post("/api/auth/email/start", json={"email": email}, **kw)
-
-
-def email_verify(c, email, code, **kw):
-    return c.post("/api/auth/email/verify", json={"email": email, "code": code}, **kw)
 
 
 def wrong(code):

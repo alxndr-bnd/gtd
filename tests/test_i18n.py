@@ -9,14 +9,10 @@ import pytest
 
 import app as A
 import pages as P
-from conftest import bot_callback, bot_message, last_code, tg_confirm, tg_start
+from conftest import bot_callback, bot_message, last_code, texts, tg_confirm, tg_start
 
 CYR = re.compile(r"[А-Яа-яЁё]")
 EN = {"accept-language": "en-US,en;q=0.9"}
-
-
-def texts(sent):
-    return [p.get("text", "") for m, p in sent if m in ("sendMessage", "editMessageText")]
 
 
 # ── правило языка ──

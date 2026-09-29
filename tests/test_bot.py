@@ -6,11 +6,7 @@ import time
 import httpx
 
 import app as A
-from conftest import bot_callback, bot_message, last_code
-
-
-def texts(sent):
-    return [p.get("text", "") for m, p in sent if m in ("sendMessage", "editMessageText")]
+from conftest import bot_callback, bot_message, last_code, texts
 
 
 def test_anyone_gets_an_account(tg):
