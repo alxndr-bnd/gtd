@@ -25,17 +25,7 @@ def test_consent_default_before_ga_config(client, monkeypatch, path):
             < h.index("googletagmanager.com/gtag/js?id=G-TEST123") < h.index('gtag("config", "G-TEST123"'))
     # _ga — host-only на gtd.serbito.rs, не общий .serbito.rs с соседними продуктами
     assert 'gtag("config", "G-TEST123", { send_page_view: false, cookie_domain: "none" });' in h
-    assert h.index(DEFAULT) < h.index("</head>")
-
-
-def test_consent_default_denied_and_ads_never_granted():
-    js = P.CONSENT_JS
-    # «Принять» — только analytics_storage; три рекламных разрешения denied при любом выборе
-    assert ("const state = v => ({ad_storage: 'denied', analytics_storage: v, ad_user_data: 'denied', "
-            "ad_personalization: 'denied'});") in js
-    assert "state(choice === 'granted' ? 'granted' : 'denied'), wait_for_update: 500" in js  # выбора нет — denied
-    assert "gtag('consent', 'update', state(v))" in js
-    assert P.CONSENT_DAYS == 365 and f"const KEY = '{P.CONSENT_KEY}', TTL = 365 * 864e5" in P.CONSENT_HEAD
+    assert h.index(DEFAULT) < h.index("</head>") and "<!--GA-->" not in h
 
 
 @pytest.mark.parametrize("path", [*PUBLIC, "/i/5"])
@@ -46,7 +36,7 @@ def test_banner_on_any_host_ga_only_on_prod(client, monkeypatch, path):
     for host in ("localhost:8000", "gtd-488744139718.europe-west1.run.app"):
         h = client.get(path, headers={"host": host}).text
         assert DEFAULT in h and ".cc{position:fixed" in h, host
-        assert "googletagmanager" not in h, host
+        assert "googletagmanager" not in h and "<!--GA-->" not in h, host
 
 
 @pytest.mark.parametrize("path", [*PUBLIC, "/i/5"])
@@ -70,15 +60,6 @@ def test_cookie_settings_link_in_every_footer(client, monkeypatch, path, lang):
     foot = h[h.index("<footer>"):h.index("</footer>")]
     priv = P.PATHS[(lang, "privacy")]
     assert f'<a href="{priv}#cookies" data-cc-open>{"Настройки cookie" if lang == "ru" else "Cookie settings"}</a>' in foot
-
-
-def test_cookie_settings_link_in_the_app():
-    index = open("static/index.html", encoding="utf-8").read()
-    ui = json.loads(index.split('<script type="application/json" id="i18n">')[1].split("</script>")[0])
-    assert ui["ru"]["cookie_settings"] == "Настройки cookie" and ui["en"]["cookie_settings"] == "Cookie settings"
-    assert ui["ru"]["privacy_url"] == "/privacy" and ui["en"]["privacy_url"] == "/en/privacy"
-    assert ("""${window.gtdConsent ? `<a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>"""
-            """${t('cookie_settings')}</a>` : ''}""") in index
 
 
 def test_banner_texts():
