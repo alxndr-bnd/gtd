@@ -4,15 +4,18 @@ import hashlib
 import hmac
 import html
 import ipaddress
+import json
 import logging
 import os
 import re
 import secrets
 import smtplib
+import sys
 import time
 from email.message import EmailMessage
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time as dtime, timedelta
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -28,15 +31,70 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import pages
 
 log = logging.getLogger("gtd")
-logging.basicConfig(level=logging.INFO)
-# httpx на INFO пишет полный URL каждого запроса, а в URL Telegram API зашит токен бота — в логи он не должен попадать
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
+# Одноразовые токены и nonce в адресе (/auth?t=…) — в журнал запросов uvicorn только без значений (SERBITO-360, GTD-10)
+SECRET_PARAMS_RE = re.compile(r"([?&](?:t|nonce|token|code|credential)=)[^&#\s\"']+")
+
+
+class ScrubQuery(logging.Filter):
+    """Фильтр журнала запросов: значения секретных параметров URL → [Filtered]. Строка uvicorn.access —
+    '%s - "%s %s HTTP/%s" %d', путь с query string — среди args."""
+    def filter(self, record):
+        if isinstance(record.args, tuple):
+            record.args = tuple(SECRET_PARAMS_RE.sub(r"\1[Filtered]", a) if isinstance(a, str) else a
+                                for a in record.args)
+        elif isinstance(record.msg, str):
+            record.msg = SECRET_PARAMS_RE.sub(r"\1[Filtered]", record.msg)
+        return True
+
+
+# Cloud Logging понимает JSON-строку в stdout: severity — уровень записи, message — текст (SERBITO-336).
+# Без этого всё, что пишет приложение, приходит без уровня, и ни фильтр по ошибкам, ни алерт не работают
+SEVERITY = {"DEBUG": "DEBUG", "INFO": "INFO", "WARNING": "WARNING", "ERROR": "ERROR", "CRITICAL": "CRITICAL"}
+
+
+class CloudJson(logging.Formatter):
+    def format(self, record):
+        msg = record.getMessage()
+        if record.exc_info:  # трейсбек — в том же message: так ошибку подхватывает Error Reporting
+            msg += "\n" + self.formatException(record.exc_info)
+        return json.dumps({"severity": SEVERITY.get(record.levelname, "DEFAULT"), "message": msg,
+                           "logger": record.name}, ensure_ascii=False)
+
+
+def setup_logging() -> bool:
+    """JSON с severity в stdout — в Cloud Run (K_SERVICE задаёт сама платформа) или при LOG_FORMAT=json;
+    локально — обычные читаемые строки. uvicorn настраивает свои логгеры до импорта приложения — перенастраиваем
+    и их, чтобы журнал запросов и ошибки сервера тоже шли с уровнем. Возвращает, включён ли JSON."""
+    json_logs = os.getenv("LOG_FORMAT", "json" if os.getenv("K_SERVICE") else "text") == "json"
+    if json_logs:
+        h = logging.StreamHandler(sys.stdout)
+        h.setFormatter(CloudJson())
+        logging.getLogger().handlers[:] = [h]
+        logging.getLogger().setLevel(logging.INFO)
+        for name in ("uvicorn", "uvicorn.access"):
+            lg = logging.getLogger(name)
+            lg.handlers[:], lg.propagate = [h], False
+    else:
+        logging.basicConfig(level=logging.INFO)
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, ScrubQuery) for f in access.filters):
+        access.addFilter(ScrubQuery())
+    # httpx на INFO пишет полный URL каждого запроса, а в URL Telegram API зашит токен бота — в логи он не должен попадать
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    return json_logs
+
+
+setup_logging()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 BASE_URL = os.getenv("BASE_URL", "https://gtd.serbito.rs").rstrip("/")
 TZ = ZoneInfo(os.getenv("TZ", "Europe/Belgrade"))
-DEV = os.getenv("DEV", "") == "1"
+# DEV=1 — вход без пароля (/dev-login) и коды входа в логе. На публичном инстансе это вход в чужой аккаунт, поэтому
+# при https-адресе или в Cloud Run он не включается, даже если переменную передали (SERBITO-360, GTD-12)
+DEV = os.getenv("DEV", "") == "1" and not BASE_URL.startswith("https://") and not os.getenv("K_SERVICE")
+if os.getenv("DEV", "") == "1" and not DEV:
+    log.warning("DEV=1 игнорируется: инстанс публичный (https BASE_URL или Cloud Run)")
 # Кто видит «Статистику» — id аккаунтов, а не почты: конфиг лежит в публичном репозитории
 ADMIN_USER_IDS = {int(x) for x in os.getenv("ADMIN_USER_IDS", "").split(",") if x.strip()}
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -211,6 +269,24 @@ create index if not exists items_user_status_pos on items(user_id, status, posit
 -- Лимиты входа по коду (SERBITO-346): n событий (писем, неверных кодов, проверок) по ключу за окно с момента
 -- since. В базе, а не в памяти инстанса: общие для всех инстансов Cloud Run и переживают перезапуск
 create table if not exists auth_limits(key text primary key, n integer not null, since bigint not null);
+-- Сессии (SERBITO-360, GTD-5): в базе только sha256 от cookie — утёкший дамп не даёт войти; seen — последняя
+-- активность, сессия живёт SESSION_TTL с неё (скользящий срок). Старая таблица sessions хранила сами токены:
+-- переносим их хешами и очищаем её. Саму таблицу не удаляем, пока ревизия до 0.20 может ещё работать при
+-- выкатке; то, что она успеет записать, переедет при следующем старте
+create table if not exists user_sessions(
+  token_hash text primary key, user_id bigint not null, created bigint not null, seen bigint not null);
+create index if not exists user_sessions_user on user_sessions(user_id);
+with moved as (delete from sessions returning token, user_id, created)
+insert into user_sessions(token_hash, user_id, created, seen)
+  select encode(sha256(convert_to(token, 'UTF8')), 'hex'), user_id, coalesce(created, 0),
+         extract(epoch from now())::bigint from moved where user_id is not null
+on conflict do nothing;
+-- Вход через бота по ссылке (GTD-3): число для сверки, откуда запрос (IP, браузер — показываем в Telegram)
+-- и хеш cookie браузера, начавшего вход: забрать сессию может только он. Строка живёт 10 минут
+alter table tg_logins add column if not exists code integer;
+alter table tg_logins add column if not exists ip text;
+alter table tg_logins add column if not exists ua text;
+alter table tg_logins add column if not exists browser text;
 """
 
 with _pool.connection() as _c:
@@ -308,9 +384,15 @@ TEXTS = {
         "login_link": "Вход (10 минут, одноразовая):\n{url}",
         "cb_done": "✅ Готово", "cb_snooze": "💤 Напомню через час", "cb_next": "⏭ В Next", "cb_missing": "Не найдено",
         "tg_link_stale": "Ссылка устарела — нажми кнопку на сайте ещё раз",
-        "tg_confirm_link": "привязать этот Telegram к аккаунту GTD",
+        "tg_confirm_link": "привязать этот Telegram к аккаунту GTD {who}",
         "tg_confirm_login": "войти в GTD в браузере",
-        "tg_confirm": "Подтвердить: {what}?\n\nЖми, только если сам только что нажал кнопку на сайте.",
+        "tg_confirm": "Подтвердить: {what}?\n\nЗапрос из браузера: {device}, IP {ip}.{merge}\n\nНажми число, которое "
+                      "показано на сайте. Если ты сам сейчас не нажимал кнопку на сайте — ничего не нажимай: "
+                      "это чужая попытка войти в твой аккаунт.",
+        "tg_merge_warn": "\n\nУ этого Telegram уже есть свой аккаунт с задачами ({items}). После подтверждения сайт "
+                         "предложит объединить аккаунты — тот, кто в этом браузере, увидит твои задачи.",
+        "tg_wrong_code": "Число не совпало — вход отменён. Нажми кнопку на сайте ещё раз",
+        "device_unknown": "неизвестный браузер",
         "tg_linked": "✅ Telegram привязан — вернись в браузер",
         "tg_link_merge": "У этого Telegram уже есть свой аккаунт с задачами — подтверди объединение в браузере",
         "tg_login_ok": "✅ Вход подтверждён — вернись в браузер",
@@ -338,6 +420,7 @@ TEXTS = {
         "too_many_day": "Слишком много писем с кодом за сутки — попробуй завтра или войди другим способом",
         "code_locked": "Слишком много неверных кодов — вход по коду на этот адрес закрыт на сутки. "
                        "Войди другим способом или попробуй завтра",
+        "email_busy": "Вход по почте сейчас недоступен — войди другим способом или попробуй позже",
         "merge_missing": "Аккаунт для объединения не найден",
         "merge_stale": "Предложение устарело — привяжи способ входа ещё раз",
         "google_off": "Вход через Google не настроен",
@@ -386,9 +469,15 @@ TEXTS = {
         "cb_done": "✅ Done", "cb_snooze": "💤 I'll remind you in an hour", "cb_next": "⏭ Moved to Next",
         "cb_missing": "Not found",
         "tg_link_stale": "This link has expired — press the button on the website again",
-        "tg_confirm_link": "link this Telegram to your GTD account",
+        "tg_confirm_link": "link this Telegram to the GTD account {who}",
         "tg_confirm_login": "sign in to GTD in your browser",
-        "tg_confirm": "Confirm: {what}?\n\nTap only if you've just pressed the button on the website yourself.",
+        "tg_confirm": "Confirm: {what}?\n\nRequested from: {device}, IP {ip}.{merge}\n\nTap the number shown on the "
+                      "website. If you didn't just press the button on the website yourself, don't tap anything: "
+                      "someone else is trying to get into your account.",
+        "tg_merge_warn": "\n\nThis Telegram already has its own account with tasks ({items}). After you confirm, the "
+                         "website will offer to merge the accounts — whoever uses that browser will see your tasks.",
+        "tg_wrong_code": "The number didn't match — sign-in cancelled. Press the button on the website again",
+        "device_unknown": "unknown browser",
         "tg_linked": "✅ Telegram linked — go back to your browser",
         "tg_link_merge": "This Telegram already has its own account with tasks — confirm the merge in your browser",
         "tg_login_ok": "✅ Sign-in confirmed — go back to your browser",
@@ -415,6 +504,7 @@ TEXTS = {
         "too_many_day": "Too many sign-in codes requested today — try again tomorrow or sign in another way",
         "code_locked": "Too many wrong codes — signing in with a code to this address is locked for 24 hours. "
                        "Sign in another way or try again tomorrow",
+        "email_busy": "Email sign-in is temporarily unavailable — sign in another way or try again later",
         "merge_missing": "The account to merge wasn't found",
         "merge_stale": "This offer has expired — link the sign-in method again",
         "google_off": "Google sign-in isn't set up",
@@ -764,26 +854,69 @@ def tg_login_get(nonce):
                (nonce, int(time.time())))
 
 
-async def tg_login_prompt(chat, nonce, lang):
-    """/start <nonce> — пришли с кнопки «Войти через Telegram» на сайте. Просим подтвердить явно:
-    иначе чужую ссылку можно подсунуть жертве и получить сессию в её аккаунт."""
+def mask_email(email: str) -> str:
+    """a***@example.com: в сообщении бота видно, чей это аккаунт, но не весь адрес."""
+    name, _, domain = email.partition("@")
+    return f"{name[:1]}***@{domain}"
+
+
+def account_label(uid) -> str:
+    """Как назвать аккаунт в подтверждениях: почта (скрытая) или имя."""
+    u = row("select email, name from users where id=%s", (uid,)) if uid else None
+    if not u:
+        return ""
+    return mask_email(u["email"]) if u["email"] else (u["name"] or "")
+
+
+def code_choices(code: int) -> list:
+    """Кнопки сверки: верное число и два случайных других, вперемешку."""
+    got = {code}
+    while len(got) < 3:
+        got.add(10 + secrets.randbelow(90))
+    out = list(got)
+    secrets.SystemRandom().shuffle(out)
+    return out
+
+
+async def tg_login_prompt(chat, frm, nonce, lang):
+    """/start <nonce> — пришли с кнопки «Войти через Telegram» на сайте. Одного нажатия мало (SERBITO-360, GTD-3):
+    сайт показал число, здесь из трёх кнопок верна одна, — чужую ссылку вслепую не подтвердить. В тексте — откуда
+    запрос (браузер и IP) и к какому аккаунту привязка, а если у этого Telegram свои задачи — что их увидят."""
     r = tg_login_get(nonce)
-    if not r:
+    if not r or r["code"] is None:  # строки до сверки числом (выкатка) — просто «устарела»
         await tg("sendMessage", chat_id=chat, text=tr(lang, "tg_link_stale") + ".")
         return
-    what = tr(lang, "tg_confirm_link" if r["link_user_id"] else "tg_confirm_login")
-    await tg("sendMessage", chat_id=chat, text=tr(lang, "tg_confirm", what=what),
-             reply_markup={"inline_keyboard": [[{"text": tr(lang, "btn_confirm"), "callback_data": f"tgok:{nonce}"}]]})
+    merge = ""
+    if r["link_user_id"]:
+        what = tr(lang, "tg_confirm_link", who=account_label(r["link_user_id"]))
+        mine = row("select id from users where tg_id=%s", (frm["id"],))
+        if mine and mine["id"] != r["link_user_id"] and has_data(mine["id"]):
+            merge = tr(lang, "tg_merge_warn", items=account_stats(mine["id"])["items"])
+    else:
+        what = tr(lang, "tg_confirm_login")
+    text = tr(lang, "tg_confirm", what=what, device=r["ua"] or tr(lang, "device_unknown"), ip=r["ip"] or "?",
+              merge=merge)
+    await tg("sendMessage", chat_id=chat, text=text, reply_markup={"inline_keyboard": [[
+        {"text": str(n), "callback_data": f"tgok:{nonce}:{n}"} for n in code_choices(r["code"])]]})
 
 
-async def tg_login_confirm(cb, nonce):
+async def tg_login_confirm(cb, data):
+    """Нажата кнопка с числом. Попытка одна: не то число — ссылка сгорает (иначе перебор трёх кнопок).
+    Строку «забираем» атомарно (pending → busy), так что два нажатия не подтвердят вход дважды."""
     frm, msg = cb["from"], cb.get("message", {})
     _, lang = tg_known(frm)
-    r = tg_login_get(nonce)
+    nonce, _, picked = data.partition(":")
+    r = row("update tg_logins set status='busy' where nonce=%s and expires>%s and status='pending' and code is not null "
+            "returning *", (nonce, int(time.time())))
     if not r:
         note = tr(lang, "tg_link_stale")
+    elif picked != str(r["code"]):
+        run("update tg_logins set status='denied' where nonce=%s", (nonce,))
+        note = tr(lang, "tg_wrong_code")
     elif r["link_user_id"]:
-        res = link_identity(r["link_user_id"], "tg_id", frm["id"])
+        # Привязка по ссылке — без молчаливого объединения: иначе пустой аккаунт того, кто прислал ссылку, вместе
+        # с его сессиями переехал бы в аккаунт жертвы. Объединение — только явно, предложением в браузере
+        res = link_identity(r["link_user_id"], "tg_id", frm["id"], auto_merge=False)
         run("update tg_logins set status=%s, user_id=%s, merge=%s where nonce=%s",
             ("ok" if res["ok"] else "merge", r["link_user_id"], res.get("merge"), nonce))
         note = tr(lang, "tg_linked" if res["ok"] else "tg_link_merge")
@@ -863,11 +996,14 @@ async def handle_message(msg):
     frm = msg.get("from", {})
     if not frm.get("id"):  # посты каналов, анонимные админы групп: не от человека — аккаунт не заводим
         return
+    # Бот работает только в личке (SERBITO-360, GTD-8): в группе ссылка входа из /login, задачи и коды видны всем
+    if msg["chat"].get("type") != "private":
+        return
     text = (msg.get("text") or msg.get("caption") or "").strip()
     cmd, _, arg = text.partition(" ")
     cmd = cmd.split("@")[0].lower()
     if cmd == "/start" and arg.strip():
-        await tg_login_prompt(chat, arg.strip(), tg_known(frm)[1])
+        await tg_login_prompt(chat, frm, arg.strip(), tg_known(frm)[1])
         return
     u = tg_user(frm.get("id"), frm.get("first_name", ""), frm.get("language_code"))
     lang = bot_lang(u)
@@ -949,6 +1085,9 @@ async def handle_callback(cb):
     """Кнопки бота. На любое нажатие отвечаем answerCallbackQuery — иначе у пользователя крутится часики;
     кнопки прежних версий и испорченные данные — просто «Не найдено», без исключения."""
     act, _, sid = (cb.get("data") or "").partition(":")
+    if (cb.get("message") or {}).get("chat", {}).get("type", "private") != "private":  # кнопки в группах — мимо
+        await tg("answerCallbackQuery", callback_query_id=cb["id"])
+        return
     if act == "tgok":
         await tg_login_confirm(cb, sid)
         return
@@ -1109,7 +1248,8 @@ async def lifespan(app):
 
 
 # ───────────────────────── Web / API ─────────────────────────
-app = FastAPI(lifespan=lifespan)
+# /docs, /redoc и /openapi.json — только локально (SERBITO-360, GTD-9): публичной карте API на проде незачем быть
+app = FastAPI(lifespan=lifespan, **({} if DEV else {"docs_url": None, "redoc_url": None, "openapi_url": None}))
 
 # HEAD отвечаем как GET, только без тела. Мониторинги аптайма и превью ссылок (Slack и др.) сперва шлют HEAD,
 # а FastAPI сам его не добавляет — без этого на HEAD / был 405 и сайт считался лежащим.
@@ -1139,11 +1279,133 @@ class HeadAsGet:
 
 app.add_middleware(HeadAsGet)
 
+# ── Защита запросов и заголовки ответов (SERBITO-360)
+# GTD-6: запрос, меняющий данные, принимаем только со своей страницы. SameSite=Lax не спасает от соседних
+# поддоменов *.serbito.rs — для браузера это тот же «сайт», и cookie уходит. Поэтому: Sec-Fetch-Site (современные
+# браузеры) — только same-origin; Origin, если есть, — ровно наш хост. Без обоих заголовков — не браузер (curl,
+# тесты): CSRF — атака через браузер жертвы, их пропускаем. Тело /api — только JSON: форма с чужого сайта может
+# прислать text/plain, а fetch с application/json на чужой origin браузер без CORS не отправит
+UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
+BASE_ORIGIN = "{0.scheme}://{0.netloc}".format(urlsplit(BASE_URL))
+
+
+def cross_site(headers: dict) -> bool:
+    site = headers.get("sec-fetch-site")
+    if site and site not in ("same-origin", "none"):
+        return True
+    origin = headers.get("origin")
+    if origin is None:
+        return False
+    # Свой — это хост запроса или BASE_URL: reverse proxy у self-host может подменять Host на внутренний адрес
+    u = urlsplit(origin)
+    return u.scheme not in ("http", "https") or (u.netloc != headers.get("host", "") and origin != BASE_ORIGIN)
+
+
+def json_body_ok(headers: dict) -> bool:
+    has_body = headers.get("content-length", "0") not in ("", "0") or "transfer-encoding" in headers
+    return not has_body or headers.get("content-type", "").split(";")[0].strip().lower() == "application/json"
+
+
+def sentry_csp_uri() -> str:
+    """Отчёты CSP — в тот же проект Sentry (security endpoint из DSN); без DSN — только в консоль браузера."""
+    u = urlsplit(SENTRY_DSN)
+    if not (u.username and u.hostname and u.path.strip("/")):
+        return ""
+    return f"{u.scheme}://{u.hostname}/api/{u.path.strip('/')}/security/?sentry_key={u.username}"
+
+
+# GTD-9. CSP пока только report-only: SPA и страницы живут на inline-скриптах, стилях и обработчиках, внешние —
+# Google Sign-In, виджет Telegram, GA и Cloudflare. Нарушения видны в консоли и в Sentry, не ломая сайт; когда
+# отчёты затихнут — перевести в Content-Security-Policy. frame-ancestors (нас нельзя встроить во фрейм) — сразу
+CSP_REPORT_ONLY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://accounts.google.com https://telegram.org "
+    "https://www.googletagmanager.com https://static.cloudflareinsights.com",
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com",
+    "img-src 'self' data: https:",
+    "connect-src 'self' https://accounts.google.com https://*.google-analytics.com https://*.analytics.google.com "
+    "https://*.googletagmanager.com https://cloudflareinsights.com",
+    "frame-src https://accounts.google.com https://oauth.telegram.org",
+    "font-src 'self' data:",
+    "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+    *([f"report-uri {sentry_csp_uri()}"] if sentry_csp_uri() else []),
+])
+SECURITY_HEADERS = [
+    (b"x-content-type-options", b"nosniff"),
+    (b"referrer-policy", b"strict-origin-when-cross-origin"),
+    (b"x-frame-options", b"DENY"),
+    (b"content-security-policy", b"frame-ancestors 'none'"),
+    (b"content-security-policy-report-only", CSP_REPORT_ONLY.encode()),
+    (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
+    # HSTS — только с https: по http браузер его всё равно игнорирует
+    *([(b"strict-transport-security", b"max-age=31536000; includeSubDomains")] if COOKIE_SECURE else []),
+]
+
+
+class Guard:
+    """Чистый ASGI-слой снаружи приложения: отбивает чужие запросы (GTD-6), добавляет заголовки безопасности
+    каждому ответу (GTD-9) и продлевает cookie сессии, если session_user сдвинул её срок (GTD-5)."""
+    def __init__(self, asgi):
+        self.asgi = asgi
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.asgi(scope, receive, send)
+        state = scope.setdefault("state", {})  # тот же dict, что request.state в обработчике
+
+        async def send_h(msg):
+            if msg["type"] == "http.response.start":
+                hs = list(msg.get("headers", []))
+                have = {k.lower() for k, _ in hs}
+                hs += [(k, v) for k, v in SECURITY_HEADERS if k not in have]
+                sid = state.get("sid_refresh")
+                # Ответ сам ставит или стирает sid (вход, выход) — его cookie главнее продления
+                if sid and not any(k.lower() == b"set-cookie" and v.startswith(b"sid=") for k, v in hs):
+                    hs.append((b"set-cookie", sid_cookie(sid).encode("latin-1")))
+                msg = {**msg, "headers": hs}
+            await send(msg)
+
+        path = scope["path"]
+        if scope["method"] in UNSAFE and (path.startswith("/api/") or path == "/auth"):
+            headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+            if cross_site(headers):
+                return await JSONResponse({"detail": "cross-site request"}, 403)(scope, receive, send_h)
+            if path.startswith("/api/") and not json_body_ok(headers):
+                return await JSONResponse({"detail": "application/json required"}, 415)(scope, receive, send_h)
+        await self.asgi(scope, receive, send_h)
+
+
+app.add_middleware(Guard)
+
+# ── Сессии (GTD-5): в cookie — случайный токен, в базе — его sha256. Срок скользящий: SESSION_TTL с последней
+# активности; отметку seen и cookie обновляем не чаще раза в сутки, чтобы не писать в базу на каждый запрос
+SESSION_TTL = 90 * 86400
+SESSION_TOUCH = 86400
+
+
+def token_hash(tok: str) -> str:
+    return hashlib.sha256(tok.encode()).hexdigest()
+
+
+def sid_cookie(tok: str) -> str:
+    """Заголовок Set-Cookie для сессии — тот же, что ставит set_session."""
+    r = Response()
+    r.set_cookie("sid", tok, max_age=SESSION_TTL, httponly=True, samesite="lax", secure=COOKIE_SECURE)
+    return r.headers["set-cookie"]
+
 
 def session_user(request: Request) -> int | None:
     sid = request.cookies.get("sid")
-    r = row("select user_id from sessions where token=%s", (sid,)) if sid else None
-    return r["user_id"] if r else None
+    if not sid:
+        return None
+    now, h = int(time.time()), token_hash(sid)
+    r = row("select user_id, seen from user_sessions where token_hash=%s and seen>%s", (h, now - SESSION_TTL))
+    if not r:
+        return None
+    if r["seen"] < now - SESSION_TOUCH:
+        run("update user_sessions set seen=%s where token_hash=%s", (now, h))
+        request.state.sid_refresh = sid
+    return r["user_id"]
 
 
 def current_user(request: Request) -> int:
@@ -1155,9 +1417,15 @@ def current_user(request: Request) -> int:
 
 
 def set_session(resp, uid: int):
-    tok = secrets.token_urlsafe(32)
-    run("insert into sessions(token,user_id,created) values(%s,%s,%s)", (tok, uid, int(time.time())))
-    resp.set_cookie("sid", tok, max_age=60 * 60 * 24 * 90, httponly=True, samesite="lax", secure=COOKIE_SECURE)
+    tok, now = secrets.token_urlsafe(32), int(time.time())
+    run("delete from user_sessions where seen<%s", (now - SESSION_TTL,))
+    run("insert into user_sessions(token_hash,user_id,created,seen) values(%s,%s,%s,%s)", (token_hash(tok), uid, now, now))
+    resp.headers.append("set-cookie", sid_cookie(tok))
+    return resp
+
+
+def clear_session(resp):
+    resp.delete_cookie("sid", httponly=True, samesite="lax", secure=COOKIE_SECURE)
     return resp
 
 
@@ -1178,6 +1446,10 @@ EMAIL_FAILS = 20                # неверных кодов на адрес з
 EMAIL_SENDS = 10                # писем с кодом на один адрес за сутки — от засыпания ящика письмами
 SENDER_SENDS = ((5, 600), (30, DAY))  # писем с кодом от одного отправителя: за 10 минут и за сутки
 SENDER_GUESSES = (30, 600)      # проверок кода от одного отправителя за 10 минут (по всем адресам)
+# Общий потолок писем в сутки (SERBITO-360, GTD-4): аккаунт Brevo общий с serbito, и его дневная квота (300 на
+# бесплатном плане) — одна на двоих. Лимиты на адрес и на отправителя не спасают от рассылки со многих IP на
+# многие адреса; потолок оставляет serbito запас, а на 80 % и при упоре пишет ошибку — она уходит алертом в Sentry
+EMAIL_DAILY_CAP = int(os.getenv("EMAIL_DAILY_CAP", "200"))
 
 
 def limit_hit(key: str, window: int) -> int:
@@ -1284,7 +1556,7 @@ def attach(uid: int, field: str, value) -> int | None:
             return other["id"]
         run(f"update users set {field}=null where id=%s", (other["id"],))
         if not any(other[f] for f in IDENTITIES if f != field):
-            run("delete from sessions where user_id=%s", (other["id"],))
+            run("delete from user_sessions where user_id=%s", (other["id"],))
             run("delete from login_tokens where user_id=%s", (other["id"],))
             run("delete from users where id=%s", (other["id"],))
     run(f"update users set {field}=%s where id=%s", (value, uid))
@@ -1317,7 +1589,7 @@ def merge_accounts(keep: int, drop: int):
                   (drop, keep))
         c.execute("update users set item_seq = item_seq + (select count(*) from items where user_id=%s) "
                   "where id=%s", (drop, keep))
-        for table in ("items", "sessions", "login_tokens"):
+        for table in ("items", "user_sessions", "login_tokens"):
             c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
         c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
         moved = {f: d[f] for f in IDENTITIES if d[f] and not k[f]}
@@ -1335,14 +1607,15 @@ def account_stats(uid: int) -> dict:
                "(select count(*) from projects where user_id=%s and status='active') projects", (uid, uid))
 
 
-def link_identity(uid: int, field: str, value) -> dict:
+def link_identity(uid: int, field: str, value, auto_merge: bool = True) -> dict:
     """Привязать способ входа к uid. {"ok": True} — готово; иначе — предложение объединить аккаунты.
-    Если свой аккаунт ещё пустой и ничего не теряется, просто переезжаем в тот, где уже есть данные."""
+    Если свой аккаунт ещё пустой и ничего не теряется, просто переезжаем в тот, где уже есть данные —
+    кроме auto_merge=False (привязка по ссылке в бота, где подтверждает не тот, кто в браузере)."""
     other = attach(uid, field, value)
     if other is None:
         return {"ok": True}
     me_, them = row("select * from users where id=%s", (uid,)), row("select * from users where id=%s", (other,))
-    if not has_data(uid) and not any(me_[f] and them[f] for f in IDENTITIES):
+    if auto_merge and not has_data(uid) and not any(me_[f] and them[f] for f in IDENTITIES):
         merge_accounts(other, uid)
         return {"ok": True}
     tok = secrets.token_urlsafe(16)
@@ -1432,6 +1705,13 @@ def send_code(email: str, rate_key: str, lang: str = "ru"):
             raise AuthError(429, "too_many" if window < DAY else "too_many_day")
     if limit_hit("mail-day:" + email, DAY) > EMAIL_SENDS:
         raise AuthError(429, "too_many_day")
+    sent = limit_hit("mail-all", DAY)
+    if sent > EMAIL_DAILY_CAP:
+        if sent == EMAIL_DAILY_CAP + 1:  # алерт один раз за окно, а не на каждую попытку
+            log.error("email: достигнут суточный потолок писем (%s), вход по почте закрыт до конца окна", EMAIL_DAILY_CAP)
+        raise AuthError(503, "email_busy")
+    if sent == EMAIL_DAILY_CAP * 8 // 10:
+        log.error("email: отправлено %s писем за сутки — 80%% потолка %s", sent, EMAIL_DAILY_CAP)
     code = f"{secrets.randbelow(10 ** 6):06d}"
     run("delete from email_codes where expires<%s", (now,))
     run("delete from auth_limits where since<%s", (now - DAY,))
@@ -1445,7 +1725,8 @@ def send_code(email: str, rate_key: str, lang: str = "ru"):
     try:
         send_email(email, tr(lang, "mail_subject", code=code), tr(lang, "mail_body", code=code))
     except (smtplib.SMTPException, OSError) as e:
-        log.warning("smtp to %s failed: %s", email, e)
+        # Без адреса и текста ошибки: SMTPRecipientsRefused и ответы сервера содержат адрес получателя (GTD-10)
+        log.warning("smtp failed: %s %s", type(e).__name__, getattr(e, "smtp_code", ""))
         run("delete from email_codes where email=%s", (email,))
         raise AuthError(502, "smtp_fail")
 
@@ -1543,21 +1824,49 @@ def auth_merge(body: dict, request: Request, uid: int = Depends(current_user)):
     return {"ok": True}
 
 
+# Вход через бота по ссылке (GTD-3). Браузер, начавший вход, получает cookie tgl (в базе — её хеш): забрать
+# сессию опросом может только он, даже если nonce из ссылки попал к кому-то ещё
+TG_COOKIE = "tgl"
+TG_STARTS = (20, 600)  # начатых входов через бота от одного IP за 10 минут
+
+
+def device_label(ua: str) -> str:
+    """«Chrome, macOS» из User-Agent — для текста подтверждения в боте. Сам User-Agent не храним."""
+    ua = ua or ""
+    browser = next((name for key, name in (("Edg/", "Edge"), ("OPR/", "Opera"), ("YaBrowser", "Yandex Browser"),
+                                             ("Firefox/", "Firefox"), ("Chrome/", "Chrome"), ("CriOS", "Chrome"),
+                                             ("Safari/", "Safari")) if key in ua), "")
+    system = next((name for key, name in (("iPhone", "iOS"), ("iPad", "iPadOS"), ("Android", "Android"),
+                                            ("Windows", "Windows"), ("Mac OS X", "macOS"), ("CrOS", "ChromeOS"),
+                                            ("Linux", "Linux")) if key in ua), "")
+    return ", ".join(x for x in (browser, system) if x)
+
+
 @app.post("/api/auth/tg/start")
 def auth_tg_start(body: dict, request: Request):
     if not (TOKEN and BOT_USERNAME):
         raise auth_fail(AuthError(400, "tg_off"), request)
-    nonce = secrets.token_urlsafe(16)
+    ip = client_ip(request)
+    limit, window = TG_STARTS
+    if limit_hit("tg-start:" + ip_key(ip), window) > limit:
+        raise auth_fail(AuthError(429, "too_many"), request)
+    nonce, code = secrets.token_urlsafe(16), 10 + secrets.randbelow(90)
     now = int(time.time())
     run("delete from tg_logins where expires<%s", (now,))
     link_uid = session_user(request) if body.get("link") else None
-    run("insert into tg_logins(nonce,link_user_id,expires) values(%s,%s,%s)", (nonce, link_uid, now + 600))
-    return {"nonce": nonce, "url": f"https://t.me/{BOT_USERNAME}?start={nonce}"}
+    browser = request.cookies.get(TG_COOKIE) or secrets.token_urlsafe(16)
+    run("insert into tg_logins(nonce,link_user_id,expires,code,ip,ua,browser) values(%s,%s,%s,%s,%s,%s,%s)",
+        (nonce, link_uid, now + 600, code, ip, device_label(request.headers.get("user-agent", "")), token_hash(browser)))
+    resp = JSONResponse({"nonce": nonce, "code": code, "url": f"https://t.me/{BOT_USERNAME}?start={nonce}"})
+    resp.set_cookie(TG_COOKIE, browser, max_age=600, path="/api/auth/tg", httponly=True, samesite="strict",
+                    secure=COOKIE_SECURE)
+    return resp
 
 
 # ── Telegram Login Widget (SERBITO-292): вход в один клик на сайте. Данные приходят от браузера, поэтому верим
 # им только после проверки подписи: https://core.telegram.org/widgets/login#checking-authorization
-TG_WIDGET_MAX_AGE = 24 * 60 * 60  # подпись виджета старше суток не принимаем: перехваченный payload быстро сгорает
+# Подпись виджета старше 10 минут не принимаем, и каждую — только раз (GTD-11): перехваченный payload не повторить
+TG_WIDGET_MAX_AGE = 10 * 60
 TG_WIDGET_SKEW = 5 * 60  # часы Telegram могут чуть убегать вперёд наших
 
 
@@ -1583,6 +1892,9 @@ def tg_widget_verify(data) -> dict:
     now = time.time()
     if not now - TG_WIDGET_MAX_AGE <= auth_date <= now + TG_WIDGET_SKEW:
         raise AuthError(400, "tg_widget_stale")
+    # Одноразовость: подпись уже видели в пределах срока её жизни — это повтор
+    if limit_hit("tg-widget:" + got, TG_WIDGET_MAX_AGE + TG_WIDGET_SKEW) > 1:
+        raise AuthError(400, "tg_widget_stale")
     return {"id": tg_id, "first_name": str(fields.get("first_name", ""))}
 
 
@@ -1601,14 +1913,19 @@ def auth_tg_widget(body: dict, request: Request):
     return set_session(JSONResponse({"ok": True}), tg_user(d["id"], d["first_name"])["id"])
 
 
-@app.get("/api/auth/tg/poll")
-def auth_tg_poll(nonce: str, request: Request):
+@app.post("/api/auth/tg/poll")
+def auth_tg_poll(body: dict, request: Request):
+    """Опрос страницы, ждущей подтверждения в боте. nonce — в теле, а не в адресе: не оседает в журналах запросов.
+    Чужой браузер (нет cookie tgl, с которой начинали) видит «устарело», как и несуществующий nonce."""
+    nonce, browser = str(body.get("nonce") or ""), request.cookies.get(TG_COOKIE, "")
     r = row("select * from tg_logins where nonce=%s", (nonce,))
-    if not r or r["expires"] < time.time():
+    if not r or r["expires"] < time.time() or not browser or not hmac.compare_digest(r["browser"] or "", token_hash(browser)):
         return {"status": "expired"}
-    if r["status"] == "pending":
+    if r["status"] in ("pending", "busy"):
         return {"status": "pending"}
     run("delete from tg_logins where nonce=%s", (nonce,))
+    if r["status"] == "denied":
+        return {"status": "denied"}
     if r["status"] == "merge":
         o = row("select drop_uid from merge_offers where token=%s", (r["merge"],))
         if not o:
@@ -1627,8 +1944,9 @@ UNDO_CHOICES = (5, 10, 30)
 @app.get("/api/me")
 def me(uid: int = Depends(current_user)):
     u = row("select name, email, tg_id, google_sub, undo_seconds, lang from users where id=%s", (uid,))
+    n = row("select count(*) n from user_sessions where user_id=%s and seen>%s", (uid, int(time.time()) - SESSION_TTL))["n"]
     return {"name": u["name"], "email": u["email"], "tg": bool(u["tg_id"]), "google": bool(u["google_sub"]),
-            "undo_seconds": u["undo_seconds"], "lang": u["lang"], "admin": uid in ADMIN_USER_IDS}
+            "undo_seconds": u["undo_seconds"], "lang": u["lang"], "admin": uid in ADMIN_USER_IDS, "sessions": n}
 
 
 @app.get("/api/admin/stats")
@@ -1685,17 +2003,42 @@ def patch_me(body: dict, uid: int = Depends(current_user)):
     return me(uid)
 
 
+# Страницы входа по ссылке: не кешировать, адрес с токеном не отдавать в Referer
+AUTH_HEADERS = {"X-Robots-Tag": "noindex", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+
+
+def auth_stale_page(request: Request, lang: str) -> HTMLResponse:
+    """Ссылку открывают в браузере из Telegram — страница с выходом, а не сырой JSON."""
+    page = pages.auth_stale(lang if lang in LANGS else req_lang(request), BOT_USERNAME)
+    return HTMLResponse(page, status_code=400, headers=AUTH_HEADERS)
+
+
 @app.get("/auth")
 def auth(t: str, request: Request, lang: str = ""):
-    """Ссылка входа из /login в боте. lang=en — бот говорил с пользователем по-английски: ведём в /en/,
-    если язык не выбран явно в «Аккаунте»."""
-    r = row("select * from login_tokens where token=%s and expires>%s", (t, int(time.time())))
-    if not r:  # ссылку открывают в браузере из Telegram — страница с выходом, а не сырой JSON
-        page = pages.auth_stale(lang if lang in LANGS else req_lang(request), BOT_USERNAME)
-        return HTMLResponse(page, status_code=400, headers={"X-Robots-Tag": "noindex"})
-    run("delete from login_tokens where token=%s", (t,))
-    chosen = row("select lang from users where id=%s", (r["user_id"],))["lang"] or lang
-    return set_session(RedirectResponse("/en/" if chosen == "en" else "/", status_code=303), r["user_id"])
+    """Ссылка входа из /login в боте. Сама ссылка не входит (SERBITO-360, GTD-7): иначе чужую ссылку можно
+    подсунуть, и человек незаметно окажется в аккаунте злоумышленника и будет записывать задачи ему. Страница
+    показывает, в чей аккаунт вход, и входит только по кнопке (POST). Заодно превью ссылок и префетч не сжигают
+    одноразовый токен."""
+    r = row("select user_id from login_tokens where token=%s and expires>%s", (t, int(time.time())))
+    if not r:
+        return auth_stale_page(request, lang)
+    cur = session_user(request)
+    page_lang = lang if lang in LANGS else req_lang(request, r["user_id"])
+    return HTMLResponse(pages.auth_confirm(page_lang, account_label(r["user_id"]), t, lang if lang in LANGS else "",
+                                           account_label(cur) if cur and cur != r["user_id"] else ""),
+                        headers=AUTH_HEADERS)
+
+
+@app.post("/auth")
+async def auth_confirm(request: Request):
+    """Кнопка «Войти» со страницы /auth: форма со своей страницы (чужой Origin отбивает Guard)."""
+    form = parse_qs((await request.body()).decode("utf-8", "replace"))
+    t, lang = form.get("t", [""])[0], form.get("lang", [""])[0]
+    uid = run("delete from login_tokens where token=%s and expires>%s returning user_id", (t, int(time.time())))
+    if not uid:
+        return auth_stale_page(request, lang)
+    chosen = row("select lang from users where id=%s", (uid,))["lang"] or lang
+    return set_session(RedirectResponse("/en/" if chosen == "en" else "/", status_code=303), uid)
 
 
 @app.get("/dev-login")
@@ -1760,8 +2103,16 @@ def list_contexts(uid: int = Depends(current_user)):
 
 @app.post("/api/logout")
 def logout(request: Request):
-    run("delete from sessions where token=%s", (request.cookies.get("sid", ""),))
-    return {"ok": True}
+    """Выход: сессия удаляется из базы, cookie — из браузера."""
+    run("delete from user_sessions where token_hash=%s", (token_hash(request.cookies.get("sid", "")),))
+    return clear_session(JSONResponse({"ok": True}))
+
+
+@app.post("/api/logout/all")
+def logout_all(uid: int = Depends(current_user)):
+    """«Выйти на всех устройствах» в «Аккаунте» (GTD-5): все сессии аккаунта, включая эту."""
+    run("delete from user_sessions where user_id=%s", (uid,))
+    return clear_session(JSONResponse({"ok": True}))
 
 
 @app.get("/api/counts")

@@ -12,7 +12,7 @@ DEV=1 docker compose up --build
 
 Open http://localhost:8000 and press **Dev login**. `DEV=1` signs you in without any provider and prints
 email sign-in codes to the log — **never expose a `DEV=1` instance to the internet**: anyone could sign in
-as the first user.
+as the first user. With an `https://` `BASE_URL` the app ignores `DEV=1`.
 
 Stop with `docker compose down` (data stays in the `db` volume) or `docker compose down -v` (wipe it).
 
@@ -48,7 +48,9 @@ At least one sign-in method is required: email (SMTP), Google, or the Telegram b
 | `SENTRY_DSN` | — | Send errors to your Sentry |
 | `TRUSTED_PROXIES` | — | Comma-separated IPs/CIDRs of your own proxies with a public address (e.g. a cloud load balancer). Sign-in rate limits key on the rightmost `X-Forwarded-For` hop that isn't a trusted proxy; private and loopback proxies (Docker, a local Caddy/nginx) are trusted without it |
 | `APP_VERSION` | `dev` | Version shown in the footer, the app menu and `/changes`, e.g. `0.16.0` (the tag you built from) |
-| `DEV` | — | `1` = dev login and codes in the log. Local only |
+| `DEV` | — | `1` = dev login and codes in the log. Local only: ignored when `BASE_URL` is `https://…` |
+| `EMAIL_DAILY_CAP` | `200` | Max sign-in code emails per 24 hours across all addresses; protects your SMTP quota |
+| `LOG_FORMAT` | `text` | `json` = one JSON line with `severity` per record (Google Cloud Logging and similar) |
 
 `GA_MEASUREMENT_ID` is ignored outside the reference domain, so self-hosted instances send nothing to Google Analytics.
 

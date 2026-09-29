@@ -35,10 +35,21 @@ def pytest_sessionfinish(session, exitstatus):
     _admin(f'drop database if exists "{DB}" with (force)')
 
 
+TABLES = ("users, sessions, user_sessions, login_tokens, projects, items, email_codes, tg_logins, merge_offers, "
+          "tg_email_links, activity, auth_limits")
+
+
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
-    A.run("truncate users, sessions, login_tokens, projects, items, email_codes, tg_logins, merge_offers, "
-          "tg_email_links, activity, auth_limits restart identity")
+    # Браузерный смоук: запрос страницы прошлого теста может ещё идти в сервере-потоке (select по items и projects),
+    # и truncate, берущий те же таблицы в другом порядке, изредка ловит deadlock — тогда просто повторяем
+    for attempt in range(5):
+        try:
+            A.run(f"truncate {TABLES} restart identity")
+            break
+        except psycopg.errors.DeadlockDetected:
+            if attempt == 4:
+                raise
     A._seen_today.clear()
     monkeypatch.setattr(A, "TOKEN", "")
     monkeypatch.setattr(A, "BOT_USERNAME", "")
@@ -102,9 +113,27 @@ def tg_from(tg_id, name, lang):
 
 
 def bot_message(text, tg_id=777, name="Tom", lang=None):
-    asyncio.run(A.handle_message({"chat": {"id": tg_id}, "from": tg_from(tg_id, name, lang), "text": text}))
+    asyncio.run(A.handle_message({"chat": {"id": tg_id, "type": "private"}, "from": tg_from(tg_id, name, lang),
+                                  "text": text}))
+
+
+def tg_start(c, link=False) -> dict:
+    """Кнопка «Войти через Telegram» на сайте: {nonce, code, url}; браузер c получает cookie tgl."""
+    r = c.post("/api/auth/tg/start", json={"link": link})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def tg_poll(c, nonce) -> dict:
+    return c.post("/api/auth/tg/poll", json={"nonce": nonce}).json()
+
+
+def tg_confirm(d, tg_id=777, lang=None, code=None):
+    """Нажатие в боте кнопки с числом с сайта (или code — другого числа)."""
+    bot_callback(f"tgok:{d['nonce']}:{d['code'] if code is None else code}", tg_id=tg_id, lang=lang)
 
 
 def bot_callback(data, tg_id=777, message=True, lang=None):
     asyncio.run(A.handle_callback({"id": "cb", "from": tg_from(tg_id, "Tom", lang), "data": data,
-                                   "message": {"chat": {"id": tg_id}, "message_id": 1} if message else {}}))
+                                   "message": {"chat": {"id": tg_id, "type": "private"}, "message_id": 1}
+                                   if message else {}}))
