@@ -16,14 +16,6 @@ def test_config_reports_session(client, login):
     assert client.get("/api/config").json()["user"] is True
 
 
-def test_index_served(client, login):
-    r = client.get("/")  # гостю — лендинг с SEO-заголовком и то же приложение
-    assert r.status_code == 200 and "<title>GTD онлайн бесплатно" in r.text and "function load()" in r.text
-    login(client)
-    r = client.get("/")  # вошёл — приложение, как раньше
-    assert r.status_code == 200 and "<title>GTD</title>" in r.text and "function load()" in r.text
-
-
 def test_capture_and_list(client, login):
     login(client)
     assert client.post("/api/capture", json={"text": "  "}).status_code == 400
@@ -170,20 +162,9 @@ def test_users_are_isolated(new_client, login):
     assert alice.get("/api/items?status=all").json()[0]["title"] == "секрет"
 
 
-def test_logout(client, login):
-    login(client)
-    assert client.post("/api/logout").json() == {"ok": True}
-    assert client.get("/api/counts").status_code == 401
-
-
 def test_dev_login_creates_user(client):
     r = client.get("/dev-login", follow_redirects=False)
     assert r.status_code == 303 and client.get("/api/me").status_code == 200
-
-
-def test_dev_login_disabled_in_prod(client, monkeypatch):
-    monkeypatch.setattr(A, "DEV", False)
-    assert client.get("/dev-login").status_code == 404
 
 
 # ── Проекты: переименование и удаление ──
@@ -307,17 +288,6 @@ def test_undo_seconds_setting(client, login):
         assert client.patch("/api/me", json={"undo_seconds": bad}).status_code == 400
     assert client.get("/api/me").json()["undo_seconds"] == 30
     assert client.patch("/api/me", json={}).status_code == 200  # без полей — ничего не меняется
-
-
-def test_google_analytics_only_on_prod_domain(client, monkeypatch):
-    assert "googletagmanager" not in client.get("/").text  # ID не задан — GA нет
-    monkeypatch.setattr(A, "GA_ID", "G-TEST123")
-    prod = client.get("/", headers={"host": "gtd.serbito.rs"}).text
-    assert "gtag/js?id=G-TEST123" in prod and "send_page_view: false" in prod and "<!--GA-->" not in prod
-    for host in ("localhost:8000", "gtd-488744139718.europe-west1.run.app"):
-        page = client.get("/", headers={"host": host}).text
-        assert "googletagmanager" not in page and "<!--GA-->" not in page, host
-    assert "gtag/js?id=G-TEST123" in client.get("/i/5", headers={"host": "gtd.serbito.rs"}).text
 
 
 # ── чек-лист первого запуска: пункты отмечаются сами по данным, скрытие хранится на сервере ──

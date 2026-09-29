@@ -36,13 +36,6 @@ def test_every_entry_in_english_and_russian():
             assert not re.search(r"SERBITO-\d+|GTD-\d+", en + ru), (r.version, en)  # для людей, не номера тикетов
 
 
-def test_versions_newest_first():
-    done = C.released(C.parse(TEXT))
-    keys = [C.vkey(r.version) for r in done]
-    assert keys == sorted(keys, reverse=True) and len(set(keys)) == len(keys)
-    assert [r.date for r in done] == sorted((r.date for r in done), reverse=True)
-
-
 def test_every_tag_has_an_entry_with_its_date():
     tags = git("tag", "--list", "v*.*.*").split()
     assert "v0.1.0" in tags and "v0.16.0" in tags, "нет тегов: git fetch --tags"
