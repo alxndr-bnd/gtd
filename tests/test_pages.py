@@ -74,7 +74,7 @@ def test_seo_search_words(client):
 def test_landing_text_is_server_rendered(client, path, words):
     """Гость и поисковик получают текст лендинга в самом HTML, без JS; приложение (скрипт) — то же."""
     h = client.get(path).text
-    root = h[h.index('<div id="root">'):h.index('<dialog id="dlg">')]
+    root = h[h.index('<div id="root">'):h.index('<dialog id="dlg"')]
     for w in words:
         assert w in root, w
     assert "<!--LANDING-->" not in h and "function loginScreen" in h
