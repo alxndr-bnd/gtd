@@ -1,5 +1,6 @@
 """GTD for free — веб-UI + Telegram-бот (захват задач и напоминания)."""
 import asyncio
+import gzip
 import hashlib
 import hmac
 import html
@@ -26,6 +27,7 @@ from psycopg_pool import ConnectionPool
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import pages
@@ -1250,6 +1252,66 @@ async def lifespan(app):
 # ───────────────────────── Web / API ─────────────────────────
 # /docs, /redoc и /openapi.json — только локально (SERBITO-360, GTD-9): публичной карте API на проде незачем быть
 app = FastAPI(lifespan=lifespan, **({} if DEV else {"docs_url": None, "redoc_url": None, "openapi_url": None}))
+
+# ── Сжатие ответов (SERBITO-349). Cloud Run отдаёт ответы как есть, а index.html с инлайн-SPA — ~111 КБ на каждое
+# открытие. Сжимаем gzip только текст (HTML, JSON, JS, CSS, XML, SVG) от GZIP_MIN байт; уже сжатое (PNG, ответ
+# с Content-Encoding), частичное (206) и потоковое (тело несколькими кусками — FileResponse, StreamingResponse)
+# идёт как есть. Starlette GZipMiddleware не подошёл: он сжимает и потоковые ответы.
+# Слой — самый внутренний (добавлен первым): HEAD, который HeadAsGet превращает в GET, получает те же
+# Content-Encoding и Content-Length, что и GET.
+GZIP_MIN = 1024
+GZIP_TYPES = ("text/", "application/json", "application/javascript", "application/manifest+json",
+              "application/xml", "image/svg+xml")
+
+
+def accepts_gzip(value: str) -> bool:
+    """Accept-Encoding разрешает gzip: «gzip» (или, если его нет, «*») и не с q=0."""
+    ok = {}
+    for part in value.split(","):
+        name, _, params = part.partition(";")
+        q = params.replace(" ", "").lower()
+        try:
+            ok[name.strip().lower()] = not (q.startswith("q=") and float(q[2:]) == 0)
+        except ValueError:
+            ok[name.strip().lower()] = False
+    return ok.get("gzip", ok.get("*", False))
+
+
+class Gzip:
+    def __init__(self, asgi):
+        self.asgi = asgi
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.asgi(scope, receive, send)
+        gz = accepts_gzip(Headers(scope=scope).get("accept-encoding", ""))
+        held = None  # http.response.start ждёт первого куска тела: только по нему ясно, сжимать ли
+
+        async def send_z(msg):
+            nonlocal held
+            if msg["type"] == "http.response.start":
+                held = msg
+                return
+            if held is None:
+                return await send(msg)
+            start, held = held, None
+            body, h = msg.get("body", b""), MutableHeaders(raw=list(start.get("headers", [])))
+            if (msg["type"] == "http.response.body" and not msg.get("more_body") and len(body) >= GZIP_MIN
+                    and start["status"] not in (204, 206, 304) and "content-encoding" not in h
+                    and h.get("content-type", "").lower().startswith(GZIP_TYPES)):
+                h.add_vary_header("Accept-Encoding")  # кэши не отдадут сжатое тому, кто его не просил
+                if gz:
+                    body = gzip.compress(body, compresslevel=6, mtime=0)
+                    h["content-encoding"], h["content-length"] = "gzip", str(len(body))
+                    msg = {**msg, "body": body}
+                start = {**start, "headers": h.raw}
+            await send(start)
+            await send(msg)
+
+        await self.asgi(scope, receive, send_z)
+
+
+app.add_middleware(Gzip)
 
 # HEAD отвечаем как GET, только без тела. Мониторинги аптайма и превью ссылок (Slack и др.) сперва шлют HEAD,
 # а FastAPI сам его не добавляет — без этого на HEAD / был 405 и сайт считался лежащим.
