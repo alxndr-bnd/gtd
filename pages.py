@@ -134,7 +134,7 @@ PUBLIC_CSS = """<style>
 
 # /about — отдельная лёгкая страница без JS приложения: цвета те же, что в index.html
 BASE_CSS = """<style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#5f6a7a;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
 @media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
