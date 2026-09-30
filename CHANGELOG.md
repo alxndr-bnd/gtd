@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-30
+
 ### Changed
 - Pages open faster: the site now sends them compressed. Grey hint text is a little darker and easier to read.
   - RU: Страницы открываются быстрее — сайт теперь отдаёт их сжатыми. Серый текст подсказок стал чуть темнее и читается легче.
@@ -226,7 +228,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/alxndr-bnd/gtd/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/alxndr-bnd/gtd/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/alxndr-bnd/gtd/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/alxndr-bnd/gtd/compare/v0.17.0...v0.18.0
