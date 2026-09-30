@@ -14,7 +14,7 @@ if(location.hostname==='gtd.serbito.rs'){
 }
 </script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706;--bad:#c62828}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#5f6a7a;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706;--bad:#c62828}
 @media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18;--ok:#3ec97b;--warn:#f0a03c;--bad:#f07070}}
 :focus-visible{outline:2px solid var(--ac);outline-offset:1px} input:focus,textarea:focus,select:focus{outline:2px solid var(--ac);outline-offset:-1px}  /* фокус — в цвет логотипа, а не синий браузерный */
 *{accent-color:var(--ac)}
@@ -120,7 +120,7 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   .it input[type=checkbox]{width:24px;height:24px}
   .toast{bottom:12px}
 }
-.it.sel{outline:2px solid var(--ac);outline-offset:-1px}
+.it.sel,.it:focus-visible{outline:2px solid var(--ac);outline-offset:-1px}
 nav a.kb{outline:2px solid var(--ac);outline-offset:2px}  /* снаружи с зазором — видна и на синем активном */
 .draftnote{color:var(--warn);font-size:12.5px;margin-top:10px} .draftnote a{color:inherit}
 nav .keys{color:var(--mut);font-size:11.5px;line-height:1.6;margin:18px 10px 0}
@@ -149,8 +149,10 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   .topbar .userbox{flex-shrink:0;max-width:45%} .topbar button.user{padding:0 8px;height:36px;line-height:1}
   .topbar .umenu{position:absolute;right:0;top:100%;margin-top:6px;min-width:180px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;padding:4px}
   .topbar .umenu a{padding-left:10px}
-  nav{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:40;overflow-y:auto;transform:translateX(-105%);transition:transform .2s;border-right:1px solid var(--bd)}
-  nav.open{transform:none;box-shadow:0 0 40px #0005}
+  /* Закрытое меню — visibility:hidden: его пункты не ловят Tab за краем экрана (SERBITO-349); прячется после выезда */
+  nav{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:40;overflow-y:auto;transform:translateX(-105%);
+    visibility:hidden;transition:transform .2s,visibility 0s .2s;border-right:1px solid var(--bd)}
+  nav.open{transform:none;box-shadow:0 0 40px #0005;visibility:visible;transition:transform .2s}
   nav .navfoot{display:none}
   .scrim.open{display:block;position:fixed;inset:0;z-index:30;background:#0006}
 }
@@ -158,7 +160,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
 </head>
 <body>
 <div id="root"><!--LANDING--></div>
-<dialog id="dlg"></dialog>
+<dialog id="dlg" aria-labelledby="dlg-h"></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <!-- Все видимые строки приложения — здесь, ru и en с одинаковыми ключами (проверяет тест). {имя} — подстановка -->
 <script type="application/json" id="i18n">
@@ -186,7 +188,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "ex": "Например: «{ex}»",
   "onb": [["capture", "Запиши 3 мысли", "в поле ниже или боту, не разбирая"],
     ["process", "Разбери Inbox", "реши, что делать с задачей: → Next, → Waiting, → Someday…"],
-    ["telegram", "Подключи Telegram-бота", "записывать с телефона и получать напоминания — в <a data-view=\"account\">Аккаунте</a>"]],
+    ["telegram", "Подключи Telegram-бота", "записывать с телефона и получать напоминания — в <a href=\"#account\" data-view=\"account\">Аккаунте</a>"]],
   "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть",
   "cap_hints": ["Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»",
     "Что сделать? «завтра в 10:00 #дом @телефон»", "Что нужно сделать? #проект @контекст", "Что нужно сделать?", "Задача…"],
@@ -229,11 +231,11 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "new_project": "Новый проект", "create": "Создать", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
   "complete": "Завершить",
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
-    "s2": "2. Inbox → ноль", "s2_text": "В инбоксе: <b>{n}</b> — <a data-view=\"inbox\">разобрать</a>",
+    "s2": "2. Inbox → ноль", "s2_text": "В инбоксе: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">разобрать</a>",
     "s3": "3. Проекты без следующего действия", "s3_ok": "Все проекты движутся ✅",
     "s4": "4. Waiting старше недели", "s4_ok": "Ничего не зависло ✅",
     "s5": "5. Ближайшие напоминания", "s5_none": "Нет",
-    "s6": "6. Someday/Maybe", "s6_text": "Идей: <b>{n}</b> — <a data-view=\"someday\">просмотреть</a>. Что-то пора активировать?"},
+    "s6": "6. Someday/Maybe", "s6_text": "Идей: <b>{n}</b> — <a href=\"#someday\" data-view=\"someday\">просмотреть</a>. Что-то пора активировать?"},
   "moved_to": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
     "done": "Готово", "trash": "Корзину"},
   "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
@@ -275,7 +277,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "ex": "For example: “{ex}”",
   "onb": [["capture", "Capture 3 thoughts", "in the field below or to the bot, no sorting yet"],
     ["process", "Clarify your Inbox", "decide what each task needs: → Next, → Waiting, → Someday…"],
-    ["telegram", "Connect the Telegram bot", "capture from your phone and get reminders — under <a data-view=\"account\">Account</a>"]],
+    ["telegram", "Connect the Telegram bot", "capture from your phone and get reminders — under <a href=\"#account\" data-view=\"account\">Account</a>"]],
   "onb_title": "First steps in GTD", "onb_close": "Hide",
   "cap_hints": ["Quick capture: “call the bank tomorrow at 10am #home @phone”",
     "What to do? “tomorrow at 10am #home @phone”", "What needs doing? #project @context", "What needs doing?", "Task…"],
@@ -318,11 +320,11 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "new_project": "New project", "create": "Create", "open_n": "{n} open", "no_next": "⚠ no next action",
   "complete": "Complete",
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
-    "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a data-view=\"inbox\">process it</a>",
+    "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">process it</a>",
     "s3": "3. Projects without a next action", "s3_ok": "All projects are moving ✅",
     "s4": "4. Waiting for over a week", "s4_ok": "Nothing is stuck ✅",
     "s5": "5. Upcoming reminders", "s5_none": "None",
-    "s6": "6. Someday/Maybe", "s6_text": "Ideas: <b>{n}</b> — <a data-view=\"someday\">look through</a>. Time to activate any?"},
+    "s6": "6. Someday/Maybe", "s6_text": "Ideas: <b>{n}</b> — <a href=\"#someday\" data-view=\"someday\">look through</a>. Time to activate any?"},
   "moved_to": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
     "done": "Done", "trash": "Trash"},
   "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
@@ -629,17 +631,19 @@ function changesLink(){
 function navHtml(){
   const me = S.me || {}, who = esc(me.email || me.name || t('account_short'));
   // «Аккаунт» и «Выйти» свёрнуты в одну кнопку; на телефоне она справа в верхней полосе
-  const user = `<div class="userbox"><button class="user" data-act="umenu" aria-haspopup="true">👤 <span>${who}</span> ▾</button>
-    <div class="umenu" hidden><a data-view="account">${t('account')}</a><a data-act="logout">${t('sign_out')}</a></div></div>`;
+  const user = `<div class="userbox"><button class="user" data-act="umenu" aria-haspopup="true" aria-expanded="false">👤 <span>${who}</span> ▾</button>
+    <div class="umenu" hidden><a href="#account" data-view="account">${t('account')}</a><a href="#" role="button" data-act="logout">${t('sign_out')}</a></div></div>`;
   const cur = viewLabel();
-  // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается»
-  return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}"><svg viewBox="0 0 24 24" width="22" height="22"
+  // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается».
+  // Разделы — ссылки с href (SERBITO-349): без него <a> не получает фокус с клавиатуры и не читается как ссылка
+  const item = (k, l, n) => `<a href="#${k}" class="${S.view===k?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
+  return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <span class="tb-title">${cur}</span>${user}</div>
     <div class="scrim" data-act="drawer"></div>
-    <nav><h1 data-view="inbox" title="${t('to_inbox')}"><img src="/favicon.svg" alt="" width="24" height="24">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
-    <a class="${S.view===k?'on':''}" data-view="${k}">${l}<span class="n">${k==='review'?'':(S.counts[k]||0)}</span></a>`).join('')}
-    ${me.admin?`<a class="${S.view==='stats'?'on':''}" data-view="stats">${t('stats')}</a>`:''}
+    <nav id="nav" aria-label="${t('menu')}"><h1 data-view="inbox" title="${t('to_inbox')}"><img src="/favicon.svg" alt="" width="24" height="24">GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
+    ${item(k, l, `<span class="n">${k==='review'?'':(S.counts[k]||0)}</span>`)}`).join('')}
+    ${me.admin?item('stats', t('stats'), ''):''}
     <a href="${t('about_url')}" title="${t('about_title')}">${t('about')}</a>
     ${changesLink()}
     ${window.gtdConsent ? `<a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>${t('cookie_settings')}</a>` : ''}
@@ -658,8 +662,9 @@ function itemHtml(it){
   else if(it.status==='waiting') acts.push(['next','→ Next']);
   else if(it.status==='someday') acts.push(['next','→ Next']);
   else if(it.status==='done') acts.push(['next',t('restore')]);
-  return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}">
-    <input type="checkbox" data-act="toggle" ${it.status==='done'?'checked':''}>
+  // tabindex=-1: карточку фокусирует выбор стрелками и возврат из диалога, в порядок Tab она не входит
+  return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}" tabindex="-1">
+    <input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" data-act="mv" data-st="${s}" ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
@@ -725,7 +730,9 @@ function render(){
   docTitle();  // и длинный SEO-заголовок лендинга после входа сменится
   gaPage();
   if(S.sel!=null){ S.sel = Math.min(S.sel, cards().length-1); if(S.sel<0) S.sel = null; }  // выбор переживает перерисовку
-  if(S.sel!=null || S.zone==='nav') selDraw();
+  const lost = !document.activeElement || document.activeElement===document.body;  // старый список заменён
+  if(S.sel!=null || S.zone==='nav') selDraw(lost);
+  if(S.toBurger){ S.toBurger = false; if(lost) $('.burger')?.focus(); }
 }
 
 // Выполненные задачи проекта (SERBITO-327): hide — не видны; list — на своём месте в списке, приглушённые
@@ -846,7 +853,7 @@ function reorderKey(e){
   const up = e.key==='ArrowUp', sib = up ? el.previousElementSibling : el.nextElementSibling;
   if(!sib) return true;
   box.insertBefore(el, up ? sib : sib.nextElementSibling);
-  S.sel += up ? -1 : 1; selDraw();
+  S.sel += up ? -1 : 1; selDraw(true);
   dndSave(el);
   return true;
 }
@@ -854,7 +861,7 @@ function reorderKey(e){
 function projectsHtml(){
   return `<h2>${L.views.projects}</h2><div class="hint">${t('projects_hint')}</div>
   <div class="cap"><input id="np" placeholder="${t('new_project')}"><button data-act="newproj">${t('create')}</button></div>
-  ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}"><div class="b"><div class="t">${esc(p.title)}</div>
+  ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}" tabindex="-1"><div class="b"><div class="t">${esc(p.title)}</div>
     <div class="meta"><span>${t('open_n', {n:p.open_count})}</span>${p.next_count?'':`<span class="warn">${t('no_next')}</span>`}</div></div>
     <button class="sm" data-act="renameproj" data-pid="${p.id}" title="${t('rename')}">✏️</button>
     <button class="sm" data-act="delproj" data-pid="${p.id}" title="${t('delete')}">🗑</button>
@@ -893,7 +900,7 @@ function reviewHtml(){
   return `<h2>${L.views.review}</h2>
   <div class="rv"><h3>${t('review.s1')}</h3>${t('review.s1_text')}</div>
   <div class="rv"><h3>${t('review.s2')}</h3>${t('review.s2_text', {n:c.inbox||0})}</div>
-  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
+  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="#projects" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
   <div class="rv"><h3>${t('review.s4')}</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):t('review.s4_ok')}</div>
   <div class="rv"><h3>${t('review.s5')}</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):t('review.s5_none')}</div>
   <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
@@ -966,6 +973,20 @@ const draft = {
 };
 const ITEM_FIELDS = ['title','notes','status','project_id','context','remind'];
 
+// Диалог (карточка задачи, проект): закрыли — фокус туда, откуда открыли (SERBITO-349), а не на <body>. Открывший
+// элемент мог пропасть — список перерисовался после сохранения: тогда такой же по селектору back. Возвращает
+// функцию возврата: её зовут и после перерисовки (сохранение → load)
+function dlgShow(back){
+  const d = $('#dlg'), opener = document.activeElement;
+  const ret = () => {
+    const a = document.activeElement; if(a && a !== document.body && a.isConnected) return;  // фокус уже на месте
+    (opener?.isConnected && opener !== document.body ? opener : back && document.querySelector(back))?.focus();
+  };
+  d.addEventListener('close', ret, {once:true});
+  d.showModal();
+  return ret;
+}
+
 // У каждой задачи своя ссылка /i/<номер>: открытая карточка отражается в адресе, закрыли — вернулись на /
 const itemLink = it => `${location.origin}/i/${it.num}`;
 function openEdit(id, found){
@@ -973,15 +994,15 @@ function openEdit(id, found){
   const d = $('#dlg');
   history.replaceState(null, '', `/i/${it.num}`);
   d.onclose = () => { acClose(); if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };
-  d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px">${t('task_n', {n:it.num})}
+  d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px"><span id="dlg-h">${t('task_n', {n:it.num})}</span>
       <button type="button" class="sm" data-act="copylink" aria-label="${t('copy_link')}" title="${t('copy_link_to', {url:esc(itemLink(it))})}">🔗</button></h3>
-    <label>${t('f_title')}</label><div class="capw"><input name="title" value="${esc(it.title)}" required autofocus autocomplete="off" data-ac-src>
+    <label for="ef-title">${t('f_title')}</label><div class="capw"><input id="ef-title" name="title" value="${esc(it.title)}" required autofocus autocomplete="off" data-ac-src>
       <div class="ac" role="listbox" hidden></div></div>
-    <label>${t('f_notes')}</label><textarea name="notes" rows="3">${esc(it.notes)}</textarea>
-    <label>${t('f_list')}</label><select name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
-    <label>${t('f_project')}</label><select name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
-    <label>${t('f_context')}</label><input name="context" value="${esc(it.context||'')}" placeholder="${t('f_context_ph')}">
-    <label>${t('f_remind')}</label><input type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
+    <label for="ef-notes">${t('f_notes')}</label><textarea id="ef-notes" name="notes" rows="3">${esc(it.notes)}</textarea>
+    <label for="ef-status">${t('f_list')}</label><select id="ef-status" name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
+    <label for="ef-project">${t('f_project')}</label><select id="ef-project" name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
+    <label for="ef-context">${t('f_context')}</label><input id="ef-context" name="context" value="${esc(it.context||'')}" placeholder="${t('f_context_ph')}">
+    <label for="ef-remind">${t('f_remind')}</label><input id="ef-remind" type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
     <div class="draftnote" hidden>${t('draft')} · <a href="#" data-act="dropdraft">${t('draft_drop')}</a></div>
     <div class="row"><button type="button" data-act="del" style="color:#d33">${t('delete')}</button><span><button type="button" data-act="cancel">${t('cancel')}</button> <button class="pri" value="ok">${t('save')}</button></span></div></form>`;
   const form = $('#ef'), key = 'item:'+it.id, saved = draft.get(key);
@@ -992,14 +1013,14 @@ function openEdit(id, found){
   const keep = () => draft.set(key, Object.fromEntries(ITEM_FIELDS.map(k => [k, form.elements[k].value])));
   form.addEventListener('input', keep); form.addEventListener('change', keep);
   form.querySelector('[data-act=dropdraft]').onclick = e => { e.preventDefault(); draft.del(key); openEdit(id, it); };
-  d.showModal();
+  const back = dlgShow(`main .it[data-id="${id}"]`);
   $('#ef').onsubmit = async e => {
     draft.del(key);
     const f = new FormData(e.target);
     await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
       project_id:f.get('project_id')?+f.get('project_id'):null, context:f.get('context'),
       remind_at:f.get('remind')?Math.floor(new Date(f.get('remind')).getTime()/1000):null});
-    load();
+    await load(); back();
   };
   d.querySelector('[data-act=cancel]').onclick = () => { draft.del(key); d.close(); };  // «Отмена» — осознанно выбросить
   d.querySelector('[data-act=copylink]').onclick = async e => {
@@ -1021,22 +1042,22 @@ async function projApi(pid, method, body, query=''){
 function openRenameProject(pid){
   const p = S.projects.find(x=>x.id===pid); if(!p) return;
   const d = $('#dlg');
-  d.innerHTML = `<form method="dialog" id="pf"><h3 style="margin:0 0 6px">${t('rename_project')}</h3>
-    <label>${t('f_title')}</label><input name="title" value="${esc(p.title)}" required>
+  d.innerHTML = `<form method="dialog" id="pf"><h3 id="dlg-h" style="margin:0 0 6px">${t('rename_project')}</h3>
+    <label for="pf-title">${t('f_title')}</label><input id="pf-title" name="title" value="${esc(p.title)}" required>
     <div class="msg" id="pfmsg"></div>
     <div class="row"><span></span><span><button type="button" data-act="cancel">${t('cancel')}</button> <button class="pri" value="ok">${t('save')}</button></span></div></form>`;
-  d.showModal();
+  const back = dlgShow(`[data-act=renameproj][data-pid="${pid}"]`);
   d.querySelector('[data-act=cancel]').onclick = () => d.close();
   $('#pf').onsubmit = async e => {
     e.preventDefault();
-    try{ await projApi(pid, 'PATCH', {title:new FormData(e.target).get('title')}); d.close(); load(); }
+    try{ await projApi(pid, 'PATCH', {title:new FormData(e.target).get('title')}); d.close(); await load(); back(); }
     catch(err){ $('#pfmsg').textContent = err.message; }
   };
 }
 function openDeleteProject(pid){
   const p = S.projects.find(x=>x.id===pid); if(!p) return;
   const n = p.total_count, d = $('#dlg');
-  d.innerHTML = `<h3 style="margin:0 0 6px">${t('delete_project_q', {title:esc(p.title)})}</h3>
+  d.innerHTML = `<h3 id="dlg-h" style="margin:0 0 6px">${t('delete_project_q', {title:esc(p.title)})}</h3>
     <p class="hint" style="margin:0">${n ? t('project_tasks', {n}) : t('project_no_tasks')}</p>
     <div class="msg" id="pdmsg"></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
@@ -1044,7 +1065,7 @@ function openDeleteProject(pid){
       <button data-del="delete" style="color:#d33">${t('del_all', {n})}</button>`
           : `<button data-del="keep" style="color:#d33">${t('del_project')}</button>`}
       <button data-del="">${t('cancel')}</button></div>`;
-  d.showModal();
+  dlgShow(`[data-act=delproj][data-pid="${pid}"]`);
   d.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if(!b.dataset.del) return d.close();
     try{ await projApi(pid, 'DELETE', null, '?items='+b.dataset.del); d.close(); if(S.pid===pid) S.pid=null; load(); }
@@ -1102,10 +1123,10 @@ function cardClick(e){
 }
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return cardClick(e);
+  if(el.tagName==='A' && el.getAttribute('href')?.startsWith('#')) e.preventDefault();  // раздел, а не якорь в адресе
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
-  if(act==='drawer'){ const open = !$('nav').classList.contains('open');
-    $('nav').classList.toggle('open', open); $('.scrim').classList.toggle('open', open); return; }
-  if(act==='umenu'){ const m = el.parentElement.querySelector('.umenu'); m.hidden = !m.hidden; return; }
+  if(act==='drawer') return drawer(!$('nav').classList.contains('open'));
+  if(act==='umenu'){ const m = el.parentElement.querySelector('.umenu'); m.hidden = !m.hidden; el.setAttribute('aria-expanded', !m.hidden); return; }
   if(act==='capture') return capture();
   if(act==='emailsend') return emailSend();
   if(act==='emailverify') return emailVerify();
@@ -1137,7 +1158,10 @@ document.addEventListener('click', async e => {
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
   if(act==='back'){ e.preventDefault(); S.pid=null; return load(); }
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
-  if(el.dataset.view){ S.view=el.dataset.view; S.ctx=null; S.sel=null; S.zone='main'; S.pid=el.dataset.pid?+el.dataset.pid:null; return load(); }
+  if(el.dataset.view){
+    S.toBurger = !!el.closest('nav.open');  // выбрали в выезжающем меню — оно закроется, фокус вернётся на ☰
+    S.view=el.dataset.view; S.ctx=null; S.sel=null; S.zone='main'; S.pid=el.dataset.pid?+el.dataset.pid:null; return load();
+  }
   if(el.dataset.pid && el.classList.contains('pj')){ S.pid=+el.dataset.pid; return load(); }
 });
 document.addEventListener('change', async e => {
@@ -1169,12 +1193,36 @@ document.addEventListener('input', e => {
 });
 // Ушли в поле или кликнули мышью мимо меню — выходим из режима меню
 const leaveMenu = () => { if(S.zone==='nav'){ S.zone = 'main'; selDraw(); } };
-document.addEventListener('focusin', e => { if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) leaveMenu(); });
+// Пункт меню получил фокус с клавиатуры (Tab) — режим меню с этого пункта: стрелки идут от него (SERBITO-349)
+document.addEventListener('focusin', e => {
+  const a = e.target.closest?.('nav > a[data-view]');
+  if(!a) return leaveMenu();
+  if(a.matches(':focus-visible') && !(S.zone==='nav' && menu()[S.navSel]===a)){ S.zone = 'nav'; S.navSel = menu().indexOf(a); selDraw(); }
+});
 document.addEventListener('mousedown', e => {
   if(!e.target.closest('nav')) leaveMenu();
-  if(!e.target.closest('.userbox')) document.querySelectorAll('.umenu').forEach(m => m.hidden = true);
+  if(!e.target.closest('.userbox')) closeUmenu();
 });
-const closeDrawer = () => { $('nav')?.classList.remove('open'); $('.scrim')?.classList.remove('open'); };
+function closeUmenu(){
+  document.querySelectorAll('.umenu').forEach(m => { m.hidden = true; m.parentElement.querySelector('[aria-expanded]')?.setAttribute('aria-expanded', false); });
+}
+// Выезжающее меню на телефоне (SERBITO-349): открылось — фокус на текущий раздел внутри него, Tab ходит по кругу
+// внутри (drawerTab), Esc / ☰ / тап мимо закрывают и возвращают фокус на ☰
+function drawer(open){
+  const nav = $('nav'), burger = $('.burger'); if(!nav) return;
+  nav.classList.toggle('open', open); $('.scrim')?.classList.toggle('open', open);
+  burger?.setAttribute('aria-expanded', open);
+  if(open) (nav.querySelector('a[aria-current]') || nav.querySelector('a[href]'))?.focus();
+  else if(nav.contains(document.activeElement)) burger?.focus();
+}
+const closeDrawer = () => drawer(false);
+function drawerTab(e){
+  if(e.key!=='Tab' || !$('nav.open')) return false;
+  const f = [...$('nav').querySelectorAll('a[href],button')].filter(x => x.getClientRects().length);
+  const i = f.indexOf(document.activeElement);
+  if(e.shiftKey ? i <= 0 : i < 0 || i === f.length-1){ e.preventDefault(); (e.shiftKey ? f.at(-1) : f[0])?.focus(); }
+  return true;
+}
 // mousedown, а не click: клик по подсказке не должен уводить фокус из поля
 document.addEventListener('mousedown', e => {
   const o = e.target.closest('[data-ac]');
@@ -1186,11 +1234,14 @@ document.addEventListener('mousedown', e => {
 // Пока печатаешь в поле, открыта карточка или подсказки @/# — стрелки не трогаем.
 const cards = () => [...document.querySelectorAll('main .it')].filter(c => c.getClientRects().length);  // без свёрнутых
 const menu = () => [...document.querySelectorAll('nav > a[data-view]')];  // без «Выйти»: случайный Enter не разлогинит
-function selDraw(){
+// focus — фокус браузера идёт за выбором (SERBITO-349): так его видят экранные чтецы, а Tab продолжает с него
+function selDraw(focus){
   const list = cards();
   list.forEach((c, i) => c.classList.toggle('sel', S.zone!=='nav' && i===S.sel));
   if(S.zone!=='nav') list[S.sel]?.scrollIntoView({block:'nearest'});
   menu().forEach((a, i) => a.classList.toggle('kb', S.zone==='nav' && i===S.navSel));
+  const el = S.zone==='nav' ? menu()[S.navSel] : S.sel!=null ? list[S.sel] : null;
+  if(focus && el && document.activeElement!==el) el.focus({preventScroll:true});
 }
 function toMenu(){
   S.zone = 'nav';
@@ -1216,8 +1267,8 @@ function navKey(e){
   if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){
     if(e.target.id!=='cap' || AC.items.length) return false;
     const atEnd = e.target.selectionStart === e.target.value.length;  // иначе ↓ ходит по строкам поля
-    if(e.key==='ArrowDown' && list.length && atEnd){ e.preventDefault(); e.target.blur(); S.zone = 'main'; S.sel = 0; selDraw(); return true; }
-    if(e.key==='ArrowLeft' && !e.target.value){ e.preventDefault(); e.target.blur(); toMenu(); selDraw(); return true; }
+    if(e.key==='ArrowDown' && list.length && atEnd){ e.preventDefault(); e.target.blur(); S.zone = 'main'; S.sel = 0; selDraw(true); return true; }
+    if(e.key==='ArrowLeft' && !e.target.value){ e.preventDefault(); e.target.blur(); toMenu(); selDraw(true); return true; }
     return false;
   }
   if(S.zone==='nav'){
@@ -1225,17 +1276,24 @@ function navKey(e){
     if(e.key==='ArrowDown') S.navSel = Math.min(S.navSel+1, items.length-1);
     else if(e.key==='ArrowUp') S.navSel = Math.max(S.navSel-1, 0);
     else if(e.key==='Enter' && items[S.navSel]){
-      const i = S.navSel; e.preventDefault(); S.sel = null;
-      items[i].click(); S.zone = 'nav'; S.navSel = i; selDraw(); return true;  // открыть раздел, остаться в меню
+      const i = S.navSel, inDrawer = !!$('nav.open'); e.preventDefault(); S.sel = null;
+      items[i].click();
+      if(!inDrawer){ S.zone = 'nav'; S.navSel = i; }  // открыть раздел, остаться в меню (выезжающее — закрылось)
+      selDraw(); return true;
     }
     else if(e.key==='ArrowRight'){  // в основное окно — на первую карточку, а если их нет — в поле захвата
       S.zone = 'main';
       if(cards().length) S.sel = 0; else { S.sel = null; $('#cap')?.focus(); }
     }
-    else if(e.key==='Escape') S.zone = 'main';  // Esc — вернуться к прежнему выбору
+    else if(e.key==='Escape'){ S.zone = 'main'; if(S.sel==null) document.activeElement?.blur(); }  // Esc — к прежнему выбору
     else return false;
-    e.preventDefault(); selDraw(); return true;
+    e.preventDefault(); selDraw(true); return true;
   }
+  // Фокус на карточке (вернулись из диалога, кликнули) — выбор стрелками идёт от неё. Enter на ссылке или кнопке —
+  // её собственное действие, а не «открыть выбранную карточку»
+  const card = e.target.closest?.('main .it');
+  if(card===e.target && S.sel==null && ['ArrowDown','ArrowUp','Enter'].includes(e.key)) S.sel = list.indexOf(card);
+  if(e.key==='Enter' && card!==e.target && e.target.matches?.('a[href],button,summary')) return false;
   if(e.key==='ArrowDown' && list.length) S.sel = S.sel==null ? 0 : Math.min(S.sel+1, list.length-1);
   else if(e.key==='ArrowUp' && S.sel!=null){
     if(S.sel===0){ S.sel = null; $('#cap')?.focus(); } else S.sel--;
@@ -1245,9 +1303,9 @@ function navKey(e){
     return c.dataset.id ? (openEdit(+c.dataset.id), true) : (c.click(), true);  // задача или проект
   }
   else if(e.key==='ArrowLeft') toMenu();
-  else if(e.key==='Escape' && S.sel!=null) S.sel = null;
+  else if(e.key==='Escape' && S.sel!=null){ S.sel = null; if(e.target.closest?.('main .it')) e.target.blur(); }
   else return false;
-  e.preventDefault(); selDraw(); return true;
+  e.preventDefault(); selDraw(true); return true;
 }
 
 document.addEventListener('keydown', e => {
@@ -1260,6 +1318,9 @@ document.addEventListener('keydown', e => {
     if(e.key==='Escape'){ e.preventDefault(); return acClose(); }
   }
   if(e.key==='Escape' && $('nav.open')) return closeDrawer();
+  if(drawerTab(e)) return;
+  const um = e.key==='Escape' && [...document.querySelectorAll('.umenu')].find(m => !m.hidden);
+  if(um){ closeUmenu(); return um.parentElement.querySelector('button.user')?.focus(); }
   if(captureKey(e)) return;
   if(reorderKey(e)) return;
   if(navKey(e)) return;

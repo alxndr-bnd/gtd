@@ -82,11 +82,11 @@ class Watch:
     """Страница, которая копит всё, что считается поломкой: ошибки консоли, необработанные исключения,
     ответы ≥400 своего сервера и попытки сходить наружу."""
 
-    def __init__(self, browser, base, lang="ru", stubs=None):
+    def __init__(self, browser, base, lang="ru", stubs=None, viewport=(1280, 900)):
         """stubs — {начало внешнего URL: тело JS}: локальные подмены внешних скриптов (GA на «проде»)."""
         self.base, self.errors, self.expected_404, self.stubs = base, [], set(), stubs or {}
         self.ctx = browser.new_context(locale="en-US" if lang == "en" else "ru-RU",
-                                       viewport={"width": 1280, "height": 900})
+                                       viewport={"width": viewport[0], "height": viewport[1]})
         self.ctx.route("**/*", self._route)
         self.page = self.ctx.new_page()
         self.page.on("console", self._console)
@@ -160,8 +160,8 @@ class Watch:
 def watch(browser, server):
     opened = []
 
-    def make(lang="ru"):
-        w = Watch(browser, server, lang)
+    def make(lang="ru", viewport=(1280, 900)):
+        w = Watch(browser, server, lang, viewport=viewport)
         opened.append(w)
         return w
     yield make
@@ -905,4 +905,167 @@ def test_keyboard_reorder(watch):
     until(lambda: [r["id"] for r in A.rows("select id from items where project_id=%s order by ppos", (pid,))] == want,
           "порядок проекта не сохранился")
     assert db_order(uid, "next") == [second, first, third]  # порядок Next не тронут
+    w.check("итог")
+
+
+# ── Клавиатура и доступность (SERBITO-349) ──
+PHONE = (390, 844)
+FOCUSED = """() => { const a = document.activeElement;
+  return a && a !== document.body ? {view: a.dataset.view || null, id: a.id, tag: a.tagName, cls: a.className,
+    inNav: !!a.closest('nav'), card: a.closest('.it[data-id]')?.dataset.id || null} : null; }"""
+
+
+def tab_walk(w, n, back=False):
+    """n нажатий Tab (Shift+Tab); после каждого — что в фокусе."""
+    out = []
+    for _ in range(n):
+        w.page.keyboard.press("Shift+Tab" if back else "Tab")
+        out.append(w.page.evaluate(FOCUSED))
+    return out
+
+
+def test_nav_reachable_by_keyboard(watch):
+    """Разделы — ссылки с href: Tab доходит до каждого, Enter открывает, фокус остаётся на пункте;
+    стрелки в меню двигают и фокус браузера, текущий раздел — aria-current."""
+    w = watch()
+    smoke_user(w)
+    assert w.page.eval_on_selector_all("nav > a[data-view]", "els => els.every(a => a.getAttribute('href'))")
+    stops = tab_walk(w, 40)
+    reached = [s["view"] for s in stops if s and s["inNav"] and s["view"]]
+    assert set(SECTIONS) <= set(reached), reached
+    w.page.focus('nav > a[data-view="waiting"]')
+    w.page.keyboard.press("Enter")
+    w.wait('nav > a.on[data-view="waiting"][aria-current="page"]', "раздел Enter-ом")
+    assert w.page.locator('nav a[aria-current="page"]').count() == 1
+    assert w.page.evaluate(FOCUSED)["view"] == "waiting" and "#" not in w.page.url  # фокус не потерялся
+    w.page.keyboard.press("ArrowDown")  # стрелки в меню — фокус идёт за выбором
+    assert w.page.evaluate(FOCUSED)["view"] == "scheduled"
+    w.page.keyboard.press("Enter")
+    w.wait('nav > a.on[data-view="scheduled"]', "раздел стрелкой")
+    assert w.page.evaluate(FOCUSED)["view"] == "scheduled"
+    # Меню аккаунта: кнопка сообщает, раскрыта ли, пункты — ссылки с href, Esc закрывает и возвращает фокус
+    w.page.focus("nav .navfoot button.user")
+    w.page.keyboard.press("Enter")
+    assert w.page.get_attribute("nav .navfoot button.user", "aria-expanded") == "true"
+    w.page.keyboard.press("Tab")
+    assert w.page.evaluate(FOCUSED)["view"] == "account"
+    w.page.keyboard.press("Escape")
+    assert w.page.get_attribute("nav .navfoot button.user", "aria-expanded") == "false"
+    assert "user" in w.page.evaluate(FOCUSED)["cls"]
+    w.check("итог")
+
+
+def test_phone_drawer_focus(watch):
+    """Телефон: закрытое меню не ловит Tab; ☰ открывает — фокус внутри, Tab ходит по кругу внутри, Esc закрывает
+    и возвращает фокус на ☰; выбор раздела закрывает меню, фокус — снова на ☰."""
+    w = watch(viewport=PHONE)
+    smoke_user(w)
+    assert not any(s and s["inNav"] for s in tab_walk(w, 30)), "Tab попал в закрытое меню"
+    burger = w.page.locator(".burger")
+    assert burger.get_attribute("aria-expanded") == "false" and burger.get_attribute("aria-controls") == "nav"
+    burger.focus()
+    w.page.keyboard.press("Enter")
+    w.wait("nav.open", "меню открыто")
+    assert burger.get_attribute("aria-expanded") == "true"
+    assert w.page.evaluate(FOCUSED)["view"] == "inbox"  # текущий раздел
+    assert all(s and s["inNav"] for s in tab_walk(w, 25)), "фокус ушёл из открытого меню"
+    assert all(s and s["inNav"] for s in tab_walk(w, 5, back=True))
+    w.page.keyboard.press("Escape")
+    w.wait("nav:not(.open)", "меню закрыто Esc")
+    assert "burger" in w.page.evaluate(FOCUSED)["cls"] and burger.get_attribute("aria-expanded") == "false"
+    w.page.keyboard.press("Enter")
+    w.wait("nav.open", "меню снова открыто")
+    w.page.focus('nav > a[data-view="next"]')
+    w.page.keyboard.press("Enter")
+    w.wait('nav:not(.open) > a.on[data-view="next"]', "раздел из меню")
+    w.page.wait_for_function("document.activeElement.classList.contains('burger')", timeout=WAIT_MS)
+    w.check("итог")
+
+
+def test_task_dialog_labels_and_focus_return(watch):
+    """Карточка задачи: у каждого поля подпись, у диалога имя; Esc и «Сохранить» возвращают фокус на задачу,
+    с которой открыли; у галочки «выполнено» имя — название задачи."""
+    w = watch()
+    ids = smoke_user(w)
+    card = f'main .it[data-id="{ids["inbox"]}"]'
+    w.wait(card, "список")
+    assert w.page.get_by_role("checkbox", name="Позвонить маме").count() == 1
+    unnamed = w.page.eval_on_selector_all('main .it input[type="checkbox"]', "els => els.filter(x => !x.ariaLabel).length")
+    assert unnamed == 0
+    # С клавиатуры: из поля захвата ↓ — выбор и фокус на первой карточке, Enter — открыть
+    w.page.locator("#cap").press("ArrowDown")
+    assert w.page.evaluate(FOCUSED)["card"] == str(ids["inbox"])
+    w.page.keyboard.press("Enter")
+    w.wait("#dlg[open] #ef", "карточка с клавиатуры")
+    assert w.page.get_by_role("dialog", name="Задача #1").count() == 1
+    fields = w.page.eval_on_selector_all("#ef input, #ef select, #ef textarea",
+                                         "els => els.map(x => [x.name, x.labels[0]?.textContent.trim() || ''])")
+    assert len(fields) == 6 and all(label for _, label in fields), fields
+    w.page.keyboard.press("Escape")
+    w.page.wait_for_function("!document.querySelector('#dlg[open]')", timeout=WAIT_MS)
+    assert w.page.evaluate(FOCUSED)["card"] == str(ids["inbox"])
+    # Мышью, с сохранением: список перерисован — фокус на той же задаче в новом списке
+    w.page.click(f"{card} .t")
+    w.wait("#dlg[open] #ef", "карточка мышью")
+    w.page.fill("#ef-title", "Позвонить маме вечером")
+    w.page.click("#ef button.pri")
+    w.wait(f'{card} .t:text-is("Позвонить маме вечером")', "сохранено")
+    w.page.wait_for_function(f"document.activeElement === document.querySelector('{card}')", timeout=WAIT_MS)
+    w.check("итог")
+
+
+@pytest.mark.parametrize("bot", [False, True])
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_landing_signin_space_reserved(watch, monkeypatch, bot, viewport):
+    """Место под кнопки входа есть в HTML до JS: блок не растёт, когда их кладёт JS, и почти не пустует."""
+    if bot:
+        monkeypatch.setattr(A, "TOKEN", "test-token")
+        monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    w = watch(viewport=viewport)
+    w.page.add_init_script("""window.__cls = 0; new PerformanceObserver(l => l.getEntries().forEach(e => {
+      if(!e.hadRecentInput) window.__cls += e.value; })).observe({type: 'layout-shift', buffered: true});""")
+    w.goto("/")
+    w.wait('#signin a[href="/dev-login"]', "кнопки входа")
+    if bot:
+        w.wait("#signin .tgfb", "кнопка Telegram")
+    reserved = w.page.evaluate("parseFloat(document.querySelector('#signin').style.minHeight)")
+    real = w.page.evaluate("""() => { const s = document.querySelector('#signin'); s.style.minHeight = '';
+      return s.getBoundingClientRect().height; }""")
+    assert 0 <= reserved - real <= 8, (reserved, real)
+    assert w.page.evaluate("window.__cls") < 0.01
+    w.check("итог")
+
+
+def test_consent_banner_never_covers_focus(watch, monkeypatch):
+    """Телефон, баннер согласия открыт: ни одна остановка Tab — на лендинге, в списке задач и в выезжающем
+    меню — не оказывается под баннером."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    w = watch(viewport=PHONE)
+    covered = """() => { const a = document.activeElement, cc = document.querySelector('#cc');
+      if(!a || a === document.body || !cc || cc.hidden || cc.contains(a)) return null;
+      const b = cc.getBoundingClientRect(), r = a.getBoundingClientRect();
+      return r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right ? a.outerHTML.slice(0, 80) : null; }"""
+
+    def walk(n, what):
+        hidden = []
+        for _ in range(n):
+            w.page.keyboard.press("Tab")
+            if (c := w.page.evaluate(covered)):
+                hidden.append(c)
+        assert not hidden, f"{what}: под баннером {hidden}"
+
+    w.goto("/")
+    banner(w, "баннер на лендинге")
+    walk(40, "лендинг")
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,'ru',true) "
+                "returning id", (int(time.time()),))
+    for i in range(12):
+        A.capture(uid, f"Задача {i}")
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    banner(w, "баннер в приложении")
+    walk(60, "список задач")
+    w.page.click(".burger")
+    w.wait("nav.open", "меню")
+    walk(20, "выезжающее меню")
     w.check("итог")

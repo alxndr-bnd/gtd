@@ -4,6 +4,7 @@ SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер п
 Google индексирует его без JS. Маршруты — в app.py, здесь только содержимое; base — BASE_URL."""
 import html
 import json
+import math
 import os
 import re
 
@@ -133,7 +134,7 @@ PUBLIC_CSS = """<style>
 
 # /about — отдельная лёгкая страница без JS приложения: цвета те же, что в index.html
 BASE_CSS = """<style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#5f6a7a;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
 @media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -179,6 +180,10 @@ CONSENT_CSS = """<style>
 body.cc-open .pub{padding-bottom:calc(var(--cc-h,0px) + 32px)}
 body.cc-open main{padding-bottom:calc(var(--cc-h,0px) + 24px)}
 body.cc-open .toast{bottom:calc(var(--cc-h,0px) + 24px)}
+/* Фокус не прячется под баннером (WCAG 2.4.11, SERBITO-349): прокрутка к элементу оставляет снизу место под баннер —
+   и у страницы, и у выезжающего меню приложения (nav на телефоне прокручивается сам) */
+html.cc-open{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px)}
+@media(max-width:700px){html.cc-open nav{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px);padding-bottom:calc(var(--cc-h,0px) + 16px)}}
 @media(max-width:700px){.cc{bottom:8px;padding:10px 12px}.cc .ccb{flex:1}.cc button{flex:1;min-height:44px}
   body.cc-kb .cc{display:none}}
 </style>"""
@@ -209,18 +214,19 @@ function gtag(){ dataLayer.push(arguments); }
       + `<button type="button" class="ccy" data-cc="granted">${t.yes}</button>`
       + `<button type="button" data-cc="denied">${t.no}</button></div>`;
   }
-  // Высота баннера — в --cc-h: низ страницы и тост «Отменить» не прячутся под ним
-  const fit = () => { if(el && !el.hidden) document.body.style.setProperty('--cc-h', el.offsetHeight + 'px'); };
+  // Высота баннера — в --cc-h (на <html>: от неё и scroll-padding): низ страницы, тост «Отменить» и фокус не прячутся под ним
+  const root = document.documentElement;
+  const fit = () => { if(el && !el.hidden) root.style.setProperty('--cc-h', el.offsetHeight + 'px'); };
   function show(focus){
     if(!el){
       el = document.createElement('div'); el.className = 'cc'; el.id = 'cc'; el.setAttribute('role', 'region');
       document.body.prepend(el);  // первым в порядке Tab; position:fixed — страница не сдвигается
       new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
     }
-    draw(); el.hidden = false; document.body.classList.add('cc-open'); fit();
+    draw(); el.hidden = false; document.body.classList.add('cc-open'); root.classList.add('cc-open'); fit();
     if(focus) el.querySelector('button').focus();
   }
-  function hide(){ if(el) el.hidden = true; document.body.classList.remove('cc-open'); }
+  function hide(){ if(el) el.hidden = true; document.body.classList.remove('cc-open'); root.classList.remove('cc-open'); }
   // Отзыв согласия: стираем _ga* на этом хосте (GA пишет их host-only, cookie_domain 'none') и на родительских
   // доменах — там остались cookie, которые GA ставил на .serbito.rs до SERBITO-319
   function dropCookies(){
@@ -240,6 +246,13 @@ function gtag(){ dataLayer.push(arguments); }
     if(e.target.closest('[data-cc-open]')){ e.preventDefault(); show(true); }  // «Настройки cookie»
   });
   addEventListener('resize', fit);
+  // Фокус (Tab) попал под баннер — докручиваем: scrollIntoView учитывает scroll-padding-bottom выше. Браузер сам
+  // прокручивает только к элементу за краем окна, а этот на экране — просто закрыт баннером
+  document.addEventListener('focusin', e => {
+    if(!el || el.hidden || el.contains(e.target)) return;
+    const b = el.getBoundingClientRect(), r = e.target.getBoundingClientRect();
+    if(r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right) e.target.scrollIntoView({block: 'nearest'});
+  });
   // Телефон: открыта клавиатура (видимая область сжалась, фокус в поле) — баннер не закрывает поле ввода
   window.visualViewport?.addEventListener('resize', () => document.body.classList.toggle('cc-kb',
     visualViewport.height < innerHeight * .75 && /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)));
@@ -360,13 +373,34 @@ sign in on the site with Telegram or link the bot under “Account”.</p>
 }
 
 
-def landing(lang: str, consent: bool = False) -> str:
-    """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin."""
+# Место под кнопки входа (SERBITO-349): #signin в HTML пустой, JS заполняет его после /api/config — и лендинг
+# прыгал на ~260 px (CLS 0.13–0.17). Высоту резервируем заранее по включённым способам входа (порядок — как
+# в loginScreen: Google, почта, Telegram). Замер в Chromium, px: кнопка Google 44; строка почты 48, её нижний
+# отступ 16 больше соседнего (+2 перед «или», +6 перед сообщением); Telegram 46 — iframe виджета (запасная
+# кнопка ниже, 40); «или» 14+19+14; строка сообщения 10+13; «Нет способов входа» 50; «Dev login» 15+40.
+# Браузерный смоук сверяет резерв с реальной высотой.
+SIGNIN_PX = {"google": 44, "email": 48, "bot": 46}
+SIGNIN_OR, SIGNIN_MSG, SIGNIN_NONE, SIGNIN_DEV = 46.84, 23, 49.75, 54.75
+
+
+def signin_height(methods: list[str], dev: bool = False) -> int:
+    if not methods:
+        return math.ceil(SIGNIN_NONE)
+    h = sum(SIGNIN_PX[m] for m in methods) + SIGNIN_OR * (len(methods) - 1) + SIGNIN_MSG
+    if "email" in methods:
+        h += 6 if methods[-1] == "email" else 2
+    return math.ceil(h + (SIGNIN_DEV if dev else 0))
+
+
+def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool = False) -> str:
+    """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin; signin — включённые
+    способы входа (для резерва высоты), dev — локальная кнопка «Dev login»."""
     h, hint = LANDING_SIGNIN[lang]
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
     return (f'<div class="pub">{topbar(lang, "home")}<div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin"></div>{PRIVACY_NOTE[lang]}</div></div>{LANDING_STEPS[lang]}{footer(lang, consent)}</div>')
+            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{PRIVACY_NOTE[lang]}</div>'
+            f'</div>{LANDING_STEPS[lang]}{footer(lang, consent)}</div>')
 
 
 ABOUT = {
