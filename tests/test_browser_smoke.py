@@ -1034,3 +1034,38 @@ def test_landing_signin_space_reserved(watch, monkeypatch, bot, viewport):
     assert 0 <= reserved - real <= 8, (reserved, real)
     assert w.page.evaluate("window.__cls") < 0.01
     w.check("итог")
+
+
+def test_consent_banner_never_covers_focus(watch, monkeypatch):
+    """Телефон, баннер согласия открыт: ни одна остановка Tab — на лендинге, в списке задач и в выезжающем
+    меню — не оказывается под баннером."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    w = watch(viewport=PHONE)
+    covered = """() => { const a = document.activeElement, cc = document.querySelector('#cc');
+      if(!a || a === document.body || !cc || cc.hidden || cc.contains(a)) return null;
+      const b = cc.getBoundingClientRect(), r = a.getBoundingClientRect();
+      return r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right ? a.outerHTML.slice(0, 80) : null; }"""
+
+    def walk(n, what):
+        hidden = []
+        for _ in range(n):
+            w.page.keyboard.press("Tab")
+            if (c := w.page.evaluate(covered)):
+                hidden.append(c)
+        assert not hidden, f"{what}: под баннером {hidden}"
+
+    w.goto("/")
+    banner(w, "баннер на лендинге")
+    walk(40, "лендинг")
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,'ru',true) "
+                "returning id", (int(time.time()),))
+    for i in range(12):
+        A.capture(uid, f"Задача {i}")
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    banner(w, "баннер в приложении")
+    walk(60, "список задач")
+    w.page.click(".burger")
+    w.wait("nav.open", "меню")
+    walk(20, "выезжающее меню")
+    w.check("итог")

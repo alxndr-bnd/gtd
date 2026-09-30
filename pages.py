@@ -180,6 +180,10 @@ CONSENT_CSS = """<style>
 body.cc-open .pub{padding-bottom:calc(var(--cc-h,0px) + 32px)}
 body.cc-open main{padding-bottom:calc(var(--cc-h,0px) + 24px)}
 body.cc-open .toast{bottom:calc(var(--cc-h,0px) + 24px)}
+/* Фокус не прячется под баннером (WCAG 2.4.11, SERBITO-349): прокрутка к элементу оставляет снизу место под баннер —
+   и у страницы, и у выезжающего меню приложения (nav на телефоне прокручивается сам) */
+html.cc-open{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px)}
+@media(max-width:700px){html.cc-open nav{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px);padding-bottom:calc(var(--cc-h,0px) + 16px)}}
 @media(max-width:700px){.cc{bottom:8px;padding:10px 12px}.cc .ccb{flex:1}.cc button{flex:1;min-height:44px}
   body.cc-kb .cc{display:none}}
 </style>"""
@@ -210,18 +214,19 @@ function gtag(){ dataLayer.push(arguments); }
       + `<button type="button" class="ccy" data-cc="granted">${t.yes}</button>`
       + `<button type="button" data-cc="denied">${t.no}</button></div>`;
   }
-  // Высота баннера — в --cc-h: низ страницы и тост «Отменить» не прячутся под ним
-  const fit = () => { if(el && !el.hidden) document.body.style.setProperty('--cc-h', el.offsetHeight + 'px'); };
+  // Высота баннера — в --cc-h (на <html>: от неё и scroll-padding): низ страницы, тост «Отменить» и фокус не прячутся под ним
+  const root = document.documentElement;
+  const fit = () => { if(el && !el.hidden) root.style.setProperty('--cc-h', el.offsetHeight + 'px'); };
   function show(focus){
     if(!el){
       el = document.createElement('div'); el.className = 'cc'; el.id = 'cc'; el.setAttribute('role', 'region');
       document.body.prepend(el);  // первым в порядке Tab; position:fixed — страница не сдвигается
       new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
     }
-    draw(); el.hidden = false; document.body.classList.add('cc-open'); fit();
+    draw(); el.hidden = false; document.body.classList.add('cc-open'); root.classList.add('cc-open'); fit();
     if(focus) el.querySelector('button').focus();
   }
-  function hide(){ if(el) el.hidden = true; document.body.classList.remove('cc-open'); }
+  function hide(){ if(el) el.hidden = true; document.body.classList.remove('cc-open'); root.classList.remove('cc-open'); }
   // Отзыв согласия: стираем _ga* на этом хосте (GA пишет их host-only, cookie_domain 'none') и на родительских
   // доменах — там остались cookie, которые GA ставил на .serbito.rs до SERBITO-319
   function dropCookies(){
@@ -241,6 +246,13 @@ function gtag(){ dataLayer.push(arguments); }
     if(e.target.closest('[data-cc-open]')){ e.preventDefault(); show(true); }  // «Настройки cookie»
   });
   addEventListener('resize', fit);
+  // Фокус (Tab) попал под баннер — докручиваем: scrollIntoView учитывает scroll-padding-bottom выше. Браузер сам
+  // прокручивает только к элементу за краем окна, а этот на экране — просто закрыт баннером
+  document.addEventListener('focusin', e => {
+    if(!el || el.hidden || el.contains(e.target)) return;
+    const b = el.getBoundingClientRect(), r = e.target.getBoundingClientRect();
+    if(r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right) e.target.scrollIntoView({block: 'nearest'});
+  });
   // Телефон: открыта клавиатура (видимая область сжалась, фокус в поле) — баннер не закрывает поле ввода
   window.visualViewport?.addEventListener('resize', () => document.body.classList.toggle('cc-kb',
     visualViewport.height < innerHeight * .75 && /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)));
