@@ -16,6 +16,20 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+- Pages open faster: the site now sends them compressed. Grey hint text is a little darker and easier to read.
+  - RU: Страницы открываются быстрее — сайт теперь отдаёт их сжатыми. Серый текст подсказок стал чуть темнее и читается легче.
+
+### Fixed
+- The app menu works from the keyboard: Tab reaches every section, and on a phone the open menu keeps focus inside and returns it to the menu button when it closes.
+  - RU: Меню приложения работает с клавиатуры: Tab доходит до каждого раздела, а на телефоне открытое меню держит фокус внутри и возвращает его на кнопку меню, когда закрывается.
+- The task card works with screen readers: every field has a label, the "done" checkbox is named after its task, and closing the card brings you back to the task you opened.
+  - RU: Карточка задачи работает с экранным чтецом: у каждого поля есть подпись, галочка «выполнено» называется по своей задаче, а после закрытия карточки ты снова на той задаче, которую открыл.
+- The sign-in page no longer jumps when the sign-in buttons appear.
+  - RU: Страница входа больше не прыгает, когда появляются кнопки входа.
+- The cookie banner no longer hides the button or link you reach with Tab.
+  - RU: Баннер cookie больше не закрывает кнопку или ссылку, на которую переходишь по Tab.
+
 ## [0.20.0] - 2026-09-29
 
 ### Security
