@@ -4,6 +4,7 @@ SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер п
 Google индексирует его без JS. Маршруты — в app.py, здесь только содержимое; base — BASE_URL."""
 import html
 import json
+import math
 import os
 import re
 
@@ -360,13 +361,34 @@ sign in on the site with Telegram or link the bot under “Account”.</p>
 }
 
 
-def landing(lang: str, consent: bool = False) -> str:
-    """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin."""
+# Место под кнопки входа (SERBITO-349): #signin в HTML пустой, JS заполняет его после /api/config — и лендинг
+# прыгал на ~260 px (CLS 0.13–0.17). Высоту резервируем заранее по включённым способам входа (порядок — как
+# в loginScreen: Google, почта, Telegram). Замер в Chromium, px: кнопка Google 44; строка почты 48, её нижний
+# отступ 16 больше соседнего (+2 перед «или», +6 перед сообщением); Telegram 46 — iframe виджета (запасная
+# кнопка ниже, 40); «или» 14+19+14; строка сообщения 10+13; «Нет способов входа» 50; «Dev login» 15+40.
+# Браузерный смоук сверяет резерв с реальной высотой.
+SIGNIN_PX = {"google": 44, "email": 48, "bot": 46}
+SIGNIN_OR, SIGNIN_MSG, SIGNIN_NONE, SIGNIN_DEV = 46.84, 23, 49.75, 54.75
+
+
+def signin_height(methods: list[str], dev: bool = False) -> int:
+    if not methods:
+        return math.ceil(SIGNIN_NONE)
+    h = sum(SIGNIN_PX[m] for m in methods) + SIGNIN_OR * (len(methods) - 1) + SIGNIN_MSG
+    if "email" in methods:
+        h += 6 if methods[-1] == "email" else 2
+    return math.ceil(h + (SIGNIN_DEV if dev else 0))
+
+
+def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool = False) -> str:
+    """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin; signin — включённые
+    способы входа (для резерва высоты), dev — локальная кнопка «Dev login»."""
     h, hint = LANDING_SIGNIN[lang]
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
     return (f'<div class="pub">{topbar(lang, "home")}<div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin"></div>{PRIVACY_NOTE[lang]}</div></div>{LANDING_STEPS[lang]}{footer(lang, consent)}</div>')
+            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{PRIVACY_NOTE[lang]}</div>'
+            f'</div>{LANDING_STEPS[lang]}{footer(lang, consent)}</div>')
 
 
 ABOUT = {

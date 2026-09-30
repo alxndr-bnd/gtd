@@ -2452,6 +2452,12 @@ def ga_snippet(request: Request) -> str:
     return pages.CONSENT_HEAD + (GA_SNIPPET.format(id=GA_ID) if request.url.hostname == GA_HOST else "")
 
 
+def signin_methods() -> list[str]:
+    """Способы входа, которые покажет лендинг, — те же условия, что /api/config отдаёт SPA."""
+    on = {"google": GOOGLE_CLIENT_ID, "email": SMTP_PASSWORD or DEV, "bot": BOT_USERNAME if TOKEN else ""}
+    return [m for m in ("google", "email", "bot") if on[m]]
+
+
 def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLResponse:
     """Страница приложения. GA-сниппет — статично в HTML (чтобы Google видел тег), только на боевом домене.
     landing — гостю вместо пустого экрана входа: SEO-теги и текст лендинга прямо в HTML (pages.py)."""
@@ -2460,7 +2466,7 @@ def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLR
     page = page.replace('<html lang="ru">', f'<html lang="{lang}">')  # SPA потом поставит язык интерфейса
     if landing:
         page = (page.replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
-                .replace("<!--LANDING-->", pages.landing(lang, consent=bool(GA_ID))))
+                .replace("<!--LANDING-->", pages.landing(lang, consent=bool(GA_ID), signin=signin_methods(), dev=DEV)))
     return HTMLResponse(page)
 
 

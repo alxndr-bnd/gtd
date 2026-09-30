@@ -82,11 +82,11 @@ class Watch:
     """Страница, которая копит всё, что считается поломкой: ошибки консоли, необработанные исключения,
     ответы ≥400 своего сервера и попытки сходить наружу."""
 
-    def __init__(self, browser, base, lang="ru", stubs=None):
+    def __init__(self, browser, base, lang="ru", stubs=None, viewport=(1280, 900)):
         """stubs — {начало внешнего URL: тело JS}: локальные подмены внешних скриптов (GA на «проде»)."""
         self.base, self.errors, self.expected_404, self.stubs = base, [], set(), stubs or {}
         self.ctx = browser.new_context(locale="en-US" if lang == "en" else "ru-RU",
-                                       viewport={"width": 1280, "height": 900})
+                                       viewport={"width": viewport[0], "height": viewport[1]})
         self.ctx.route("**/*", self._route)
         self.page = self.ctx.new_page()
         self.page.on("console", self._console)
@@ -160,8 +160,8 @@ class Watch:
 def watch(browser, server):
     opened = []
 
-    def make(lang="ru"):
-        w = Watch(browser, server, lang)
+    def make(lang="ru", viewport=(1280, 900)):
+        w = Watch(browser, server, lang, viewport=viewport)
         opened.append(w)
         return w
     yield make
@@ -905,4 +905,42 @@ def test_keyboard_reorder(watch):
     until(lambda: [r["id"] for r in A.rows("select id from items where project_id=%s order by ppos", (pid,))] == want,
           "порядок проекта не сохранился")
     assert db_order(uid, "next") == [second, first, third]  # порядок Next не тронут
+    w.check("итог")
+
+
+# ── Клавиатура и доступность (SERBITO-349) ──
+PHONE = (390, 844)
+FOCUSED = """() => { const a = document.activeElement;
+  return a && a !== document.body ? {view: a.dataset.view || null, id: a.id, tag: a.tagName, cls: a.className,
+    inNav: !!a.closest('nav'), card: a.closest('.it[data-id]')?.dataset.id || null} : null; }"""
+
+
+def tab_walk(w, n, back=False):
+    """n нажатий Tab (Shift+Tab); после каждого — что в фокусе."""
+    out = []
+    for _ in range(n):
+        w.page.keyboard.press("Shift+Tab" if back else "Tab")
+        out.append(w.page.evaluate(FOCUSED))
+    return out
+
+
+@pytest.mark.parametrize("bot", [False, True])
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_landing_signin_space_reserved(watch, monkeypatch, bot, viewport):
+    """Место под кнопки входа есть в HTML до JS: блок не растёт, когда их кладёт JS, и почти не пустует."""
+    if bot:
+        monkeypatch.setattr(A, "TOKEN", "test-token")
+        monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    w = watch(viewport=viewport)
+    w.page.add_init_script("""window.__cls = 0; new PerformanceObserver(l => l.getEntries().forEach(e => {
+      if(!e.hadRecentInput) window.__cls += e.value; })).observe({type: 'layout-shift', buffered: true});""")
+    w.goto("/")
+    w.wait('#signin a[href="/dev-login"]', "кнопки входа")
+    if bot:
+        w.wait("#signin .tgfb", "кнопка Telegram")
+    reserved = w.page.evaluate("parseFloat(document.querySelector('#signin').style.minHeight)")
+    real = w.page.evaluate("""() => { const s = document.querySelector('#signin'); s.style.minHeight = '';
+      return s.getBoundingClientRect().height; }""")
+    assert 0 <= reserved - real <= 8, (reserved, real)
+    assert w.page.evaluate("window.__cls") < 0.01
     w.check("итог")
