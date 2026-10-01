@@ -34,7 +34,7 @@ h2{margin:0 0 12px;font-size:20px}
 .cap textarea{flex:1;padding:12px 14px;white-space:pre-wrap;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);
   font:inherit;font-size:15px;line-height:22px;resize:none;overflow:hidden;display:block}
 .cap button{height:48px;flex-shrink:0}  /* высота однострочного поля: 12+22+12+2 */
-.cap input{flex:1;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font-size:15px}
+.cap input{flex:1;min-width:0;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font-size:15px}
 button,select{font:inherit}
 button{padding:8px 14px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);cursor:pointer}
 button.pri{background:var(--ac);color:var(--on-ac);border-color:var(--ac)}
@@ -137,8 +137,9 @@ nav small.ver{color:var(--mut);margin-left:4px} nav .newdot{display:inline-block
 .userbox{position:relative}
 button.user{width:100%;display:flex;align-items:center;gap:6px;border:0;background:none;padding:8px 10px;border-radius:8px;text-align:left;color:var(--tx)}
 button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.umenu a{display:block;padding:8px 10px 8px 28px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
-.umenu a:hover{background:var(--bg)}
+.umenu a,.umenu button{display:block;width:100%;padding:8px 10px 8px 28px;border:0;border-radius:8px;background:none;color:var(--tx);
+  font:inherit;text-align:left;text-decoration:none;cursor:pointer}  /* «Выйти» — кнопка (Enter и пробел), выглядит как пункт */
+.umenu a:hover,.umenu button:hover{background:var(--bg)}
 .topbar,.scrim{display:none}
 /* Телефон: сверху ☰ · раздел · 👤, разделы — в выезжающем слева меню */
 @media(max-width:700px){
@@ -148,7 +149,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   .tb-title{flex:1;font-weight:600;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .topbar .userbox{flex-shrink:0;max-width:45%} .topbar button.user{padding:0 8px;height:36px;line-height:1}
   .topbar .umenu{position:absolute;right:0;top:100%;margin-top:6px;min-width:180px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;padding:4px}
-  .topbar .umenu a{padding-left:10px}
+  .topbar .umenu a,.topbar .umenu button{padding-left:10px}
   /* Закрытое меню — visibility:hidden: его пункты не ловят Tab за краем экрана (SERBITO-349); прячется после выезда */
   nav{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:40;overflow-y:auto;transform:translateX(-105%);
     visibility:hidden;transition:transform .2s,visibility 0s .2s;border-right:1px solid var(--bd)}
@@ -462,11 +463,30 @@ async function loginScreen(){
     <div class="msg" id="authmsg"></div>
     ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}`;
   // Гостю сервер отдал лендинг (текст — в HTML для поисковиков): кнопки встают в его блок входа
-  if($('#signin')) $('#signin').innerHTML = buttons;
+  if($('#signin')){ $('#signin').innerHTML = buttons; lazyWidgets($('#signin')); }
   else { document.title = 'GTD'; $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">${t('login_hint')}</p>
-    ${buttons}</div>`; }
-  mountGoogle(); mountTelegram();
+    ${buttons}</div>`; mountGoogle(); mountTelegram(); }
   gaPage();
+}
+
+// Виджеты входа Google и Telegram — ~300 КБ чужих скриптов и шрифтов (SERBITO-349, решение владельца). На лендинге
+// они не грузятся вместе со страницей: только когда блок входа на экране (после load и в простое — не спорят
+// с первой отрисовкой) или человек сам потянулся к нему (навёл, нажал, Tab в поле). Высота блока зарезервирована
+// (#signin min-height), поэтому ничего не сдвигается. Без IntersectionObserver — просто после load в простое
+function lazyWidgets(box){
+  S.lazyOff?.();  // повторный loginScreen — прежнее ожидание больше не нужно
+  const card = box.closest('.signin') || box, evs = ['pointerover', 'pointerdown', 'focusin'];
+  let io = null, done = false;
+  const off = S.lazyOff = () => { done = true; io?.disconnect(); evs.forEach(ev => card.removeEventListener(ev, go)); };
+  function go(){ if(done) return; off(); if(box.isConnected){ mountGoogle(); mountTelegram(); } }
+  const idle = () => window.requestIdleCallback ? requestIdleCallback(go, {timeout: 1500}) : setTimeout(go, 200);
+  const later = () => document.readyState === 'complete' ? idle() : addEventListener('load', idle, {once: true});
+  // Будет виджет Telegram — запасную кнопку прячем сразу, как это делает mountTelegram: место ждёт виджет
+  if(S.cfg.bot && tgWidgetOk() && $('.tgfb')) $('.tgfb').hidden = true;
+  evs.forEach(ev => card.addEventListener(ev, go));
+  if(!window.IntersectionObserver) return later();
+  io = new IntersectionObserver(es => { if(es.some(e => e.isIntersecting)){ io.disconnect(); later(); } });
+  io.observe(box);
 }
 
 // ── Вход и привязка: одни и те же кнопки; на экране приложения (есть .app) они привязывают способ к аккаунту
@@ -632,7 +652,7 @@ function navHtml(){
   const me = S.me || {}, who = esc(me.email || me.name || t('account_short'));
   // «Аккаунт» и «Выйти» свёрнуты в одну кнопку; на телефоне она справа в верхней полосе
   const user = `<div class="userbox"><button class="user" data-act="umenu" aria-haspopup="true" aria-expanded="false">👤 <span>${who}</span> ▾</button>
-    <div class="umenu" hidden><a href="#account" data-view="account">${t('account')}</a><a href="#" role="button" data-act="logout">${t('sign_out')}</a></div></div>`;
+    <div class="umenu" hidden><a href="#account" data-view="account">${t('account')}</a><button type="button" data-act="logout">${t('sign_out')}</button></div></div>`;
   const cur = viewLabel();
   // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается».
   // Разделы — ссылки с href (SERBITO-349): без него <a> не получает фокус с клавиатуры и не читается как ссылка

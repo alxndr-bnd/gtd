@@ -16,6 +16,18 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+- The home page loads faster: the Google and Telegram sign-in buttons now load only once the sign-in box is on screen.
+  - RU: Главная страница грузится быстрее: кнопки входа через Google и Telegram загружаются, только когда блок входа появился на экране.
+- In the cookie banner, Accept and Decline now look the same and are the same size, so declining is as easy as accepting.
+  - RU: В баннере cookie кнопки «Принять» и «Отклонить» теперь одинаковые на вид и по размеру — отказаться так же просто, как согласиться.
+
+### Fixed
+- The home page fits a narrow screen or 400% zoom without scrolling sideways, and every public page marks its main content and headings properly for screen readers.
+  - RU: Главная страница помещается на узком экране и при увеличении 400 % без прокрутки вбок, а у всех публичных страниц основное содержимое и заголовки правильно размечены для экранных чтецов.
+- "Sign out" in the account menu now works with the Space key as well as Enter.
+  - RU: «Выйти» в меню аккаунта теперь срабатывает и от пробела, а не только от Enter.
+
 ## [0.23.0] - 2026-10-01
 
 ### Security

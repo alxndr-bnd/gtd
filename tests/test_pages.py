@@ -4,6 +4,7 @@ import json
 import os
 import re
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 
 import pytest
 
@@ -308,3 +309,51 @@ def test_app_menu_links_to_changes():
     здесь — только адреса для обоих языков."""
     page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
     assert '"changes_url": "/changes"' in page and '"changes_url": "/en/changes"' in page
+
+
+class Outline(HTMLParser):
+    """Ориентиры и заголовки страницы: сколько <main>, какие h1–h6 по порядку и внутри ли они <main>.
+    Содержимое <script> HTMLParser не разбирает — заготовки разметки в JS SPA не считаются."""
+
+    def __init__(self):
+        super().__init__()
+        self.mains, self.depth, self.heads = 0, 0, []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "main":
+            self.mains += 1
+            self.depth += 1
+        elif re.fullmatch(r"h[1-6]", tag):
+            self.heads.append((int(tag[1]), self.depth > 0))
+
+    def handle_endtag(self, tag):
+        if tag == "main":
+            self.depth -= 1
+
+
+def outline(html):
+    o = Outline()
+    o.feed(html)
+    o.close()
+    return o
+
+
+@pytest.mark.parametrize("path, status", [*((p, 200) for p in PUBLIC), ("/no-such-page", 404), ("/en/no-such-page", 404)])
+def test_public_page_has_main_and_heading_order(client, path, status):
+    """WCAG 1.3.1 (SERBITO-349): у каждой публичной страницы один <main> с единственным h1, и уровни заголовков
+    не перескакивают (за h2 — h3, а не h4)."""
+    r = client.get(path, headers={"Accept": "text/html"})  # без text/html 404 отдаётся JSON-ом
+    assert r.status_code == status
+    o = outline(r.text)
+    assert o.mains == 1 and o.depth == 0, path
+    levels = [lvl for lvl, _ in o.heads]
+    assert levels[0] == 1 and levels.count(1) == 1 and o.heads[0][1], (path, o.heads)
+    assert all(b <= a + 1 for a, b in zip(levels, levels[1:])), (path, levels)
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_service_pages_have_main(lang):
+    """Служебные страницы из pages.py — устаревшая ссылка входа и подтверждение входа — тоже с <main> и одним h1."""
+    for html in (P.auth_stale(lang, "gtd_test_bot"), P.auth_confirm(lang, "alice@example.com", "tok", current="bob")):
+        o = outline(html)
+        assert o.mains == 1 and [lvl for lvl, _ in o.heads] == [1] and o.heads[0][1]
