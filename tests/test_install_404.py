@@ -44,7 +44,7 @@ def test_about_install_section_last(client):
     for path, words in (("/about", ("На экран «Домой»", "Установить приложение")),
                         ("/en/about", ("Add to Home Screen", "Install app"))):
         h = client.get(path).text
-        body = h[h.index('<div class="pub">'):h.index("<footer>")]
+        body = h[h.index('<div class="pub">'):h.index("</main>")]  # последнее в <main>, перед подвалом
         assert body.endswith(P.INSTALL["ru" if path == "/about" else "en"])  # отдельный раздел в самом конце
         for w in words:
             assert w in body, w
