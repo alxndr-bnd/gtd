@@ -4,9 +4,10 @@ import re
 import time
 
 import httpx
+import psycopg
 
 import app as A
-from conftest import bot_callback, bot_message, last_code, texts
+from conftest import ADMIN_URL, bot_callback, bot_message, last_code, texts
 
 
 def test_anyone_gets_an_account(tg):
@@ -345,6 +346,25 @@ def test_cron_reminders(client, tg, monkeypatch):
     monkeypatch.setattr(A, "CRON_SECRET", "s3cret")
     assert client.post("/tasks/reminders", headers={"X-Cron-Secret": "wrong"}).status_code == 403
     assert client.post("/tasks/reminders", headers={"X-Cron-Secret": "s3cret"}).json() == {"sent": 1}
+    assert client.post("/tasks/reminders", headers={"X-Cron-Secret": "s3cret"}).json() == {"sent": 0}
+
+
+def test_cron_reminders_survive_dead_pooled_connection(client, tg, monkeypatch):
+    """Sentry GTD-3: Cloud SQL закрыл простаивающее соединение, пул отдал его запросу — 500 у Cloud Scheduler.
+    Пул проверяет соединение при выдаче и заменяет мёртвое; напоминание уходит ровно один раз."""
+    bot_message("полить цветы")
+    A.run("update items set remind_at=%s", (int(time.time()) - 1,))
+    monkeypatch.setattr(A, "CRON_SECRET", "s3cret")
+    db = A._pool.conninfo.rsplit("/", 1)[1]
+    with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
+        assert admin.execute("select count(pg_terminate_backend(pid)) from pg_stat_activity where datname=%s",
+                             (db,)).fetchone()[0] >= 1
+        for _ in range(100):  # бэкенды завершаются асинхронно
+            if not admin.execute("select 1 from pg_stat_activity where datname=%s", (db,)).fetchone():
+                break
+            time.sleep(0.05)
+    r = client.post("/tasks/reminders", headers={"X-Cron-Secret": "s3cret"})
+    assert r.status_code == 200 and r.json() == {"sent": 1}
     assert client.post("/tasks/reminders", headers={"X-Cron-Secret": "s3cret"}).json() == {"sent": 0}
 
 

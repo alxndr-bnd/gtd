@@ -192,8 +192,12 @@ if not DATABASE_URL:
 # prepare_threshold=None: без серверных prepared statements. С ними миграция схемы под работающим
 # сервером (новая колонка в items → другой набор у select i.*) роняет запросы «cached plan must not
 # change result type» (Sentry GTD-1, деплой добавляет колонки, пока старая ревизия ещё обслуживает)
+# check: перед выдачей пул проверяет соединение и заменяет мёртвое. Cloud SQL (через сокет /cloudsql) закрывает
+# простаивающие соединения, а пул отдавал такое запросу — 500 у Cloud Scheduler на /tasks/reminders (Sentry GTD-3).
+# max_idle/max_lifetime: простоявшие 5 минут и прожившие 30 пул закрывает сам, не дожидаясь обрыва снаружи
 _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5,
-                       kwargs={"row_factory": dict_row, "prepare_threshold": None}, open=True)
+                       kwargs={"row_factory": dict_row, "prepare_threshold": None},
+                       check=ConnectionPool.check_connection, max_idle=300, max_lifetime=1800, open=True)
 
 # Схема и миграции: идемпотентны, выполняются при каждом старте
 SCHEMA = """
