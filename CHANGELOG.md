@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+- In the cookie banner, Accept and Decline now look the same and are the same size, so declining is as easy as accepting.
+  - RU: В баннере cookie кнопки «Принять» и «Отклонить» теперь одинаковые на вид и по размеру — отказаться так же просто, как согласиться.
+
 ### Fixed
 - The home page fits a narrow screen or 400% zoom without scrolling sideways, and every public page marks its main content and headings properly for screen readers.
   - RU: Главная страница помещается на узком экране и при увеличении 400 % без прокрутки вбок, а у всех публичных страниц основное содержимое и заголовки правильно размечены для экранных чтецов.

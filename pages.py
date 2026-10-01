@@ -175,10 +175,10 @@ CONSENT_CSS = """<style>
   font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 .cc[hidden]{display:none}
 .cc p{flex:1 1 280px;margin:0} .cc a{color:var(--ac)}
-.cc .ccb{display:flex;gap:8px;margin-left:auto}
-.cc button{font:inherit;min-height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--bd);
+/* «Принять» и «Отклонить» — одного веса (решение владельца, SERBITO-349): тот же вид и та же ширина */
+.cc .ccb{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-left:auto}
+.cc button{font:inherit;font-weight:600;min-height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--ac);
   background:var(--card);color:var(--tx);cursor:pointer}
-.cc button.ccy{background:var(--ac);color:var(--on-ac);border-color:var(--ac);font-weight:600}
 .cc button:focus-visible,.cc a:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 body.cc-open .pub{padding-bottom:calc(var(--cc-h,0px) + 32px)}
 body.cc-open .app main{padding-bottom:calc(var(--cc-h,0px) + 24px)}
@@ -214,7 +214,7 @@ function gtag(){ dataLayer.push(arguments); }
     const t = TXT[drawn = lg];
     el.setAttribute('aria-label', t.label);
     el.innerHTML = `<p>${t.text} <a href="${t.privacy}#cookies">${t.more}</a></p><div class="ccb">`
-      + `<button type="button" class="ccy" data-cc="granted">${t.yes}</button>`
+      + `<button type="button" data-cc="granted">${t.yes}</button>`
       + `<button type="button" data-cc="denied">${t.no}</button></div>`;
   }
   // Высота баннера — в --cc-h (на <html>: от неё и scroll-padding): низ страницы, тост «Отменить» и фокус не прячутся под ним

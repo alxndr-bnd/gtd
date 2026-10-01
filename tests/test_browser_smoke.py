@@ -1110,3 +1110,20 @@ def test_sign_out_from_keyboard(watch, key):
     w.page.keyboard.press(key)
     w.wait('#signin a[href="/dev-login"]', f"лендинг после выхода ({key})")
     w.check("итог")
+
+
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_consent_buttons_equal_weight(watch, monkeypatch, viewport):
+    """«Принять» и «Отклонить» одного веса (решение владельца, SERBITO-349): цвет, рамка, шрифт и размер одинаковые —
+    отказаться так же легко, как согласиться."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    w = watch(viewport=viewport)
+    w.goto("/")
+    banner(w, "баннер")
+    look = """b => { const s = getComputedStyle(b), r = b.getBoundingClientRect();
+      return [s.backgroundColor, s.color, s.borderTopColor, s.borderTopWidth, s.fontWeight, s.fontSize,
+              Math.round(r.width), Math.round(r.height)]; }"""
+    yes = w.page.eval_on_selector('#cc [data-cc="granted"]', look)
+    no = w.page.eval_on_selector('#cc [data-cc="denied"]', look)
+    assert yes == no, (yes, no)
+    w.check("итог")
