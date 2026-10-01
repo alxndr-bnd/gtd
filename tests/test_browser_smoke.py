@@ -1127,3 +1127,41 @@ def test_consent_buttons_equal_weight(watch, monkeypatch, viewport):
     no = w.page.eval_on_selector('#cc [data-cc="denied"]', look)
     assert yes == no, (yes, no)
     w.check("итог")
+
+
+# Виджет Telegram встаёт iframe'ом 234×40 на место своего <script> — заглушка делает так же
+TG_WIDGET_STUB = ("(s => { const f = document.createElement('iframe'); f.title = 'Telegram'; "
+                  "f.style.cssText = 'height:40px;width:234px;border:none'; s.after(f); })(document.currentScript);")
+WIDGETS = ("https://accounts.google.com/", "https://telegram.org/")
+
+
+def test_signin_widgets_load_when_visible(prod_browser, server, monkeypatch):
+    """Виджеты Google и Telegram (~300 КБ, SERBITO-349) не грузятся вместе с лендингом: пока блок входа за краем
+    экрана, запросов к accounts.google.com и telegram.org нет; докрутили до него — оба встают на зарезервированное
+    место, и ничего не сдвигается. Прод-хост — только там включается виджет Telegram."""
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    base = "http://gtd.serbito.rs:" + server.rsplit(":", 1)[1]
+    w = Watch(prod_browser, base, viewport=(390, 300),
+              stubs={"https://telegram.org/js/telegram-widget.js": TG_WIDGET_STUB,
+                     "https://static.cloudflareinsights.com/beacon.min.js": ""})
+    try:
+        asked = []
+        w.page.on("request", lambda r: r.url.startswith(WIDGETS) and asked.append(r.url))
+        w.goto("/")
+        w.wait('#signin a[href="/dev-login"]', "кнопки входа")
+        assert w.page.evaluate("document.querySelector('#signin').getBoundingClientRect().top") > 300
+        w.page.wait_for_load_state("load")
+        w.page.wait_for_timeout(1000)  # простой после load: блок не на экране — виджеты всё ещё не нужны
+        assert asked == [] and w.page.is_hidden("#signin .tgfb")
+        # Ниже блока входа ничего не сдвигается (внутри него, под Telegram, — только кнопка Dev login: её на проде нет)
+        below = "document.querySelector('.signin > .note').getBoundingClientRect().top + scrollY"
+        y = w.page.evaluate(below)
+        w.page.evaluate("document.querySelector('#signin').scrollIntoView({block: 'center'})")
+        w.wait('#signin .gbtn:has-text("Google")', "кнопка Google")
+        w.wait("#signin .tgw iframe", "виджет Telegram")
+        assert sorted(u.split("/")[2] for u in asked) == ["accounts.google.com", "telegram.org"], asked
+        assert w.page.evaluate(below) == y
+        w.check("итог")
+    finally:
+        w.close()

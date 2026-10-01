@@ -17,6 +17,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 ## [Unreleased]
 
 ### Changed
+- The home page loads faster: the Google and Telegram sign-in buttons now load only once the sign-in box is on screen.
+  - RU: Главная страница грузится быстрее: кнопки входа через Google и Telegram загружаются, только когда блок входа появился на экране.
 - In the cookie banner, Accept and Decline now look the same and are the same size, so declining is as easy as accepting.
   - RU: В баннере cookie кнопки «Принять» и «Отклонить» теперь одинаковые на вид и по размеру — отказаться так же просто, как согласиться.
 

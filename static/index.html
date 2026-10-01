@@ -463,11 +463,30 @@ async function loginScreen(){
     <div class="msg" id="authmsg"></div>
     ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}`;
   // Гостю сервер отдал лендинг (текст — в HTML для поисковиков): кнопки встают в его блок входа
-  if($('#signin')) $('#signin').innerHTML = buttons;
+  if($('#signin')){ $('#signin').innerHTML = buttons; lazyWidgets($('#signin')); }
   else { document.title = 'GTD'; $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">${t('login_hint')}</p>
-    ${buttons}</div>`; }
-  mountGoogle(); mountTelegram();
+    ${buttons}</div>`; mountGoogle(); mountTelegram(); }
   gaPage();
+}
+
+// Виджеты входа Google и Telegram — ~300 КБ чужих скриптов и шрифтов (SERBITO-349, решение владельца). На лендинге
+// они не грузятся вместе со страницей: только когда блок входа на экране (после load и в простое — не спорят
+// с первой отрисовкой) или человек сам потянулся к нему (навёл, нажал, Tab в поле). Высота блока зарезервирована
+// (#signin min-height), поэтому ничего не сдвигается. Без IntersectionObserver — просто после load в простое
+function lazyWidgets(box){
+  S.lazyOff?.();  // повторный loginScreen — прежнее ожидание больше не нужно
+  const card = box.closest('.signin') || box, evs = ['pointerover', 'pointerdown', 'focusin'];
+  let io = null, done = false;
+  const off = S.lazyOff = () => { done = true; io?.disconnect(); evs.forEach(ev => card.removeEventListener(ev, go)); };
+  function go(){ if(done) return; off(); if(box.isConnected){ mountGoogle(); mountTelegram(); } }
+  const idle = () => window.requestIdleCallback ? requestIdleCallback(go, {timeout: 1500}) : setTimeout(go, 200);
+  const later = () => document.readyState === 'complete' ? idle() : addEventListener('load', idle, {once: true});
+  // Будет виджет Telegram — запасную кнопку прячем сразу, как это делает mountTelegram: место ждёт виджет
+  if(S.cfg.bot && tgWidgetOk() && $('.tgfb')) $('.tgfb').hidden = true;
+  evs.forEach(ev => card.addEventListener(ev, go));
+  if(!window.IntersectionObserver) return later();
+  io = new IntersectionObserver(es => { if(es.some(e => e.isIntersecting)){ io.disconnect(); later(); } });
+  io.observe(box);
 }
 
 // ── Вход и привязка: одни и те же кнопки; на экране приложения (есть .app) они привязывают способ к аккаунту
