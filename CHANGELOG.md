@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-01
+
 ### Fixed
 - Reminders keep arriving on time after a brief database hiccup, instead of being delayed until the next attempt.
   - RU: Напоминания приходят вовремя и после короткого сбоя связи с базой, а не откладываются до следующей попытки.
@@ -232,7 +234,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/alxndr-bnd/gtd/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/alxndr-bnd/gtd/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/alxndr-bnd/gtd/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/alxndr-bnd/gtd/compare/v0.18.0...v0.19.0
