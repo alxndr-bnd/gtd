@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-01
+
 ### Changed
 - The home page loads faster: the Google and Telegram sign-in buttons now load only once the sign-in box is on screen.
   - RU: Главная страница грузится быстрее: кнопки входа через Google и Telegram загружаются, только когда блок входа появился на экране.
@@ -252,7 +254,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/alxndr-bnd/gtd/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/alxndr-bnd/gtd/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/alxndr-bnd/gtd/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/alxndr-bnd/gtd/compare/v0.20.0...v0.21.0
