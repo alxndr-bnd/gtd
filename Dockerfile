@@ -1,4 +1,7 @@
 FROM python:3.14-slim
+# Исправления безопасности Debian (например, openssl) выходят раньше, чем обновляется python:*-slim —
+# без этого Trivy в деплое останавливает релиз на уже исправленных CVE.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .
 # Манифесты вендоринга pip (pip/_vendor/bom.cdx.json, vendor.txt) декларируют его внутренний

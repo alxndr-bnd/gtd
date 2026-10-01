@@ -16,6 +16,12 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-01
+
+### Security
+- The server now runs with the latest OpenSSL security fixes.
+  - RU: Сервер работает с последними исправлениями безопасности OpenSSL.
+
 ## [0.22.0] - 2026-10-01
 
 ### Fixed
@@ -234,7 +240,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/alxndr-bnd/gtd/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/alxndr-bnd/gtd/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/alxndr-bnd/gtd/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/alxndr-bnd/gtd/compare/v0.19.0...v0.20.0
