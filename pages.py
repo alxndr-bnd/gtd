@@ -103,7 +103,9 @@ T = {
 
 # Стили публичных страниц. Переменные цвета (--bg, --ac…) — из index.html; на /about — BASE_CSS
 PUBLIC_CSS = """<style>
-.pub{max-width:880px;margin:0 auto;padding:18px 16px 32px}
+.pub{max-width:880px;margin:0 auto;padding:18px 16px 32px;overflow-wrap:break-word}
+/* <main> публичной страницы (SERBITO-349) — просто обёртка: правило main из index.html — для приложения */
+.pub>main{display:block;flex:none;max-width:none;width:auto;margin:0;padding:0}
 .pub a{color:var(--ac)}
 .pub .top{display:flex;align-items:center;gap:16px;margin-bottom:28px;font-size:14px}
 .pub .top .brand{flex:1;display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:var(--tx);text-decoration:none}
@@ -129,7 +131,8 @@ PUBLIC_CSS = """<style>
 .pub .rel h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap} .pub .rel h2 .note{font-weight:400}
 .pub .rel h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 4px}
 .pub .rel ul{margin:0;padding-left:20px} .pub .rel li{margin:4px 0}
-@media(max-width:700px){.pub .intro{grid-template-columns:1fr}.pub h1{font-size:25px}}
+/* minmax(0,1fr), а не 1fr: колонка не шире экрана, даже если строка почты или кнопка входа шире (320 px, WCAG 1.4.10) */
+@media(max-width:700px){.pub .intro{grid-template-columns:minmax(0,1fr)}.pub h1{font-size:25px}}
 </style>"""
 
 # /about — отдельная лёгкая страница без JS приложения: цвета те же, что в index.html
@@ -178,7 +181,7 @@ CONSENT_CSS = """<style>
 .cc button.ccy{background:var(--ac);color:var(--on-ac);border-color:var(--ac);font-weight:600}
 .cc button:focus-visible,.cc a:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 body.cc-open .pub{padding-bottom:calc(var(--cc-h,0px) + 32px)}
-body.cc-open main{padding-bottom:calc(var(--cc-h,0px) + 24px)}
+body.cc-open .app main{padding-bottom:calc(var(--cc-h,0px) + 24px)}
 body.cc-open .toast{bottom:calc(var(--cc-h,0px) + 24px)}
 /* Фокус не прячется под баннером (WCAG 2.4.11, SERBITO-349): прокрутка к элементу оставляет снизу место под баннер —
    и у страницы, и у выезжающего меню приложения (nav на телефоне прокручивается сам) */
@@ -309,8 +312,8 @@ def topbar(lang: str, page: str) -> str:
     t, other = T[lang], "en" if lang == "ru" else "ru"
     link = (f'<a href="{PATHS[(lang, "about")]}">{t["how"]}</a>' if page == "home"
             else f'<a href="{PATHS[(lang, "home")]}">{t["open"]}</a>')
-    return (f'<div class="top"><a class="brand" href="{PATHS[(lang, "home")]}">{mark(28)} GTD</a>{link}'
-            f'<a href="{PATHS[(other, page)]}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></div>')
+    return (f'<header class="top"><a class="brand" href="{PATHS[(lang, "home")]}">{mark(28)} GTD</a>{link}'
+            f'<a href="{PATHS[(other, page)]}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></header>')
 
 
 def footer(lang: str, consent: bool = False) -> str:
@@ -397,10 +400,10 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
     способы входа (для резерва высоты), dev — локальная кнопка «Dev login»."""
     h, hint = LANDING_SIGNIN[lang]
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
-    return (f'<div class="pub">{topbar(lang, "home")}<div class="intro"><div>{LANDING[lang]}{oss}</div>'
+    return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
             f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{PRIVACY_NOTE[lang]}</div>'
-            f'</div>{LANDING_STEPS[lang]}{footer(lang, consent)}</div>')
+            f'</div>{LANDING_STEPS[lang]}</main>{footer(lang, consent)}</div>')
 
 
 ABOUT = {
@@ -519,7 +522,7 @@ def about(base: str, lang: str, ga: str) -> str:
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "about")}{ABOUT[lang]}{OSS[lang]}{INSTALL[lang]}{footer(lang, bool(ga))}</div>
+<div class="pub">{topbar(lang, "about")}<main>{ABOUT[lang]}{OSS[lang]}{INSTALL[lang]}</main>{footer(lang, bool(ga))}</div>
 {track}
 </body>
 </html>"""
@@ -685,7 +688,7 @@ def privacy(base: str, lang: str, ga: str) -> str:
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "privacy")}{body}{footer(lang, bool(ga))}</div>
+<div class="pub">{topbar(lang, "privacy")}<main>{body}</main>{footer(lang, bool(ga))}</div>
 {track}
 </body>
 </html>"""
@@ -759,7 +762,7 @@ def changes(base: str, lang: str, ga: str) -> str:
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "changes")}{body}{footer(lang, bool(ga))}</div>
+<div class="pub">{topbar(lang, "changes")}<main>{body}</main>{footer(lang, bool(ga))}</div>
 {track}
 </body>
 </html>"""
@@ -891,13 +894,13 @@ def auth_confirm(lang: str, who: str, token: str, link_lang: str = "", current: 
 {PUBLIC_CSS}
 </head>
 <body>
-<div class="pub"><div class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></div>
+<div class="pub"><header class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></header><main>
 <h1>{h}</h1>
 <p class="lead">{text.format(who=who)}</p>
 {note}
 <form method="post" action="/auth"><input type="hidden" name="t" value="{html.escape(token)}">
 <input type="hidden" name="lang" value="{html.escape(link_lang)}">
-<p><button class="btn" type="submit">{go}</button>&emsp;<a href="{home}">{cancel}</a></p></form></div>
+<p><button class="btn" type="submit">{go}</button>&emsp;<a href="{home}">{cancel}</a></p></form></main></div>
 </body>
 </html>"""
 
@@ -918,9 +921,9 @@ def notice(lang: str, h: str, text: str, go: str, link: tuple | None) -> str:
 {PUBLIC_CSS}
 </head>
 <body>
-<div class="pub"><div class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></div>
+<div class="pub"><header class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></header><main>
 <h1>{h}</h1>
 <p class="lead">{text}</p>
-<p><a class="btn" href="{home}">{go}</a>{extra}</p></div>
+<p><a class="btn" href="{home}">{go}</a>{extra}</p></main></div>
 </body>
 </html>"""

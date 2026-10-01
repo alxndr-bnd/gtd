@@ -332,7 +332,7 @@ def test_sign_out_erases_drafts(watch):
     keys = "Object.keys(localStorage).filter(k => k.startsWith('gtd-draft:')).sort()"
     assert len(w.page.evaluate(keys)) == 2
     w.page.click("nav .navfoot button.user")
-    w.page.click('nav .navfoot .umenu a[data-act="logout"]')
+    w.page.click('nav .navfoot .umenu [data-act="logout"]')
     w.wait('#signin a[href="/dev-login"]', "лендинг после выхода")
     assert w.page.evaluate(keys) == [] and w.page.evaluate("localStorage.getItem('gtd-seen-version')") == "dev"
     w.check("выход")
@@ -1068,4 +1068,45 @@ def test_consent_banner_never_covers_focus(watch, monkeypatch):
     w.page.click(".burger")
     w.wait("nav.open", "меню")
     walk(20, "выезжающее меню")
+    w.check("итог")
+
+
+# Настоящая кнопка Google — iframe фиксированной ширины с отрицательными полями по бокам; заглушка рисует такой же
+GSI_FIXED = ("window.google={accounts:{id:{initialize(){},renderButton(el){el.innerHTML="
+             "'<iframe title=\"Google\" style=\"width:262px;height:44px;margin:0 -10px;border:0\"></iframe>';}}}};")
+WIDER = """() => { const W = document.documentElement.clientWidth;
+  return [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > W + .5)
+    .map(e => e.tagName + '.' + e.className).slice(0, 10); }"""
+
+
+@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/privacy", "/changes"])
+def test_no_horizontal_scroll_at_320px(watch, monkeypatch, path):
+    """WCAG 1.4.10 (SERBITO-349): при ширине 320 px (1280 px при 400 %) страница не прокручивается вбок — и лендинг
+    со всеми кнопками входа: Google, почта, Telegram."""
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    w = watch("en" if path.startswith("/en") else "ru", viewport=(320, 640))
+    w.page.add_init_script(GSI_FIXED)
+    w.goto(path)
+    if path in ("/", "/en/"):
+        w.wait("#signin .tgfb", "кнопки входа")
+        w.wait("#signin .gbtn iframe", "кнопка Google")
+    assert w.page.evaluate("document.documentElement.scrollWidth") <= 320, w.page.evaluate(WIDER)
+    w.check("итог")
+
+
+@pytest.mark.parametrize("key", ["Enter", "Space"])
+def test_sign_out_from_keyboard(watch, key):
+    """«Выйти» в меню аккаунта — настоящая кнопка (SERBITO-349): срабатывает и от Enter, и от пробела."""
+    A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s)", (int(time.time()),))
+    w = watch()
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    w.page.focus("nav .navfoot button.user")
+    w.page.keyboard.press("Enter")
+    w.page.keyboard.press("Tab")
+    w.page.keyboard.press("Tab")
+    assert w.page.evaluate("[document.activeElement.tagName, document.activeElement.textContent]") == ["BUTTON", "Выйти"]
+    w.page.keyboard.press(key)
+    w.wait('#signin a[href="/dev-login"]', f"лендинг после выхода ({key})")
     w.check("итог")

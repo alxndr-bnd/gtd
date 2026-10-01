@@ -16,6 +16,12 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+- The home page fits a narrow screen or 400% zoom without scrolling sideways, and every public page marks its main content and headings properly for screen readers.
+  - RU: Главная страница помещается на узком экране и при увеличении 400 % без прокрутки вбок, а у всех публичных страниц основное содержимое и заголовки правильно размечены для экранных чтецов.
+- "Sign out" in the account menu now works with the Space key as well as Enter.
+  - RU: «Выйти» в меню аккаунта теперь срабатывает и от пробела, а не только от Enter.
+
 ## [0.23.0] - 2026-10-01
 
 ### Security
