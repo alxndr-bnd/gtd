@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+- Reminders keep arriving on time after a brief database hiccup, instead of being delayed until the next attempt.
+  - RU: Напоминания приходят вовремя и после короткого сбоя связи с базой, а не откладываются до следующей попытки.
+
 ## [0.21.0] - 2026-09-30
 
 ### Changed
