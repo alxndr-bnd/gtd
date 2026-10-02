@@ -62,9 +62,9 @@ def pw():
         yield p
 
 
-def launch(pw, *args):
+def launch(pw, *args, channel=None):
     try:
-        return pw.chromium.launch(args=list(args))
+        return pw.chromium.launch(args=list(args), channel=channel)
     except PWError as e:
         if "Executable doesn't exist" in str(e) or "playwright install" in str(e):
             pytest.fail(f"{INSTALL_HINT}\n{str(e).splitlines()[0]}", pytrace=False)
@@ -1069,6 +1069,67 @@ def test_consent_banner_never_covers_focus(watch, monkeypatch):
     w.wait("nav.open", "меню")
     walk(20, "выезжающее меню")
     w.check("итог")
+
+
+@pytest.fixture(scope="module")
+def focus_browser(pw):
+    """Полный Chromium в headless (channel="chromium"), а не headless shell: у него настоящий фокус окна — вкладка
+    уходит на задний план, окно получает blur, а вернувшись — focus и повторный focusin на activeElement."""
+    b = launch(pw, channel="chromium")
+    yield b
+    b.close()
+
+
+# Элемент под баннером — посередине его высоты; закрыт ли он
+UNDER_BANNER = """el => { const b = document.querySelector('#cc').getBoundingClientRect(), r = el.getBoundingClientRect();
+  scrollBy(0, r.top + r.height / 2 - (b.top + b.height / 2)); }"""
+COVERED_BY_BANNER = """el => { const b = document.querySelector('#cc').getBoundingClientRect(), r = el.getBoundingClientRect();
+  return r.bottom > b.top && r.top < b.bottom; }"""
+
+
+def settle(page):
+    page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
+def test_window_refocus_does_not_scroll(focus_browser, server, monkeypatch):
+    """SERBITO-374: окно вернуло фокус (другое приложение, вкладка) — браузер снова шлёт focusin элементу в фокусе.
+    Это не ход клавиатуры: страница не прокручивается. А Tab на элемент под баннером его по-прежнему открывает
+    (WCAG 2.4.11). Эмуляция фокуса Playwright выключена: с ней focus/blur окна не приходят и тест прошёл бы зря."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    w = Watch(focus_browser, server, viewport=PHONE)
+    try:
+        w.goto("/")
+        banner(w, "баннер на лендинге")
+        w.ctx.new_cdp_session(w.page).send("Emulation.setFocusEmulationEnabled", {"enabled": False})
+        w.page.bring_to_front()
+        assert w.page.evaluate("document.hasFocus()"), "у окна нет фокуса: проверять нечего"
+        w.page.evaluate("window.__focusins = 0; document.addEventListener('focusin', () => __focusins++)")
+        first, second = w.page.locator("footer ul a").nth(0), w.page.locator("footer ul a").nth(1)
+
+        first.evaluate("el => el.focus()")
+        first.evaluate(UNDER_BANNER)
+        settle(w.page)
+        assert first.evaluate(COVERED_BY_BANNER), "ссылка не под баннером"
+        y, seen = w.page.evaluate("scrollY"), w.page.evaluate("__focusins")
+        other = w.ctx.new_page()
+        other.bring_to_front()
+        w.page.bring_to_front()
+        other.close()
+        w.page.wait_for_function(f"__focusins > {seen}", timeout=WAIT_MS)  # окно вернуло фокус — focusin пришёл
+        settle(w.page)
+        assert first.evaluate("el => el === document.activeElement")
+        assert w.page.evaluate("scrollY") == y, "возврат фокуса в окно прокрутил страницу"
+
+        second.evaluate(UNDER_BANNER)
+        settle(w.page)
+        assert second.evaluate(COVERED_BY_BANNER), "вторая ссылка не под баннером"
+        w.page.keyboard.press("Tab")
+        settle(w.page)
+        assert second.evaluate("el => el === document.activeElement"), "Tab ушёл не на следующую ссылку"
+        assert not second.evaluate(COVERED_BY_BANNER), "Tab оставил фокус под баннером"
+        w.check("итог")
+    finally:
+        w.close()
 
 
 # Настоящая кнопка Google — iframe фиксированной ширины с отрицательными полями по бокам; заглушка рисует такой же

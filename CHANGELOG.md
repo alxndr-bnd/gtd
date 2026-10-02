@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+- The home and info pages no longer scroll down a little each time you switch back to the browser while the cookie banner is open.
+  - RU: Главная и информационные страницы больше не прокручиваются немного вниз каждый раз, когда вы возвращаетесь в браузер при открытом баннере cookie.
+
 ## [0.24.0] - 2026-10-01
 
 ### Changed
