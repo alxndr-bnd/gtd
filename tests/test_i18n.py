@@ -342,3 +342,38 @@ def test_config_reports_browser_language(client, header, lang):
 def test_english_public_pages_have_no_russian_ui_note(client):
     for path in ("/en/", "/en/about"):
         assert "The app interface is in Russian" not in client.get(path).text
+
+
+# ── Термины GTD по-русски (SERBITO-354, решение владельца: вариант b) ──
+# Списки GTD — имена собственные, по-английски и без склонения: Inbox, Next, Waiting, Projects, Someday, Reference,
+# Weekly Review. Предложения вокруг них — по-русски. «Входящие», «инбокс» и прочие русские имена списков — смесь,
+# которой больше нет ни в приложении, ни на лендинге, ни в боте.
+GTD_LISTS = ["Inbox", "Next", "Waiting", "Projects", "Someday", "Reference", "Weekly Review"]
+RU_LIST_NAMES = re.compile(r"[Вв]ходящ|[Ии]нбокс|Еженедельн\w* обзор|Inbox → ноль|Waiting старше")
+
+
+def ru_surfaces(client):
+    """Все русские тексты, которые видит человек: SPA, публичные страницы, бот (ответы, профиль, меню команд)."""
+    out = {"spa": "\n".join(strings(UI["ru"])),
+           "bot": "\n".join(A.TEXTS["ru"].values()) + "\n".join(A.BOT_PROFILE["ru"])
+           + "\n".join(c["description"] for c in A.BOT_COMMANDS["ru"])}
+    for path in ("/", "/about", "/privacy", "/changes"):
+        # Без комментариев и кода (строки SPA проверены выше по словарю), но с JSON-LD и мета-тегами
+        out[path] = re.sub(r"<!--.*?-->|<style.*?</style>|<script(?! type=\"application/ld\+json\").*?</script>", "",
+                           client.get(path).text, flags=re.S)
+    return out
+
+
+def test_ru_gtd_terms_are_proper_nouns(client):
+    for where, text in ru_surfaces(client).items():
+        if where == "/changes":  # история изменений — как писали тогда; новые записи — по правилу
+            continue
+        assert not RU_LIST_NAMES.findall(text), (where, RU_LIST_NAMES.findall(text))
+    views = UI["ru"]["views"]
+    for key, name in zip(["inbox", "next", "waiting", "projects", "someday", "reference", "review"], GTD_LISTS):
+        assert views[key].endswith(" " + name), (key, views[key])  # меню RU — те же имена, что EN
+        assert UI["en"]["views"][key].endswith(" " + name)
+    assert UI["ru"]["back_projects"] == "← Projects"
+    about = client.get("/about").text
+    assert "Next, Waiting, Projects, Someday, Reference" in about
+    assert "Next, Waiting, Projects, Someday" in A.TEXTS["ru"]["about"]

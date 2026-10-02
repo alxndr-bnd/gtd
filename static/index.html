@@ -23,7 +23,10 @@ body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-app
 .app{display:flex;min-height:100vh}
 nav{width:230px;padding:16px 10px;border-right:1px solid var(--bd);background:var(--card);flex-shrink:0}
 nav h1{font-size:17px;margin:0 8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px} nav h1 img,.login h1 img{display:block} nav h1:hover{color:var(--ac)}
-button.icon{display:flex;align-items:center;justify-content:center;padding:0 16px} .hero button.icon svg{width:26px;height:26px}
+button.icon{display:flex;align-items:center;justify-content:center;gap:8px;padding:0 16px}
+/* Подпись кнопки захвата (SERBITO-354, G12): на широком экране — значок и слово, на телефоне — только значок;
+   aria-label начинается с этого слова */
+.cap .lbl{font-weight:600} @media(max-width:700px){.cap .lbl{display:none}} .hero button.icon svg{width:26px;height:26px}
 nav a{display:flex;justify-content:space-between;align-items:baseline;padding:8px 10px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
 nav a:hover{background:var(--bg)} nav a.on{background:var(--ac);color:var(--on-ac)}
 nav a .n{opacity:.7;font-size:13px;font-variant-numeric:tabular-nums}  /* по базовой линии названия, а не по верху */
@@ -42,7 +45,7 @@ button.sm{padding:3px 8px;font-size:12.5px;color:var(--mut)}
 button.sm:hover{color:var(--tx)}
 .hint{color:var(--mut);font-size:13px;margin:-8px 0 14px}
 .it{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px}
-.it input[type=checkbox]{margin-top:4px;width:17px;height:17px}
+.it .ck{display:flex;flex-shrink:0;cursor:pointer} .it input[type=checkbox]{margin:4px 0 0;width:17px;height:17px}
 .it .b{flex:1;min-width:0}
 .it .num{color:var(--mut);font-size:12.5px;text-decoration:none;margin-top:2px;flex-shrink:0;font-variant-numeric:tabular-nums}
 .it .num:hover{color:var(--ac)}
@@ -62,15 +65,21 @@ button.sm:hover{color:var(--tx)}
 .onb{position:relative;margin:4px 0 0} .onb h3{margin:0 0 8px;padding-right:32px}
 .onb .onbx{position:absolute;top:6px;right:6px;border:0;background:none;font-size:14px}
 .onbi{padding:3px 0} .onbi span{color:var(--mut);font-size:13px} .onbi.ok b{text-decoration:line-through;color:var(--mut)}
-.hero.onbh{padding-top:32px}
 .pj{cursor:pointer} .pj .warn{color:var(--warn)}
 .it.done{background:none}
 /* Перетаскивание (SERBITO-328): поднятая карточка — с тенью поверх соседей */
 .dnd > .it.dragging{position:relative;z-index:5;box-shadow:0 10px 28px #0003;border-color:var(--ac);cursor:grabbing;transition:none}
 body.dnd-on,body.dnd-on *{-webkit-user-select:none;user-select:none;cursor:grabbing}
-@media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
+@media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
+/* Ручка ⠿ (SERBITO-354): на сенсорном экране тянуть за неё можно сразу, без удержания; мышью тянется вся карточка */
+.it .grip{display:none}
+@media(pointer:coarse){.dnd > .it .grip{display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;
+  margin:-10px -12px -10px -4px;align-self:stretch;color:var(--mut);font-size:18px;touch-action:none;cursor:grab}}
+.dndtip{display:flex;align-items:center;gap:8px;margin:0 0 10px} .dndtip span{flex:1}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
 .pjh select.dmode{font-size:12.5px;font-weight:400;color:var(--mut);padding:3px 6px;border:1px solid var(--bd);border-radius:8px;
   background:var(--card);vertical-align:middle;max-width:100%}
+.fl{display:block;color:var(--mut);font-size:13px;margin:0 0 4px}
+.pjpick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px} .pjpick button{min-height:40px}
 .donesec{margin-top:18px} .donesec summary{cursor:pointer;color:var(--mut);font-weight:600;padding:6px 0;margin-bottom:6px}
 .rv{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .rv h3{margin:0 0 6px;font-size:15px} .rv a{color:var(--ac);cursor:pointer}
@@ -82,13 +91,18 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .login{max-width:420px;margin:12vh auto;text-align:center;padding:0 16px}
 .login .cap{margin:0}
 .gbtn{display:flex;min-height:44px} .login .gbtn{justify-content:center}
+/* Кнопки входа (SERBITO-354, G11): все во всю ширину блока, «Войти по коду» и Telegram — один заметный вид */
+#signin .tgfb,.login .tgfb{width:100%;min-height:44px}
+#signin .cap button:not(.pri),#signin .tgfb,.login .cap button:not(.pri),.login .tgfb{border-color:var(--ac);color:var(--ac);font-weight:600}
 .or{color:var(--mut);font-size:13px;margin:14px 0;display:flex;align-items:center;gap:10px}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
-.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} .msg .rv{color:var(--tx);font-size:14px}
+.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} #npmsg{margin:-10px 0 12px} .msg .rv{color:var(--tx);font-size:14px}
 .rv .cap{margin:8px 0 0}
 .capw{position:relative;flex:1;display:flex} .capw input,.capw textarea{width:100%}
 .ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;z-index:10;overflow:hidden}
-.hero{padding-top:22vh;text-align:center}
+/* Сверху — небольшой отступ, как под чек-листом: исчез чек-лист — поле не съезжает вниз (SERBITO-354, G8).
+   По центру экрана — только совсем пустой Inbox (.solo) */
+.hero{padding-top:32px;text-align:center}
 .hero.solo{padding-top:calc(50vh - 100px)}  /* поле в центре экрана; верх зафиксирован — растёт только вниз */
 .hero h2{font-size:24px;margin-bottom:14px}
 .hero .cap{margin-bottom:10px}
@@ -106,6 +120,7 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   width:min(560px,calc(100vw - 24px));background:#1f2733;color:#fff;border-radius:12px;padding:12px 14px 14px;box-shadow:0 8px 30px #0005;overflow:hidden}
 .toast .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toast button{background:none;border:1px solid #fff6;color:#fff;font-weight:600;min-height:40px;padding:0 14px}
+.toast .cxs{display:flex;gap:6px;flex-shrink:0} .toast button.cx{font-weight:400;padding:0 10px;border-radius:99px}
 .toast .sec{font-variant-numeric:tabular-nums;opacity:.7;min-width:2ch;text-align:right}
 .toast .bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--ac);transform-origin:left;animation:shrink linear forwards}
 @keyframes shrink{from{transform:scaleX(1)}to{transform:scaleX(0)}}
@@ -116,9 +131,13 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   .it .act.has-del{grid-template-columns:1fr 1fr 52px}
   .it .act button.sm{min-height:44px;font-size:15px;color:var(--tx);padding:0 6px;white-space:nowrap}
   .it .act .ar{display:none}  /* на узкой кнопке «→» лишняя — слово влезает целиком */
-  .it .act button.del{grid-column:3;grid-row:1 / span 2}
-  .it input[type=checkbox]{width:24px;height:24px}
-  .toast{bottom:12px}
+  .it .act button.del{grid-column:3;grid-row:1 / span 3}  /* во Inbox — три ряда: Next, Project, Waiting, Someday, Ref */
+  .it input[type=checkbox]{width:24px;height:24px;margin:0}
+  /* Зоны тапа ≥44px (SERBITO-354, G7): галочка — во всю высоту от левого края карточки, «#N» — квадрат 44 */
+  .it .ck{min-width:44px;min-height:44px;margin:-10px -6px -10px -12px;align-items:center;justify-content:center}
+  .it .num{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin:-10px -6px -10px 0}
+  .toast{bottom:12px;flex-wrap:wrap;row-gap:8px}
+  .toast .cxs{order:5;flex-basis:100%}  /* @контексты — отдельной строкой: текст «… → Next» не обрезается */
 }
 .it.sel,.it:focus-visible{outline:2px solid var(--ac);outline-offset:-1px}
 nav a.kb{outline:2px solid var(--ac);outline-offset:2px}  /* снаружи с зазором — видна и на синем активном */
@@ -130,7 +149,7 @@ nav small.ver{color:var(--mut);margin-left:4px} nav .newdot{display:inline-block
 .below{margin-top:56px} .below h3{font-size:17px;margin:0 0 4px} .below .hint{margin:0 0 12px}
 .dnd + .below,.below + .below{margin-top:32px}  /* под задачами Inbox — ближе: это продолжение того же экрана */
 .hero .inbox-empty{font-weight:600;margin:0 0 4px}
-@media(max-width:700px){.hero{padding-top:8vh}.hero.solo{padding-top:calc(50vh - 150px)}}
+@media(max-width:700px){.hero.solo{padding-top:calc(50vh - 150px)}}
 .aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:var(--on-ac)}
 .aco small{opacity:.7;margin-left:6px}
 /* Аккаунт: одна кнопка, раскрывает «Аккаунт» и «Выйти» */
@@ -168,7 +187,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
 {
 "ru": {
   "views": {"inbox": "📥 Inbox", "next": "⏭ Next", "waiting": "⏳ Waiting", "scheduled": "📅 Календарь / напоминания",
-    "projects": "📁 Проекты", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Готово", "review": "🔍 Weekly Review"},
+    "projects": "📁 Projects", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Готово", "review": "🔍 Weekly Review"},
   "help": {"inbox": "Всё, что ещё не осмыслено. Разбери: что это и что делать дальше?",
     "next": "Конкретные следующие физические действия.", "waiting": "Жду ответа/результата от других.",
     "scheduled": "Задачи с напоминанием — по времени.", "someday": "Когда-нибудь / может быть.",
@@ -182,18 +201,19 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "someday": ["Идеи на потом: не сейчас, но жалко потерять. Из Inbox — кнопкой «→ Someday»", "выучить испанский"],
     "reference": ["Полезное без действия: инструкции, адреса, номера. Из Inbox — кнопкой «→ Ref»", "размер фильтра для пылесоса"],
     "done": ["Отметь задачу галочкой — она окажется здесь", ""],
-    "project": ["В проекте пока нет задач — допиши к задаче его #название", "заказать образцы #{p}"]},
+    "project": ["В проекте пока нет задач — добавь первую в поле выше", ""]},
   "empty_default": "Пусто 🎉",
-  "inbox_empty": "Входящие пусты 🎉",
+  "inbox_empty": "Inbox пуст 🎉",
   "due_soon": "⏰ Скоро срок", "due_hint": "Просроченные и на ближайшие 3 дня — из всех списков", "overdue": "просрочено",
   "ex": "Например: «{ex}»",
-  "onb": [["capture", "Запиши 3 мысли", "в поле ниже или боту, не разбирая"],
+  "onb": [["capture", "Запиши 3 мысли", "в поле ниже, не разбирая"],
     ["process", "Разбери Inbox", "реши, что делать с задачей: → Next, → Waiting, → Someday…"],
     ["telegram", "Подключи Telegram-бота", "записывать с телефона и получать напоминания — в <a href=\"#account\" data-view=\"account\">Аккаунте</a>"]],
-  "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть",
+  "onb_capture_bot": "в поле ниже или <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">боту в Telegram</a>, не разбирая",
+  "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть", "ctx_offer": "Контекст:",
   "cap_hints": ["Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»",
     "Что сделать? «завтра в 10:00 #дом @телефон»", "Что нужно сделать? #проект @контекст", "Что нужно сделать?", "Задача…"],
-  "cap_add": "Добавить в Inbox",
+  "cap_add": "Добавить в Inbox", "cap_btn": "Добавить", "cap_project": "Добавить задачу в #{p}",
   "task_missing": "Задача #{n} не найдена",
   "login_page": "Вход", "login_hint": "Вход или регистрация — аккаунт создастся сам",
   "get_code": "Войти по коду", "tg_signin": "Войти через Telegram", "or": "или", "no_methods": "Способы входа не настроены.",
@@ -221,20 +241,24 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "st_new7": "новых за 7 дней", "st_new30": "новых за 30 дней", "st_tasks7": "задач за 7 дней", "st_tasks30": "задач за 30 дней",
   "st_channels": "Каналы за 30 дней", "st_channels_text": "Сайт — {web} · Telegram-бот — {tg}",
   "st_methods": "Способы входа", "st_methods_text": "Почта — {email} · Google — {google} · Telegram — {tg}",
-  "sign_out": "Выйти", "menu": "Меню", "to_inbox": "На Inbox",
+  "sign_out": "Выйти", "menu": "Меню", "to_inbox": "Открыть Inbox",
   "about": "📖 О GTD", "about_title": "Как это работает: метод GTD и разделы приложения", "about_url": "/about",
   "cookie_settings": "Настройки cookie", "privacy_url": "/privacy",
   "changes": "✨ Что нового", "changes_url": "/changes", "changes_new": "Есть новая версия",
   "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>Alt+↑↓ переставить<br>← меню · → задачи · Esc сброс",
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
-  "all": "все", "back_projects": "← Проекты", "rename": "Переименовать", "delete": "Удалить",
+  "all": "все", "back_projects": "← Projects", "rename": "Переименовать", "delete": "Удалить",
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.",
-  "new_project": "Новый проект", "create": "Создать", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
+  "new_project": "Новый проект", "create": "Создать",
+  "to_project": "→ Project", "pick_project": "В какой проект?", "new_project_opt": "+ Новый проект…",
+  "new_project_name": "Название нового проекта", "project_name_needed": "Напиши название проекта",
+  "dnd_tip": "Чтобы переставить задачу, удерживай её или тяни за ⠿", "dnd_tip_close": "Понятно",
+  "new_project_ph": "Например, Ремонт кухни", "project_created": "Проект #{p} создан", "project_exists": "Проект #{p} уже есть", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
   "complete": "Завершить",
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
-    "s2": "2. Inbox → ноль", "s2_text": "В инбоксе: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">разобрать</a>",
+    "s2": "2. Разобрать Inbox до нуля", "s2_text": "В Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">разобрать</a>",
     "s3": "3. Проекты без следующего действия", "s3_ok": "Все проекты движутся ✅",
-    "s4": "4. Waiting старше недели", "s4_ok": "Ничего не зависло ✅",
+    "s4": "4. В Waiting дольше недели", "s4_ok": "Ничего не зависло ✅",
     "s5": "5. Ближайшие напоминания", "s5_none": "Нет",
     "s6": "6. Someday/Maybe", "s6_text": "Идей: <b>{n}</b> — <a href=\"#someday\" data-view=\"someday\">просмотреть</a>. Что-то пора активировать?"},
   "moved_to": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
@@ -271,21 +295,22 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "someday": ["Ideas for later: not now, but too good to lose. From the Inbox, press “→ Someday”", "learn Spanish"],
     "reference": ["Useful info with no action: instructions, addresses, numbers. From the Inbox, press “→ Ref”", "vacuum filter size"],
     "done": ["Tick a task off and it lands here", ""],
-    "project": ["No tasks in this project yet — add its #name to a task", "order samples #{p}"]},
+    "project": ["No tasks in this project yet — add the first one in the field above", ""]},
   "empty_default": "Empty 🎉",
   "inbox_empty": "Inbox is empty 🎉",
   "due_soon": "⏰ Due soon", "due_hint": "Overdue or due in the next 3 days, from all lists", "overdue": "overdue",
   "ex": "For example: “{ex}”",
-  "onb": [["capture", "Capture 3 thoughts", "in the field below or to the bot, no sorting yet"],
+  "onb": [["capture", "Capture 3 thoughts", "in the field below, no sorting yet"],
     ["process", "Clarify your Inbox", "decide what each task needs: → Next, → Waiting, → Someday…"],
     ["telegram", "Connect the Telegram bot", "capture from your phone and get reminders — under <a href=\"#account\" data-view=\"account\">Account</a>"]],
-  "onb_title": "First steps in GTD", "onb_close": "Hide",
+  "onb_capture_bot": "in the field below or to the <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">Telegram bot</a>, no sorting yet",
+  "onb_title": "First steps in GTD", "onb_close": "Hide", "ctx_offer": "Context:",
   "cap_hints": ["Quick capture: “call the bank tomorrow at 10am #home @phone”",
     "What to do? “tomorrow at 10am #home @phone”", "What needs doing? #project @context", "What needs doing?", "Task…"],
-  "cap_add": "Add to Inbox",
+  "cap_add": "Add to Inbox", "cap_btn": "Add", "cap_project": "Add a task to #{p}",
   "task_missing": "Task #{n} not found",
   "login_page": "Sign in", "login_hint": "Sign in or sign up — the account is created automatically",
-  "get_code": "Get a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
+  "get_code": "Sign in with a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
   "error": "Something went wrong, try again",
   "merge_yes": "🔗 Merge into one", "merge_no": "Not now",
   "email_ph": "Email", "code_ph": "Code from the email", "confirm": "Confirm", "sign_in": "Sign in",
@@ -318,7 +343,11 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action.",
-  "new_project": "New project", "create": "Create", "open_n": "{n} open", "no_next": "⚠ no next action",
+  "new_project": "New project", "create": "Create",
+  "to_project": "→ Project", "pick_project": "Which project?", "new_project_opt": "+ New project…",
+  "new_project_name": "New project name", "project_name_needed": "Type a project name",
+  "dnd_tip": "To reorder, hold a task or drag it by ⠿", "dnd_tip_close": "Got it",
+  "new_project_ph": "For example, Kitchen remodel", "project_created": "Project #{p} created", "project_exists": "Project #{p} already exists", "open_n": "{n} open", "no_next": "⚠ no next action",
   "complete": "Complete",
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
     "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">process it</a>",
@@ -382,6 +411,41 @@ function applyLang(){  // после /api/me: вошли на /en/ — запо�
 setLang(document.documentElement.lang);
 let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, pid:null, cfg:{}};
 
+// ── Адреса разделов (SERBITO-354): /next, /projects, /p/<id>… (на /en/ — /en/next). Переход — запись в истории
+// браузера, и Back (кнопка, жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Inbox — это /.
+// Карточка задачи — /i/<номер>: открыли из списка — своя запись, Back её закрывает. Список — app.APP_VIEWS
+const ROUTE_VIEWS = ['next','waiting','scheduled','projects','someday','reference','done','review','account','stats'];
+function routeOf(path = location.pathname){
+  const p = path.replace(/^\/en(?=\/|$)/, '') || '/';
+  let m;
+  if((m = p.match(/^\/i\/(\d+)$/))) return {card:+m[1]};
+  if((m = p.match(/^\/p\/(\d+)$/))) return {view:'projects', pid:+m[1]};
+  const v = p.slice(1);
+  return {view:ROUTE_VIEWS.includes(v) ? v : 'inbox', pid:null};
+}
+// S.en — разделы под /en/: вошли на /en/… и язык не выбран явно в «Аккаунте»
+function viewPath(view = S.view, pid = S.pid){
+  const p = view==='projects' && pid ? `/p/${pid}` : view==='inbox' ? '/' : '/'+view;
+  return S.en ? (p==='/' ? '/en/' : '/en'+p) : p;
+}
+function routeApply(r){ S.view = r.view || 'inbox'; S.pid = r.pid || null; S.ctx = null; S.sel = null; }
+// Перейти в раздел (проект): новая запись в истории, если адрес другой
+function go(view, pid = null){
+  routeApply({view, pid});
+  const path = viewPath();
+  if(location.pathname !== path) history.pushState(null, '', path);
+  return load();
+}
+S.en = pathEn();
+routeApply(routeOf());
+// Back / Forward: карточка /i/N — открыть её; иначе закрыть открытый диалог и показать раздел из адреса
+addEventListener('popstate', () => {
+  const r = routeOf(), d = $('#dlg');
+  if(r.card) return openByNum(r.card);
+  if(d.open) d.close();
+  if(r.view !== S.view || (r.pid || null) !== S.pid){ routeApply(r); load(); }
+});
+
 // Accept-Language — выбранный язык интерфейса: на нём сервер пишет ошибки и письма
 const hdrs = json => ({'Accept-Language': LANG, ...(json ? {'Content-Type':'application/json'} : {})});
 async function api(path, method='GET', body){
@@ -406,6 +470,9 @@ async function load(){
     if(!S.me){ S.me = await api('/me'); applyLang(); }  // имя для кнопки аккаунта и язык интерфейса
     S.projects = await api('/projects');
     S.contexts = await api('/contexts');
+    if(S.pid && !S.projects.some(p => p.id===S.pid)){  // чужой, удалённый или завершённый проект — список проектов
+      S.pid = null; if(!location.pathname.startsWith('/i/')) history.replaceState(null, '', viewPath());
+    }
     if(S.view==='account') S.me = await api('/me');
     else if(S.view==='stats') S.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) S.items=[];
@@ -427,9 +494,13 @@ async function load(){
 async function openDeepLink(){
   const m = location.pathname.match(/^\/i\/(\d+)$/); if(!m || S.deepDone) return;
   S.deepDone = true;
-  const it = await api('/items/n/'+m[1]);
-  if(it && it.id) openEdit(it.id, it);
-  else { history.replaceState(null, '', '/'); const h = $('.hint'); if(h) h.textContent = t('task_missing', {n:m[1]}); }
+  return openByNum(+m[1]);
+}
+async function openByNum(n){
+  const it = await api('/items/n/'+n);
+  if(it && it.id) return openEdit(it.id, it);
+  if($('#dlg').open) $('#dlg').close();
+  history.replaceState(null, '', viewPath()); const h = $('.hint'); if(h) h.textContent = t('task_missing', {n});
 }
 
 // Локально (DEV=1): страница сама обновляется, когда сервер перезапустился после правки .py
@@ -452,7 +523,8 @@ function devLiveReload(){
 
 async function loginScreen(){
   S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
-  S.view = 'inbox'; S.pid = null; S.onb = null; S.me = null; S.fromLogin = true;  // следующий вход может быть в другой аккаунт
+  routeApply(routeOf()); S.onb = null; S.me = null; S.fromLogin = true;  // следующий вход может быть в другой аккаунт;
+  // раздел — из адреса: вошёл со ссылки /next — после входа откроется Next
   setLang($('#signin') ? document.documentElement.lang : autoLang());
   devLiveReload();
   const c = S.cfg, parts = [];
@@ -518,7 +590,9 @@ function mountGoogle(){
     google.accounts.id.initialize({client_id:S.cfg.google, callback: async ({credential}) => {
       try{ const lk = linking(); await authPost('google', {credential, link:lk}); ga(lk ? 'link_method' : 'login', {method:'google'}); load(); }catch(err){ authFail(err); }
     }});
-    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:LANG});
+    // Ширина — как у остальных кнопок входа (G11); Google принимает 200–400 px
+    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:LANG,
+      width:Math.min(400, Math.max(200, el.clientWidth))});
   };
   if(window.google?.accounts) return go();
   const s = document.createElement('script');
@@ -656,7 +730,7 @@ function navHtml(){
   const cur = viewLabel();
   // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается».
   // Разделы — ссылки с href (SERBITO-349): без него <a> не получает фокус с клавиатуры и не читается как ссылка
-  const item = (k, l, n) => `<a href="#${k}" class="${S.view===k?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
+  const item = (k, l, n) => `<a href="${viewPath(k, null)}" class="${S.view===k?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
   return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <span class="tb-title">${cur}</span>${user}</div>
@@ -677,18 +751,19 @@ const dueHtml = it => overdue(it) ? `<span class="due over">⏰ ${fmtTs(it.remin
   : `<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`;
 function itemHtml(it){
   const acts = [];
-  if(it.status==='inbox') acts.push(['next','→ Next'],['waiting','→ Waiting'],['someday','→ Someday'],['reference','→ Ref'],['trash','🗑']);
+  // «→ Project» (SERBITO-354) — не список, а выбор проекта: своя кнопка (data-act=toproj), задача уходит в Next проекта
+  if(it.status==='inbox') acts.push(['next','→ Next'],['project',t('to_project')],['waiting','→ Waiting'],['someday','→ Someday'],['reference','→ Ref'],['trash','🗑']);
   else if(it.status==='next') acts.push(['waiting','→ Waiting'],['someday','→ Someday']);
   else if(it.status==='waiting') acts.push(['next','→ Next']);
   else if(it.status==='someday') acts.push(['next','→ Next']);
   else if(it.status==='done') acts.push(['next',t('restore')]);
   // tabindex=-1: карточку фокусирует выбор стрелками и возврат из диалога, в порядок Tab она не входит
   return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}" tabindex="-1">
-    <input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}>
+    <label class="ck"><input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}></label>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
-      ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" data-act="mv" data-st="${s}" ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
-    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}</div>`;
+      ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
+    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}<span class="grip" aria-hidden="true">⠿</span></div>`;
 }
 
 // Стрелка, входящая в лоток: «положить во входящие»
@@ -698,25 +773,29 @@ const ICON_INBOX = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" 
 // Поле захвата — textarea в одну строку: длинный текст переносится, и поле растёт вниз (capFit)
 // Подсказка — самая длинная из вариантов CAP_HINTS, что целиком влезает в текущую ширину поля (capHint)
 function capHint(el = $('#cap')){
-  if(!el || !el.clientWidth) return;
+  if(!el || !el.clientWidth || el.dataset.pid) return;  // в проекте подсказка своя — «Добавить задачу в #…»
   const cs = getComputedStyle(el), ctx = (capHint.ctx ||= document.createElement('canvas').getContext('2d'));
   ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
   const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
   el.placeholder = CAP_HINTS.find(h => ctx.measureText(h).width <= room) || CAP_HINTS.at(-1);
 }
-const capHtml = () => `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${CAP_HINTS[0]}" autofocus></textarea>
-    <div id="ac" class="ac" role="listbox" hidden></div></div>
-  <button class="pri icon" data-act="capture" aria-label="${t('cap_add')}" title="${t('cap_add')}">${ICON_INBOX}</button></div>`;
+// pj — страница проекта (SERBITO-354): поле добавляет задачу в этот проект, подсказка и кнопка говорят об этом
+const capHtml = (pj = null) => {
+  const add = pj ? t('cap_project', {p:esc(pj.title)}) : t('cap_add');
+  return `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${pj ? add : CAP_HINTS[0]}"
+    ${pj ? `data-pid="${pj.id}"` : ''} autofocus></textarea><div id="ac" class="ac" role="listbox" hidden></div></div>
+  <button class="pri icon" data-act="capture" aria-label="${add}" title="${add}">${ICON_INBOX}<span class="lbl">${t('cap_btn')}</span></button></div>`;
+};
 
 function render(){
   if(DND.on){ DND.rerender = true; return; }  // идёт перетаскивание — перерисуем, когда карточку отпустят
-  let body='', hero='';
+  let body='', hero='', topCap = true;  // topCap — общее поле захвата над разделом
   const live = l => (l||[]).filter(i => !S.pendingDel.has(i.id));
   S.items = live(S.items); S.nextItems = live(S.nextItems); S.dueItems = live(S.dueItems);
   if(S.view==='review') body = reviewHtml();
   else if(S.view==='account') body = accountHtml();
   else if(S.view==='stats') body = statsHtml();
-  else if(S.view==='projects' && !S.pid) body = projectsHtml();
+  else if(S.view==='projects' && !S.pid){ body = projectsHtml(); topCap = false; }
   else{
     let items = S.items;
     let chips='';
@@ -734,17 +813,18 @@ function render(){
       const next = S.nextItems.filter(i => !dueIds.has(i.id));
       const sec = (cls, title, hint, list, cards = list.map(itemHtml).join('')) => list.length
         ? `<section class="below ${cls}"><h3>${title}</h3><div class="hint">${hint}</div>${cards}</section>` : '';
-      hero = `${onb}<section class="hero ${onb?'onbh':items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
+      hero = `${onb}<section class="hero ${onb||items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
         ${items.length?`<div class="hint">${HELP.inbox}</div>`
           :`<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
       body = dndHtml(items) + sec('due-soon', t('due_soon'), t('due_hint'), due)  // «Скоро срок» — по дате, не переставляется
         + sec('next-sec', VIEWS[1][1], HELP.next, next, dndHtml(next));
-    } else if(pj) body = projectHtml(pj, items);
+    } else if(pj){ body = projectHtml(pj, items); topCap = false; }  // поле захвата — своё, под заголовком проекта
     else body = `<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}
       ${chips}${(DND_VIEWS.includes(S.view) ? dndHtml(items) : items.map(itemHtml).join('')) || emptyHtml(S.view)}`;
   }
-  $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
+  $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || (topCap ? capHtml() : '')}${body}</main></div>`;
   if(S.view==='account'){ mountGoogle(); mountTelegram(); }
+  dndTip.draw();
   const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
   capFit(cap); capHint(cap);
   docTitle();  // и длинный SEO-заголовок лендинга после входа сменится
@@ -767,10 +847,10 @@ function projectHtml(pj, items){
     ${DONE_MODES.map(m => `<option value="${m}" ${m===mode?'selected':''}>${t('done_mode.'+m)}</option>`).join('')}</select>`;
   const sec = mode==='section' && done.length ? `<details class="donesec" data-done-of="${pj.id}" ${S.doneOpen[pj.id]?'open':''}>
     <summary>${t('done_section', {n:done.length})}</summary>${done.map(itemHtml).join('')}</details>` : '';
-  return `<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
+  return `<p><a href="${viewPath('projects', null)}" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button>${dmode}</h2>
-    ${dndHtml(shown, 'project') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
+    ${capHtml(pj)}${dndHtml(shown, 'project') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
 }
 S.doneOpen = {};  // блок «Выполненные» раскрыт — по проектам, до перезагрузки страницы
 document.addEventListener('toggle', e => {
@@ -788,12 +868,25 @@ let moveQ = Promise.resolve(), moving = 0;
 // Порядок уходит на сервер по одному (иначе быстрые Alt+↓ посчитались бы от устаревших соседей); экран уже
 // переставлен — перечитываем данные, когда очередь опустела
 function dndSave(el){
+  dndTipDone();
   const id = +el.dataset.id, nb = x => x?.dataset.id ? +x.dataset.id : null;
   const body = {prev:nb(el.previousElementSibling), next:nb(el.nextElementSibling), scope:el.parentElement.dataset.scope};
   moving++;
   moveQ = moveQ.then(() => api(`/items/${id}/move`, 'POST', body)).catch(() => {})
     .finally(() => { if(--moving===0) load(); });
 }
+// Разовая подсказка на сенсорном экране (SERBITO-354): над первым списком, где есть что переставлять, пока человек
+// не перетащил задачу или не закрыл подсказку. Мышью — не нужна: тянется сама карточка, курсор это показывает
+const dndTip = {
+  seen(){ try{ return localStorage.getItem('gtd-dnd-tip') === '1'; }catch{ return true; } },
+  draw(){
+    if(this.seen() || !matchMedia('(pointer: coarse)').matches) return;
+    const box = [...document.querySelectorAll('main .dnd')].find(b => b.children.length > 1);
+    box?.insertAdjacentHTML('beforebegin', `<div class="hint dndtip"><span>${t('dnd_tip')}</span>
+      <button class="sm" data-act="dndtip">${t('dnd_tip_close')}</button></div>`);
+  },
+};
+function dndTipDone(){ try{ localStorage.setItem('gtd-dnd-tip', '1'); }catch{} $('main .dndtip')?.remove(); }
 const dndOrder = box => [...box.children].map(c => c.dataset.id).join();
 function dndReset(){
   clearTimeout(DND.timer);
@@ -833,7 +926,8 @@ document.addEventListener('pointerdown', e => {
   const el = e.target.closest('main .dnd > .it[data-id]');
   if(!el || e.button !== 0 || DND.el || e.target.closest('a,button,input,select,textarea,label') || $('#dlg').open) return;
   Object.assign(DND, {el, box:el.parentElement, x:e.clientX, y:e.clientY, pid:e.pointerId, touch:e.pointerType==='touch'});
-  if(DND.touch) DND.timer = setTimeout(dndStart, HOLD_MS);
+  if(DND.touch && e.target.closest('.grip')) dndStart();  // за ручку — сразу, без удержания (SERBITO-354)
+  else if(DND.touch) DND.timer = setTimeout(dndStart, HOLD_MS);
 });
 document.addEventListener('pointermove', e => {
   if(!DND.el || e.pointerId !== DND.pid) return;
@@ -878,9 +972,13 @@ function reorderKey(e){
   return true;
 }
 
+// Экран проектов (SERBITO-354): одно поле — новый проект, с подписью; общего поля захвата здесь нет (render).
+// Подзаголовок — только над списком: у пустого экрана своё объяснение (emptyHtml), без повтора
 function projectsHtml(){
-  return `<h2>${L.views.projects}</h2><div class="hint">${t('projects_hint')}</div>
-  <div class="cap"><input id="np" placeholder="${t('new_project')}"><button data-act="newproj">${t('create')}</button></div>
+  return `<h2>${L.views.projects}</h2>${S.projects.length ? `<div class="hint">${t('projects_hint')}</div>` : ''}
+  <label class="fl" for="np">${t('new_project')}</label>
+  <div class="cap"><input id="np" autocomplete="off" placeholder="${t('new_project_ph')}"><button class="pri" data-act="newproj">${t('create')}</button></div>
+  <div class="msg" id="npmsg" role="alert"></div>
   ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}" tabindex="-1"><div class="b"><div class="t">${esc(p.title)}</div>
     <div class="meta"><span>${t('open_n', {n:p.open_count})}</span>${p.next_count?'':`<span class="warn">${t('no_next')}</span>`}</div></div>
     <button class="sm" data-act="renameproj" data-pid="${p.id}" title="${t('rename')}">✏️</button>
@@ -901,7 +999,8 @@ function onbHtml(){
   const o = S.counts.onboarding, steps = onbSteps();
   if(!o || o.hidden || steps.every(([k]) => o[k])) return '';
   return `<section class="rv onb"><button class="onbx" data-act="onbclose" aria-label="${t('onb_close')}" title="${t('onb_close')}">✕</button>
-    <h3>${t('onb_title')}</h3>${steps.map(([k,title,d]) => `<div class="onbi ${o[k]?'ok':''}">${o[k]?'✅':'⬜'} <b>${title}</b> <span>— ${d}</span></div>`).join('')}</section>`;
+    <h3>${t('onb_title')}</h3>${steps.map(([k,title,d]) => (d = k==='capture' && S.cfg.bot  // «или боту» — ссылкой (G9)
+      ? t('onb_capture_bot', {url:`https://t.me/${encodeURIComponent(S.cfg.bot)}`}) : d, `<div class="onbi ${o[k]?'ok':''}">${o[k]?'✅':'⬜'} <b>${title}</b> <span>— ${d}</span></div>`)).join('')}</section>`;
 }
 // GA onboarding_step: пункт стал выполнен у нас на глазах (между двумя загрузками) — шлём только его номер.
 // Выполненные к первой загрузке страницы не шлём: не отличить новое от давнего (например, сделанного в боте).
@@ -920,7 +1019,7 @@ function reviewHtml(){
   return `<h2>${L.views.review}</h2>
   <div class="rv"><h3>${t('review.s1')}</h3>${t('review.s1_text')}</div>
   <div class="rv"><h3>${t('review.s2')}</h3>${t('review.s2_text', {n:c.inbox||0})}</div>
-  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="#projects" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
+  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="${viewPath('projects', p.id)}" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
   <div class="rv"><h3>${t('review.s4')}</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):t('review.s4_ok')}</div>
   <div class="rv"><h3>${t('review.s5')}</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):t('review.s5_none')}</div>
   <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
@@ -945,14 +1044,16 @@ function gaPage(){
 // ── Undo-тост: после действия с задачей — «Отменить» с обратным отсчётом (5/10/30 с из настроек).
 // Новое действие делает предыдущее окончательным. Удаление отложено до конца таймера.
 let TOAST = null;
-function toast(text, {undo, commit} = {}){
+// chips — {label, c}: короткие варианты действия прямо в тосте (контекст после «→ Next»), pick(c) — по нажатию
+function toast(text, {undo, commit, chips, pick} = {}){
   toastEnd(true);
   const sec = S.me?.undo_seconds || 30, el = $('#toast');
-  el.innerHTML = `<span class="tx">${esc(text)}</span>${undo?`<button data-act="undo">${t('undo')}</button>`:''}
+  el.innerHTML = `<span class="tx">${esc(text)}</span>${chips?.length ? `<span class="cxs" role="group" aria-label="${t('ctx_offer')}">${chips.map(c =>
+      `<button class="cx" data-act="ctxset" data-c="${esc(c)}">@${esc(c)}</button>`).join('')}</span>` : ''}${undo?`<button data-act="undo">${t('undo')}</button>`:''}
     <b class="sec">${sec}</b><i class="bar" style="animation-duration:${sec}s"></i>`;
   el.hidden = false;
   let left = sec;
-  TOAST = {undo, commit,
+  TOAST = {undo, commit, pick,
     tick: setInterval(() => { left--; const b = el.querySelector('.sec'); if(b) b.textContent = Math.max(left, 0); }, 1000),
     end: setTimeout(() => toastEnd(true), sec * 1000)};
 }
@@ -966,12 +1067,17 @@ function toastEnd(commit){
 async function toastUndo(){ const tt = toastEnd(false); if(tt?.undo) await tt.undo(); load(); }
 addEventListener('pagehide', () => toastEnd(true));  // закрыли вкладку — отложенное удаление всё равно выполнится
 const findItem = id => S.items.concat(S.dueItems||[], S.nextItems||[]).find(i => i.id===id);
+// Из Inbox в Next без контекста — тост предлагает до трёх знакомых @контекстов (SERBITO-354, G9): контекст не
+// обязателен и не добавляет шага, но с ним работает фильтр Next
 async function moveItem(id, status){
   const it = findItem(id); if(!it) return;
   const prev = it.status;
   await api('/items/'+id, 'PATCH', {status});
   load();
-  toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev})});
+  const chips = status==='next' && prev==='inbox' && !it.context ? S.contexts.slice(0, 3) : [];
+  toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev}), chips,
+    pick: async c => { await api('/items/'+id, 'PATCH', {context:c}); load();
+      toast(t('moved', {title:it.title, to:`${L.moved_to.next} @${c}`}), {undo: () => api('/items/'+id, 'PATCH', {context:null})}); }});
 }
 S.pendingDel = new Set();  // удалённые, но ещё не отправленные на сервер (ждут конца таймера)
 function deleteItem(id){
@@ -991,7 +1097,7 @@ const draft = {
   // Выход: черновики задач не должны достаться следующему человеку за этим компьютером (SERBITO-360, GTD-14)
   clear(){ try{ Object.keys(localStorage).filter(k => k.startsWith('gtd-draft:')).forEach(k => localStorage.removeItem(k)); }catch{} },
 };
-const ITEM_FIELDS = ['title','notes','status','project_id','context','remind'];
+const ITEM_FIELDS = ['title','notes','status','project_id','newproj','context','remind'];
 
 // Диалог (карточка задачи, проект): закрыли — фокус туда, откуда открыли (SERBITO-349), а не на <body>. Открывший
 // элемент мог пропасть — список перерисовался после сохранения: тогда такой же по селектору back. Возвращает
@@ -1012,15 +1118,22 @@ const itemLink = it => `${location.origin}/i/${it.num}`;
 function openEdit(id, found){
   const it = found || findItem(id); if(!it) return;
   const d = $('#dlg');
-  history.replaceState(null, '', `/i/${it.num}`);
-  d.onclose = () => { acClose(); if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };
+  // Своя запись в истории: Back закрывает карточку. Пришли прямой ссылкой (или Forward) — адрес уже этот
+  if(location.pathname !== `/i/${it.num}`) history.pushState({card:it.num}, '', `/i/${it.num}`);
+  d.onclose = () => {  // закрыли (Esc, «Отмена», сохранение) — вернуться к разделу: назад по своей записи или заменой
+    acClose();
+    if(!location.pathname.startsWith('/i/')) return;  // закрыта по Back — адрес уже раздела
+    if(history.state?.card) history.back(); else history.replaceState(null, '', viewPath());
+  };
   d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px"><span id="dlg-h">${t('task_n', {n:it.num})}</span>
       <button type="button" class="sm" data-act="copylink" aria-label="${t('copy_link')}" title="${t('copy_link_to', {url:esc(itemLink(it))})}">🔗</button></h3>
     <label for="ef-title">${t('f_title')}</label><div class="capw"><input id="ef-title" name="title" value="${esc(it.title)}" required autofocus autocomplete="off" data-ac-src>
       <div class="ac" role="listbox" hidden></div></div>
     <label for="ef-notes">${t('f_notes')}</label><textarea id="ef-notes" name="notes" rows="3">${esc(it.notes)}</textarea>
     <label for="ef-status">${t('f_list')}</label><select id="ef-status" name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
-    <label for="ef-project">${t('f_project')}</label><select id="ef-project" name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
+    <label for="ef-project">${t('f_project')}</label><select id="ef-project" name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}
+      <option value="new">${t('new_project_opt')}</option></select>
+    <div class="newproj" hidden><label for="ef-newproj">${t('new_project_name')}</label><input id="ef-newproj" name="newproj" autocomplete="off"></div>
     <label for="ef-context">${t('f_context')}</label><input id="ef-context" name="context" value="${esc(it.context||'')}" placeholder="${t('f_context_ph')}">
     <label for="ef-remind">${t('f_remind')}</label><input id="ef-remind" type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
     <div class="draftnote" hidden>${t('draft')} · <a href="#" data-act="dropdraft">${t('draft_drop')}</a></div>
@@ -1032,13 +1145,23 @@ function openEdit(id, found){
   }
   const keep = () => draft.set(key, Object.fromEntries(ITEM_FIELDS.map(k => [k, form.elements[k].value])));
   form.addEventListener('input', keep); form.addEventListener('change', keep);
+  // «+ Новый проект…» в списке проектов (SERBITO-354) — под ним поле названия, обязательное, пока оно выбрано
+  const np = form.querySelector('.newproj'), npSync = focus => {
+    const on = form.elements.project_id.value === 'new';
+    np.hidden = !on; form.elements.newproj.required = on;
+    if(on && focus) form.elements.newproj.focus();
+  };
+  npSync(false);
+  form.elements.project_id.addEventListener('change', () => npSync(true));
   form.querySelector('[data-act=dropdraft]').onclick = e => { e.preventDefault(); draft.del(key); openEdit(id, it); };
   const back = dlgShow(`main .it[data-id="${id}"]`);
   $('#ef').onsubmit = async e => {
     draft.del(key);
     const f = new FormData(e.target);
+    let pid = f.get('project_id');
+    if(pid === 'new') pid = (await api('/projects','POST',{title:f.get('newproj').trim()})).id;
     await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
-      project_id:f.get('project_id')?+f.get('project_id'):null, context:f.get('context'),
+      project_id:pid?+pid:null, context:f.get('context'),
       remind_at:f.get('remind')?Math.floor(new Date(f.get('remind')).getTime()/1000):null});
     await load(); back();
   };
@@ -1050,6 +1173,38 @@ function openEdit(id, found){
   };
   // Без confirm: удаление отменяется из тоста «Отменить»
   d.querySelector('[data-act=del]').onclick = () => { draft.del(key); d.close(); deleteItem(id); };
+}
+
+// «→ Project» на задаче во Inbox (SERBITO-354): выбрать проект или сразу создать новый. Задача уходит в Next
+// этого проекта, тост — с «Отменить» (вернуть список и проект, как были)
+function openToProject(id){
+  const it = findItem(id); if(!it) return;
+  const d = $('#dlg');
+  d.innerHTML = `<div id="tp"><h3 id="dlg-h" style="margin:0 0 4px">${t('pick_project')}</h3>
+    <p class="hint" style="margin:0 0 10px">${esc(it.title)}</p>
+    <div class="pjpick">${S.projects.map(p => `<button type="button" data-pick="${p.id}">#${esc(p.title)}</button>`).join('')}</div>
+    <label for="tp-new">${t('new_project')}</label>
+    <div class="cap" style="margin:0"><input id="tp-new" autocomplete="off"><button type="button" class="pri" data-pick="new">${t('create')}</button></div>
+    <div class="msg" id="tpmsg"></div>
+    <div class="row"><span></span><button type="button" data-tp="cancel">${t('cancel')}</button></div></div>`;
+  dlgShow(`main .it[data-id="${id}"] [data-act=toproj]`);
+  if(!S.projects.length) $('#tp-new').focus();
+  const pick = async b => {
+    let pid = b.dataset.pick, title;
+    if(pid === 'new'){
+      title = $('#tp-new').value.trim();
+      if(!title){ $('#tpmsg').textContent = t('project_name_needed'); return $('#tp-new').focus(); }
+      pid = (await api('/projects','POST',{title})).id;
+    } else title = S.projects.find(p => p.id === +pid)?.title;
+    const prev = {status:it.status, project_id:it.project_id ?? null};
+    try{ await api('/items/'+id, 'PATCH', {project_id:+pid, status:'next'}); }
+    catch{ $('#tpmsg').textContent = t('failed'); return; }
+    d.close(); await load();
+    toast(t('moved', {title:it.title, to:'#'+title}), {undo: () => api('/items/'+id, 'PATCH', prev)});
+  };
+  d.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => pick(b));
+  $('#tp-new').onkeydown = e => { if(e.key==='Enter'){ e.preventDefault(); pick(d.querySelector('[data-pick=new]')); } };
+  d.querySelector('[data-tp=cancel]').onclick = () => d.close();
 }
 
 // ── Проекты: переименование и удаление (с задачами или только снять проект с задач)
@@ -1088,16 +1243,34 @@ function openDeleteProject(pid){
   dlgShow(`[data-act=delproj][data-pid="${pid}"]`);
   d.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if(!b.dataset.del) return d.close();
-    try{ await projApi(pid, 'DELETE', null, '?items='+b.dataset.del); d.close(); if(S.pid===pid) S.pid=null; load(); }
+    try{ await projApi(pid, 'DELETE', null, '?items='+b.dataset.del); d.close();
+      if(S.pid===pid){ S.pid = null; history.replaceState(null, '', viewPath()); } load(); }
     catch(err){ $('#pdmsg').textContent = err.message; }
   });
 }
 
+// Куда ушла задача, видно не всегда: на странице проекта она в нём, в Waiting или Done — в Inbox. Кроме Inbox
+// (там она в списке или в Next ниже) — тост «… → куда» с «Отменить» (SERBITO-354)
+async function newProject(){
+  const inp = $('#np'), v = inp.value.trim();
+  if(!v){ $('#npmsg').textContent = t('project_name_needed'); return inp.focus(); }
+  const had = S.projects.find(p => p.title.toLowerCase() === v.toLowerCase());  // сервер вернёт тот же проект
+  await api('/projects','POST',{title:v});
+  await load();
+  toast(t(had ? 'project_exists' : 'project_created', {p:had ? had.title : v}));
+  $('#np')?.focus();
+}
+
 async function capture(){
   const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
-  inp.value=''; acClose(); draft.del('cap'); await api('/capture','POST',{text:v});
+  const pid = inp.dataset.pid ? +inp.dataset.pid : undefined;
+  inp.value=''; acClose(); draft.del('cap');
+  const it = await api('/capture','POST',{text:v, project_id:pid});
   ga('task_capture', {channel:'web'});  // только факт — текст задачи в GA не уходит
   await load(); $('#cap')?.focus();  // записываем подряд, не кликая в поле снова
+  if(it?.id && S.view!=='inbox')
+    toast(t('moved', {title:it.title, to:it.project ? '#'+it.project : L.moved_to[it.status]||it.status}),
+      {undo: () => api('/items/'+it.id, 'DELETE')});
 }
 
 // ── Подсказки в поле захвата и в заголовке карточки (SERBITO-298): «@» — существующие контексты,
@@ -1143,7 +1316,8 @@ function cardClick(e){
 }
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return cardClick(e);
-  if(el.tagName==='A' && el.getAttribute('href')?.startsWith('#')) e.preventDefault();  // раздел, а не якорь в адресе
+  if(el.tagName==='A' && el.dataset.view && (e.metaKey || e.ctrlKey || e.shiftKey)) return;  // раздел в новой вкладке
+  if(el.tagName==='A' && (el.dataset.view || el.getAttribute('href')?.startsWith('#'))) e.preventDefault();  // переход — сами
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
   if(act==='drawer') return drawer(!$('nav').classList.contains('open'));
   if(act==='umenu'){ const m = el.parentElement.querySelector('.umenu'); m.hidden = !m.hidden; el.setAttribute('aria-expanded', !m.hidden); return; }
@@ -1159,7 +1333,10 @@ document.addEventListener('click', async e => {
     e.preventDefault(); return openEdit(id);
   }
   if(act==='mv') return moveItem(id, el.dataset.st);
+  if(act==='toproj') return openToProject(id);
+  if(act==='dndtip') return dndTipDone();
   if(act==='undo') return toastUndo();
+  if(act==='ctxset') return TOAST?.pick?.(el.dataset.c);
   if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
   if(act==='logout'){ draft.clear(); await api('/logout','POST'); S.me = null; return location.assign(LANG==='en' ? '/en/' : '/'); }  // на лендинг: его текст — с сервера
@@ -1169,20 +1346,20 @@ document.addEventListener('click', async e => {
   }
   if(act==='lang'){  // явный выбор (или «Авто») — сильнее входа на /en/: подсказку и адрес /en/ забываем
     S.me = await api('/me','PATCH',{lang:el.dataset.l || null}); langHint.del();
-    if(pathEn()) history.replaceState(null, '', '/');
+    if(S.en){ S.en = false; history.replaceState(null, '', viewPath()); }
     setLang(S.me.lang || autoLang()); return render();
   }
-  if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
+  if(act==='newproj') return newProject();
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
-  if(act==='back'){ e.preventDefault(); S.pid=null; return load(); }
+  if(act==='back') return go('projects');
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
   if(el.dataset.view){
     S.toBurger = !!el.closest('nav.open');  // выбрали в выезжающем меню — оно закроется, фокус вернётся на ☰
-    S.view=el.dataset.view; S.ctx=null; S.sel=null; S.zone='main'; S.pid=el.dataset.pid?+el.dataset.pid:null; return load();
+    S.zone='main'; return go(el.dataset.view, el.dataset.pid ? +el.dataset.pid : null);
   }
-  if(el.dataset.pid && el.classList.contains('pj')){ S.pid=+el.dataset.pid; return load(); }
+  if(el.dataset.pid && el.classList.contains('pj')) return go('projects', +el.dataset.pid);
 });
 document.addEventListener('change', async e => {
   if(e.target.dataset.act==='donemode'){  // режим показа выполненных — запоминается в проекте на сервере
@@ -1274,7 +1451,7 @@ function captureKey(e){
   if(e.code!=='KeyC' && e.code!=='KeyN') return false;
   if(e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || $('#dlg').open) return false;
   if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return false;
-  const cap = $('#cap'); if(!cap) return false;
+  const cap = $('#cap') || $('#np'); if(!cap) return false;  // на экране проектов — поле нового проекта
   e.preventDefault();  // иначе буква впечатается в поле
   closeDrawer(); S.zone = 'main'; S.sel = null; selDraw();
   cap.focus(); cap.setSelectionRange(cap.value.length, cap.value.length);

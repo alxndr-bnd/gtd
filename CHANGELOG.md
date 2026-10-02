@@ -16,6 +16,38 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+- Inbox tasks have a "→ Project" button: pick a project or create a new one right there. The task dialog's project list also has "+ New project".
+  - RU: У задач в Inbox есть кнопка «→ Project»: выберите проект или сразу создайте новый. В списке проектов в карточке задачи тоже есть «+ Новый проект».
+- A project page has its own "Add a task" field: what you type there goes straight into that project. Elsewhere, a message tells you where a new task went, with Undo.
+  - RU: На странице проекта есть своё поле «Добавить задачу»: всё, что вы там пишете, попадает сразу в этот проект. В других разделах сообщение показывает, куда ушла новая задача, и её можно отменить.
+- After you move a task from the Inbox to Next, the message offers your usual @contexts: one tap adds one, so the Next filter works.
+  - RU: Когда вы переносите задачу из Inbox в Next, сообщение предлагает ваши обычные @контексты: одно нажатие — и контекст добавлен, фильтр в Next работает.
+- The "First steps" checklist links to the Telegram bot.
+  - RU: В чек-листе «Первые шаги» есть ссылка на Telegram-бота.
+
+### Changed
+- The Back button and the phone's back gesture now move between sections, projects and an open task instead of leaving the app. Each section has its own address, so a reload keeps you where you were.
+  - RU: Кнопка «Назад» и жест «назад» на телефоне теперь переходят между разделами, проектами и открытой задачей, а не уводят из приложения. У каждого раздела свой адрес, и после перезагрузки вы остаётесь там же.
+- The Projects screen has a single labelled "New project" field. Pressing Create with an empty name tells you what's missing, and a new project is confirmed with a message.
+  - RU: На экране проектов осталось одно подписанное поле «Новый проект». «Создать» без названия подсказывает, чего не хватает, а созданный проект подтверждается сообщением.
+- In Russian, the GTD list names (Inbox, Next, Waiting, Projects, Someday, Reference, Weekly Review) are now used the same way everywhere — in the app, on the site and in the bot — with the text around them in Russian.
+  - RU: В русской версии названия списков GTD (Inbox, Next, Waiting, Projects, Someday, Reference, Weekly Review) теперь везде одинаковые — в приложении, на сайте и в боте, а текст вокруг них по-русски.
+- On a touch screen, tasks have a ⠿ handle: drag it to reorder right away, without holding. A one-time tip explains how to reorder.
+  - RU: На сенсорном экране у задач есть ручка ⠿: потяните за неё, чтобы сразу переставить задачу, без удержания. Разовая подсказка объясняет, как переставлять.
+- On a wide screen, the capture button now says "Add" next to its icon.
+  - RU: На широком экране у кнопки добавления рядом со значком есть подпись «Добавить».
+
+### Fixed
+- On a phone, the checkbox and the task number are easier to tap: each now has a finger-sized area.
+  - RU: На телефоне галочку и номер задачи легче нажать: у каждого теперь зона под палец.
+- After the "First steps" card goes away, the Inbox no longer leaves an empty gap above the capture field.
+  - RU: Когда карточка «Первые шаги» исчезает, над полем ввода в Inbox больше не остаётся пустого места.
+- The sign-in buttons are the same width and say the same thing ("Sign in with…"), and the Telegram button no longer looks disabled.
+  - RU: Кнопки входа одной ширины и начинаются одинаково («Войти…»), а кнопка Telegram больше не выглядит выключенной.
+- A /ru/ address now opens the Russian site instead of a "Page not found" error, and a wrong address always shows a proper "Page not found" page.
+  - RU: Адрес /ru/ теперь открывает русский сайт, а не ошибку «Страница не найдена», а неверный адрес всегда показывает нормальную страницу «Страница не найдена».
+
 ## [0.25.0] - 2026-10-02
 
 ### Fixed

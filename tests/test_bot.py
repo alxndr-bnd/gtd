@@ -182,7 +182,7 @@ def test_start_greeting_explains_inbox_with_examples(tg, monkeypatch):
     monkeypatch.setattr(A, "BASE_URL", "https://gtd.serbito.rs")
     bot_message("/start")
     text, markup = tg[-1][1]["text"], tg[-1][1]["reply_markup"]
-    assert "попадёт во Входящие" in text
+    assert "попадёт в Inbox" in text
     assert "«позвонить маме завтра в 10:00» → напомню" in text
     assert "«отчёт #Работа @комп» → сразу в проект и контекст" in text
     assert markup["inline_keyboard"][1] == [{"text": A.tr("ru", "btn_site"), "url": "https://gtd.serbito.rs"}]

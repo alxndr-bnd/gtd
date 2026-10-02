@@ -364,19 +364,19 @@ TEXTS = {
                 "• «Позвонить в банк завтра в 10:00» → напоминание\n"
                 "• «через 2 часа проверить деплой»\n"
                 "• «в пятницу отчёт #Клиент_X @работа» → сразу в Next, проект и контекст\n\n"
-                "/inbox — что в инбоксе\n/next — следующие действия\n/done 12 — закрыть задачу №12\n"
+                "/inbox — что в Inbox\n/next — что в Next\n/done 12 — закрыть задачу №12\n"
                 "/login — ссылка для входа в веб-интерфейс\n"
                 "/email you@example.com — привязать почту: входить на сайте по коду или через Google\n"
                 "/about — что такое GTD",
         "ready": "GTD-бот готов.\n\n",
-        "start": "Пришли любую мысль — она попадёт во Входящие, а разберёшь потом.\n\n"
+        "start": "Пришли любую мысль — она попадёт в Inbox, а разберёшь потом.\n\n"
                  "• «позвонить маме завтра в 10:00» → напомню\n"
                  "• «отчёт #Работа @комп» → сразу в проект и контекст\n\n"
                  "Все команды — /help",
         "about": "GTD (Getting Things Done) — метод Дэвида Аллена из его книги «Getting Things Done» "
                  "(по-русски — «Как привести дела в порядок»). Голова — для идей, а не для хранения: всё, что требует "
-                 "внимания, сразу записываешь во Входящие, а потом решаешь, что это и какой следующий конкретный шаг. "
-                 "Шаги ложатся в списки — Next, Waiting, проекты, Someday, — и раз в неделю ты их пересматриваешь, "
+                 "внимания, сразу записываешь в Inbox, а потом решаешь, что это и какой следующий конкретный шаг. "
+                 "Шаги ложатся в списки — Next, Waiting, Projects, Someday, — и раз в неделю ты их пересматриваешь, "
                  "так что ничего не теряется.\n\nПодробнее: {url}/about",
         "first_task": "Готово! Можно добавить срок — «завтра в 10:00», — а разобрать всё удобнее на сайте: {url}",
         "btn_email": "📧 Добавить email", "btn_about": "ℹ️ Как это работает", "btn_site": "🌐 Открыть сайт",
@@ -685,11 +685,12 @@ END_POS = "(select coalesce(max(position), 0) + 1024 from items where user_id=%s
 END_PPOS = "(select coalesce(max(ppos), 0) + 1024 from items where user_id=%s and project_id=%s)"
 
 
-def capture(uid: int, raw: str, source: str = "web") -> dict:
-    """Умный захват: текст [@контекст] [#проект] [когда] -> задача."""
+def capture(uid: int, raw: str, source: str = "web", project_id: int | None = None) -> dict:
+    """Умный захват: текст [@контекст] [#проект] [когда] -> задача. project_id — проект страницы, на которой
+    записали (SERBITO-354); #проект в самом тексте важнее."""
     track(uid, "telegram" if source == "telegram" else "web")
     p = parse_task(uid, raw)
-    title, ctx, proj_id, remind = p["title"], p["context"], p["project_id"], p["remind_at"]
+    title, ctx, proj_id, remind = p["title"], p["context"], p["project_id"] or project_id, p["remind_at"]
     status = "next" if (ctx or proj_id) else "inbox"
     iid = run(
         # Номер — из счётчика пользователя, атомарно в одной команде (изменяющий подзапрос — только в WITH)
@@ -785,7 +786,7 @@ def tg_known(frm: dict):
 # — всем прочим; поэтому "" — английский, а языки, которым по правилу pages.lang_of положен русский, — явно
 BOT_PROFILE = {
     "ru": ("Записывай задачи и мысли в один тап — разберёшь потом. Работает по методу GTD Дэвида Аллена: "
-           "Входящие, следующие действия, проекты, напоминания. Всё синхронизируется с сайтом gtd.serbito.rs. "
+           "Inbox, следующие действия, проекты, напоминания. Всё синхронизируется с сайтом gtd.serbito.rs. "
            "Бесплатно.",
            "GTD в Telegram: записывай задачи в один тап, напоминания и проекты. gtd.serbito.rs"),
     "en": ("Capture tasks and ideas in one tap — sort them out later. Built on David Allen's GTD method: "
@@ -793,7 +794,7 @@ BOT_PROFILE = {
            "GTD in Telegram: capture tasks in one tap, reminders and projects. gtd.serbito.rs"),
 }
 BOT_COMMANDS = {
-    "ru": [{"command": "inbox", "description": "Инбокс"}, {"command": "next", "description": "Следующие действия"},
+    "ru": [{"command": "inbox", "description": "Что в Inbox"}, {"command": "next", "description": "Что в Next"},
            {"command": "done", "description": "Закрыть задачу: /done 12"},
            {"command": "login", "description": "Ссылка для входа в веб"},
            {"command": "email", "description": "Привязать почту"},
@@ -2248,7 +2249,12 @@ def api_capture(body: dict, uid: int = Depends(current_user)):
     text = (body.get("text") or "").strip()
     if not text:
         raise HTTPException(400, "empty")
-    return capture(uid, text, "web")
+    pid = body.get("project_id")  # записали на странице проекта — задача в нём (SERBITO-354)
+    if pid is not None:
+        if type(pid) is not int:
+            raise HTTPException(400, "project_id")
+        project_get(uid, pid)  # только свой: чужой — 404
+    return capture(uid, text, "web", pid)
 
 
 @app.patch("/api/items/{iid}")
@@ -2552,12 +2558,29 @@ def web_manifest(request: Request):
                         headers={"Vary": "Accept-Language", "Cache-Control": "public, max-age=86400"})
 
 
+@app.get("/ru", include_in_schema=False)
+@app.get("/ru/{rest:path}", include_in_schema=False)
+def ru_prefix(request: Request, rest: str = ""):
+    """Русский — на /, английский — на /en/ (SERBITO-354, G10). Угаданный /ru/… ведёт на ту же страницу без
+    префикса, а не в 404. Ведущие / и \\ срезаны: //host и /\\host браузер понял бы как чужой сайт."""
+    to = "/" + rest.lstrip("/\\")
+    if request.url.query:
+        to += "?" + request.url.query
+    return RedirectResponse(to, status_code=308)
+
+
+def wants_json(request: Request) -> bool:
+    """Клиент просит JSON, а не страницу: в Accept есть application/json и нет text/html."""
+    accept = request.headers.get("accept", "")
+    return "application/json" in accept and "text/html" not in accept
+
+
 @app.exception_handler(StarletteHTTPException)
 async def not_found_page(request: Request, exc: StarletteHTTPException):
-    """404 в браузере — страница с логотипом и ссылками вместо сырого JSON. /api/* и запросы без text/html
-    в Accept (fetch, curl, боты) получают JSON, как раньше; остальные ошибки — тоже."""
+    """404 — страница с логотипом и ссылками вместо сырого JSON: браузеру, curl, превью ссылок (SERBITO-354, G10).
+    /api/* и клиенты, которые просят JSON, получают JSON, как раньше; остальные ошибки — тоже."""
     path = request.url.path
-    if exc.status_code != 404 or (path + "/").startswith("/api/") or "text/html" not in request.headers.get("accept", ""):
+    if exc.status_code != 404 or (path + "/").startswith("/api/") or wants_json(request):
         return await http_exception_handler(request, exc)
     en = path == "/en" or path.startswith("/en/")
     lang = "en" if en else pages.pick_lang(request.headers.get("accept-language"))
@@ -2571,3 +2594,21 @@ def item_page(num: int, request: Request):
     r = app_page(request)
     r.headers["X-Robots-Tag"] = "noindex"
     return r
+
+
+# Адреса разделов и проектов (SERBITO-354): переход в приложении — запись в истории браузера, и Back (кнопка,
+# жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Сервер отдаёт на них то же приложение, что
+# на /i/N: раздел выбирает фронт по адресу. Inbox — это / (и /en/). Список — тот же, что ROUTE_VIEWS в index.html
+APP_VIEWS = ("next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review", "account", "stats")
+
+
+def section_page(request: Request):
+    r = app_page(request, "en" if request.url.path.startswith("/en/") else "ru")
+    r.headers["X-Robots-Tag"] = "noindex"
+    return r
+
+
+for _prefix in ("", "/en"):
+    for _view in APP_VIEWS:
+        app.add_api_route(f"{_prefix}/{_view}", section_page, methods=["GET"], include_in_schema=False)
+    app.add_api_route(_prefix + "/p/{pid:int}", section_page, methods=["GET"], include_in_schema=False)

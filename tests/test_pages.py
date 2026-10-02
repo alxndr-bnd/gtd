@@ -93,7 +93,7 @@ def test_about_content(client):
     ru = client.get("/about").text
     for w in ("Дэвида Аллена", "«Getting Things Done» (2001", "«Как привести дела в порядок»",
               "Собрать", "Обработать", "Организовать", "Пересмотреть", "Делать",
-              "Поле захвата", "Inbox", "Next, Waiting, Проекты, Someday, Reference, Календарь", "Weekly Review",
+              "Поле захвата", "Inbox", "Next, Waiting, Projects, Someday, Reference, Календарь", "Weekly Review",
               "@контексту", "позвонить маме завтра в 10:00", "отчёт #Работа @комп", "@gtdsrbot",
               "<kbd>C</kbd>", "<kbd>N</kbd>", "<kbd>Enter</kbd>", "<kbd>↑</kbd>"):
         assert w in ru, w
@@ -234,6 +234,25 @@ def test_item_page_noindex(client):
     assert r.status_code == 200 and r.headers["x-robots-tag"] == "noindex"
     assert "<title>GTD</title>" in r.text and 'id="signin"' not in r.text  # личная ссылка — не лендинг
     assert "noindex" not in client.get("/").headers.get("x-robots-tag", "")
+
+
+APP_PATHS = ["/next", "/waiting", "/scheduled", "/projects", "/someday", "/reference", "/done", "/review", "/account",
+             "/stats", "/p/7"]
+
+
+@pytest.mark.parametrize("path", APP_PATHS + ["/en" + p for p in APP_PATHS])
+def test_section_addresses_open_the_app(client, path):
+    """SERBITO-354: у каждого раздела и проекта свой адрес — Back в браузере ходит по ним, а ссылку можно открыть
+    заново. Это то же приложение, что /i/N: личное, без лендинга, не для поисковиков."""
+    r = client.get(path)
+    assert r.status_code == 200 and r.headers["x-robots-tag"] == "noindex"
+    assert "function loginScreen" in r.text and 'id="signin"' not in r.text
+    assert f'<html lang="{"en" if path.startswith("/en/") else "ru"}">' in r.text
+
+
+@pytest.mark.parametrize("path", ["/inbox", "/p/x", "/nextt", "/en/p/x"])
+def test_unknown_section_is_404(client, path):
+    assert client.get(path).status_code == 404
 
 
 def test_absolute_urls_follow_base_url(monkeypatch, client):

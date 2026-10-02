@@ -58,11 +58,18 @@ no language at all — Russian.
   is stored in `users.tg_lang` — reminders use it. `/login` for an English user links to `/en/`.
 - Texts: SPA — the `#i18n` dictionary in `static/index.html`; bot and server — `TEXTS` in `app.py`. ru/en keys
   match and English has no Cyrillic (`tests/test_i18n.py`).
+- GTD terms in Russian (owner decision, SERBITO-354): the lists — Inbox, Next, Waiting, Projects, Someday, Reference,
+  Weekly Review — are proper nouns, written in English and not declined (“в Inbox”, “из Next”); the sentences around
+  them are Russian. Other sections (Календарь, Готово, Аккаунт) are ordinary UI words and are translated. Same rule
+  in the app, the public pages and the bot (`test_ru_gtd_terms_are_proper_nouns`).
 
 ## Public pages and UI
 
 App sections: Inbox · Next (filter by @context) · Waiting · Calendar/reminders · Projects (⚠ without a next
 action) · Someday · Reference · Done · Weekly Review.
+Every section has its own address — `/` (Inbox), `/next`, `/projects`, `/p/<id>` (a project), `/account`… and the
+same under `/en/` — so Back (button or phone gesture) returns to the previous section instead of leaving the site.
+A task card opened from a list is its own history entry `/i/<N>`: Back closes it. Server: `app.APP_VIEWS`.
 
 Public pages are `pages.py`; the server renders the text (for search engines): landing for guests on `/` and
 `/en/`, “How it works” on `/about` and `/en/about`, privacy policy on `/privacy`, “What's new” on `/changes`
@@ -73,8 +80,8 @@ The running version (`APP_VERSION` from the deploy tag, else `dev`) is in every 
 come from `scripts/og_image.py`. The logo is the “Inbox” mark (`pages.mark()`, color `#0F766E` — also the site
 accent); favicon and phone icons in `static/` are built by `scripts/icons.py`.
 Install to home screen — `/manifest.webmanifest` (`pages.manifest()`, description in the browser language), no
-service worker. Unknown address in a browser — 404 page (`pages.not_found()`); `/api/*` and non-`text/html`
-requests get JSON.
+service worker. Unknown address — 404 page (`pages.not_found()`), also for curl and link previews; only `/api/*`
+and clients that ask for `application/json` get JSON. `/ru/…` redirects (308) to the same page without the prefix.
 
 ## Analytics
 

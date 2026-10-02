@@ -29,7 +29,7 @@ WAIT_MS = 5000  # потолок ожидания одного условия р
 
 # Кнопка Google грузит скрипт с accounts.google.com — в тестах вместо него заглушка с тем же API
 GSI_STUB = ("window.google={accounts:{id:{initialize(){},"
-            "renderButton(el){el.textContent='Google';}}}};")
+            "renderButton(el,o){el.textContent='Google';window.__gsi=o;}}}};")  # o — параметры кнопки для проверки
 SECTIONS = ["inbox", "next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review"]
 
 
@@ -82,10 +82,11 @@ class Watch:
     """Страница, которая копит всё, что считается поломкой: ошибки консоли, необработанные исключения,
     ответы ≥400 своего сервера и попытки сходить наружу."""
 
-    def __init__(self, browser, base, lang="ru", stubs=None, viewport=(1280, 900)):
-        """stubs — {начало внешнего URL: тело JS}: локальные подмены внешних скриптов (GA на «проде»)."""
+    def __init__(self, browser, base, lang="ru", stubs=None, viewport=(1280, 900), touch=False):
+        """stubs — {начало внешнего URL: тело JS}: локальные подмены внешних скриптов (GA на «проде»).
+        touch — телефон с сенсорным экраном: pointer: coarse."""
         self.base, self.errors, self.expected_404, self.stubs = base, [], set(), stubs or {}
-        self.ctx = browser.new_context(locale="en-US" if lang == "en" else "ru-RU",
+        self.ctx = browser.new_context(locale="en-US" if lang == "en" else "ru-RU", has_touch=touch, is_mobile=touch,
                                        viewport={"width": viewport[0], "height": viewport[1]})
         self.ctx.route("**/*", self._route)
         self.page = self.ctx.new_page()
@@ -160,8 +161,8 @@ class Watch:
 def watch(browser, server):
     opened = []
 
-    def make(lang="ru", viewport=(1280, 900)):
-        w = Watch(browser, server, lang, viewport=viewport)
+    def make(lang="ru", viewport=(1280, 900), touch=False):
+        w = Watch(browser, server, lang, viewport=viewport, touch=touch)
         opened.append(w)
         return w
     yield make
@@ -213,9 +214,9 @@ def test_app_sections(watch, monkeypatch, lang):
     for has_items in (False, True):
         if has_items:
             ids = seed(uid)
-            w.page.reload()
+            w.goto("/")
             w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка с задачами")
-        for view in SECTIONS + ["inbox"]:  # и обратно во Входящие: переходы между разделами
+        for view in SECTIONS + ["inbox"]:  # и обратно в Inbox: переходы между разделами
             open_section(w, view, has_items, lang)
         # «Аккаунт» — в свёрнутом меню пользователя; кнопка Google — из заглушки GSI
         w.page.click("nav .navfoot button.user")
@@ -247,6 +248,7 @@ def test_app_sections(watch, monkeypatch, lang):
     ("/", 200, '#signin a[href="/dev-login"]'),   # лендинг гостю: кнопки входа кладёт JS
     ("/en/", 200, '#signin a[href="/dev-login"]'),
     ("/i/1", 200, '#root .login a[href="/dev-login"]'),  # ссылка на задачу без входа — экран входа
+    ("/next", 200, '#root .login a[href="/dev-login"]'),  # адрес раздела без входа — тоже (SERBITO-354)
     ("/about", 200, "body"),
     ("/en/about", 200, "body"),
     ("/changes", 200, "section.rel"),
@@ -650,7 +652,7 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
 
 
 # ── Экран Inbox: что делать дальше (SERBITO-326) ──
-INBOX_TEXT = {"ru": {"empty": "Входящие пусты", "due": "Скоро срок", "next": "Next", "over": "просрочено"},
+INBOX_TEXT = {"ru": {"empty": "Inbox пуст", "due": "Скоро срок", "next": "Next", "over": "просрочено"},
               "en": {"empty": "Inbox is empty", "due": "Due soon", "next": "Next", "over": "overdue"}}
 
 
@@ -763,10 +765,7 @@ def test_project_completed_modes(watch, lang):
     assert not w.page.is_visible(f'main .it[data-id="{fresh}"]')  # блок свёрнут
     w.page.click("main details.donesec summary")
     assert cards("main details.donesec .it") == [fresh, old]  # свежие сверху
-    w.page.reload()  # после перезагрузки — снова Inbox: открываем проект заново
-    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка")
-    w.page.click('nav > a[data-view="projects"]')
-    w.page.click("main .it.pj .t")
+    w.page.reload()  # адрес проекта (SERBITO-354) — после перезагрузки тот же проект
     w.wait("main details.donesec", f"[{lang}] после перезагрузки")
     assert w.page.input_value("main select.dmode") == "section"
 
@@ -829,9 +828,8 @@ def test_drag_to_reorder_with_mouse(watch):
     until(lambda: db_order(uid, "next") == [second, third, first], "порядок не сохранился на сервере")
     w.page.wait_for_timeout(300)
     assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
-    w.page.reload()
-    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка")
-    w.page.click('nav > a[data-view="next"]')
+    w.page.reload()  # адрес раздела (SERBITO-354) — после перезагрузки снова Next
+    w.wait('nav > a.on[data-view="next"]', f"[{lang}] перезагрузка")
     w.wait('main .dnd > .it', f"[{lang}] Next после перезагрузки")
     assert screen_order(w) == [second, third, first]
     # С фильтром @контекста — тот же список, перестановка работает
@@ -1000,7 +998,7 @@ def test_task_dialog_labels_and_focus_return(watch):
     assert w.page.get_by_role("dialog", name="Задача #1").count() == 1
     fields = w.page.eval_on_selector_all("#ef input, #ef select, #ef textarea",
                                          "els => els.map(x => [x.name, x.labels[0]?.textContent.trim() || ''])")
-    assert len(fields) == 6 and all(label for _, label in fields), fields
+    assert len(fields) == 7 and all(label for _, label in fields), fields  # 7-е — имя нового проекта (SERBITO-354)
     w.page.keyboard.press("Escape")
     w.page.wait_for_function("!document.querySelector('#dlg[open]')", timeout=WAIT_MS)
     assert w.page.evaluate(FOCUSED)["card"] == str(ids["inbox"])
@@ -1225,4 +1223,371 @@ def test_signin_widgets_load_when_visible(prod_browser, server, monkeypatch):
         assert w.page.evaluate(below) == y
         w.check("итог")
     finally:
+        w.close()
+
+
+# ── SERBITO-354: gtd UX ──
+def wait_db(w, cond, what):
+    """Как until, но ждём через Playwright: пока тест спит в time.sleep, перехват запросов (ctx.route) не крутится
+    и запрос страницы к серверу стоит."""
+    deadline = time.monotonic() + WAIT_MS / 1000
+    while not cond():
+        assert time.monotonic() < deadline, what
+        w.page.wait_for_timeout(50)
+    w.check(what)
+
+
+def path_is(w, path, what):
+    """Ждём адрес: история и перерисовка после popstate — асинхронные."""
+    try:
+        w.page.wait_for_function("p => location.pathname === p", arg=path, timeout=WAIT_MS)
+    except PWTimeout:
+        pytest.fail(f"{what}: адрес {w.page.evaluate('location.pathname')}, ждали {path}", pytrace=False)
+    w.check(what)
+
+
+def test_back_button_stays_in_app(watch):
+    """G1: каждый раздел и проект — свой адрес и запись в истории. Back (кнопка браузера, жест на телефоне) ведёт
+    в прошлый раздел, а не с сайта; открытая карточка закрывается по Back; Forward возвращает. Адрес раздела
+    открывается заново после перезагрузки."""
+    w = watch()
+    ids = smoke_user(w)
+    pid = A.row("select project_id from items where id=%s", (ids["proj"],))["project_id"]
+    assert w.page.get_attribute('nav > a[data-view="next"]', "href") == "/next"
+    w.page.click('nav > a[data-view="next"]')
+    path_is(w, "/next", "Next")
+    w.page.click('nav > a[data-view="projects"]')
+    path_is(w, "/projects", "Projects")
+    w.page.click("main .it.pj .t")
+    path_is(w, f"/p/{pid}", "проект")
+    w.wait('main [data-act="back"]', "проект открыт")
+    w.page.click("main .it .t")
+    w.wait("#dlg[open] #ef", "карточка")
+    path_is(w, "/i/3", "карточка")
+
+    w.page.go_back()  # карточка закрывается, проект на месте
+    path_is(w, f"/p/{pid}", "Back из карточки")
+    w.page.wait_for_selector("#dlg:not([open])", state="attached", timeout=WAIT_MS)
+    assert w.page.locator('main [data-act="back"]').count()
+    w.page.go_back()
+    path_is(w, "/projects", "Back из проекта")
+    w.wait("main .it.pj", "список проектов")
+    w.page.go_back()
+    path_is(w, "/next", "Back в Next")
+    w.wait('nav > a.on[data-view="next"]', "Next после Back")
+    w.page.go_forward()
+    path_is(w, "/projects", "Forward")
+    w.wait('nav > a.on[data-view="projects"]', "Projects после Forward")
+    w.page.go_back()
+    w.page.go_back()
+    path_is(w, "/", "Back в Inbox")
+    w.wait('nav > a.on[data-view="inbox"]', "Inbox после Back")
+
+    # Адрес раздела переживает перезагрузку; проект — тоже
+    w.goto("/waiting")
+    w.wait('nav > a.on[data-view="waiting"]', "/waiting напрямую")
+    w.goto(f"/p/{pid}")
+    w.wait('main [data-act="back"]', "/p/N напрямую")
+    # «← Projects» — тоже переход с записью в истории
+    w.page.click('main [data-act="back"]')
+    path_is(w, "/projects", "← Projects")
+    w.page.go_back()
+    path_is(w, f"/p/{pid}", "Back к проекту")
+    w.wait('main [data-act="back"]', "проект после Back")
+    w.check("итог")
+
+
+def test_card_link_closes_to_its_section(watch):
+    """Карточка, открытая прямой ссылкой /i/N, закрывается в Inbox (/), без лишней записи в истории; на /en/…
+    разделы остаются под /en/."""
+    w = watch("en")
+    smoke_user(w, "en")
+    w.goto("/i/1")
+    w.wait("#dlg[open] #ef", "карточка по ссылке")
+    w.page.keyboard.press("Escape")
+    path_is(w, "/", "закрыта")
+    w.goto("/en/next")
+    w.wait('nav > a.on[data-view="next"]', "/en/next")
+    assert w.page.evaluate("document.documentElement.lang") == "en"
+    w.page.click('nav > a[data-view="someday"]')
+    path_is(w, "/en/someday", "раздел под /en/")
+    w.page.go_back()
+    path_is(w, "/en/next", "Back под /en/")
+    w.wait('nav > a.on[data-view="next"]', "Next после Back")
+    w.check("итог")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_capture_on_project_page(watch, lang):
+    """Items 2c, 3: на странице проекта поле «добавить задачу» — под его заголовком и пишет в этот проект; тост
+    говорит, куда ушла задача. В других разделах (кроме Inbox) тост тоже говорит куда — задача не пропадает молча."""
+    w = watch(lang)
+    ids = smoke_user(w, lang)
+    pid = A.row("select project_id from items where id=%s", (ids["proj"],))["project_id"]
+    w.goto(f"/p/{pid}")
+    w.wait('main [data-act="back"]', "проект")
+    order = w.page.eval_on_selector_all("main h2.pjh, main #cap", "els => els.map(e => e.tagName)")
+    assert order == ["H2", "TEXTAREA"], order  # поле — под заголовком проекта
+    assert "Проект Альфа" in w.page.get_attribute("#cap", "placeholder")
+    assert "Проект Альфа" in w.page.get_attribute('main [data-act="capture"]', "aria-label")
+    w.page.fill("#cap", "Купить плитку")
+    w.page.press("#cap", "Enter")
+    w.wait('main .dnd .it .t:text-is("Купить плитку")', "задача в списке проекта")
+    it = A.row("select project_id, status from items where title='Купить плитку'")
+    assert (it["project_id"], it["status"]) == (pid, "next")
+    w.wait("#toast:not([hidden])", "тост")
+    assert "#Проект Альфа" in w.page.inner_text("#toast .tx")
+    w.page.click('#toast [data-act="undo"]')  # «Отменить» — задачи нет
+    wait_db(w, lambda: not A.row("select id from items where title='Купить плитку'"), "отмена записи")
+
+    w.page.click('nav > a[data-view="waiting"]')
+    w.wait('nav > a.on[data-view="waiting"]', "Waiting")
+    w.page.fill("#cap", "Мысль")
+    w.page.press("#cap", "Enter")
+    w.wait("#toast:not([hidden])", "тост в Waiting")
+    assert "Inbox" in w.page.inner_text("#toast .tx")
+    assert A.row("select status, project_id from items where title='Мысль'") == {"status": "inbox", "project_id": None}
+    w.check("итог")
+
+
+def test_inbox_item_to_project(watch):
+    """Items 2a, 2b: у задачи во Inbox есть «→ Project» — выбрать проект или создать новый, задача уходит в него
+    (в Next) с тостом и «Отменить». В карточке задачи в списке проектов есть «+ Новый проект»."""
+    w = watch()
+    ids = smoke_user(w)
+    alpha = A.row("select project_id from items where id=%s", (ids["proj"],))["project_id"]
+    card = f'main .it[data-id="{ids["inbox"]}"]'
+    w.page.click(f'{card} [data-act="toproj"]')
+    w.wait("#dlg[open] #tp", "выбор проекта")
+    assert w.page.locator("#dlg").get_attribute("aria-labelledby") == "dlg-h"
+    w.page.click('#tp [data-pick]:has-text("#Проект Альфа")')
+    wait_db(w, lambda: A.row("select project_id, status from items where id=%s", (ids["inbox"],))
+          == {"project_id": alpha, "status": "next"}, "задача не ушла в проект")
+    w.wait("#toast:not([hidden])", "тост")
+    assert "#Проект Альфа" in w.page.inner_text("#toast .tx")
+    w.page.click('#toast [data-act="undo"]')  # вернуть как было: Inbox, без проекта
+    wait_db(w, lambda: A.row("select project_id, status from items where id=%s", (ids["inbox"],))
+          == {"project_id": None, "status": "inbox"}, "отмена")
+
+    # Новый проект прямо из Inbox; пустое название — подсказка, проект не создан
+    w.wait(f'{card} [data-act="toproj"]', "кнопка после отмены")
+    w.page.click(f'{card} [data-act="toproj"]')
+    w.wait("#dlg[open] #tp", "выбор проекта снова")
+    n = A.row("select count(*) n from projects")["n"]
+    w.page.click('#tp [data-pick="new"]')
+    assert w.page.inner_text("#tpmsg") and A.row("select count(*) n from projects")["n"] == n
+    w.page.fill("#tp-new", "Отпуск")
+    w.page.press("#tp-new", "Enter")
+    wait_db(w, lambda: (A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s",
+                         (ids["inbox"],)) or {}).get("title") == "Отпуск", "новый проект из Inbox")
+    w.page.wait_for_selector("#dlg:not([open])", state="attached", timeout=WAIT_MS)
+
+    # Карточка задачи: «+ Новый проект» в списке проектов
+    w.page.click('nav > a[data-view="someday"]')
+    w.page.click(f'main .it[data-id="{ids["someday"]}"] .t')
+    w.wait("#dlg[open] #ef", "карточка")
+    assert w.page.is_hidden("#ef-newproj")
+    w.page.select_option("#ef-project", "new")
+    assert w.page.is_visible("#ef-newproj") and w.page.evaluate("document.activeElement.id") == "ef-newproj"
+    w.page.fill("#ef-newproj", "Ремонт")
+    w.page.click("#ef button.pri")
+    wait_db(w, lambda: (A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s",
+                         (ids["someday"],)) or {}).get("title") == "Ремонт", "новый проект из карточки")
+    w.check("итог")
+
+
+def test_projects_screen_one_clear_input(watch):
+    """Item 4 (G4): на экране проектов одно поле — «Новый проект» с подписью; общего поля захвата нет. «Создать»
+    без названия — подсказка, а не тишина; создан — тост; такой уже есть — тост об этом. Пустой экран не повторяет
+    подзаголовок дважды."""
+    A.run("insert into users(tg_id,name,created,checklist_hidden) values(0,'Smoke',%s,true)", (int(time.time()),))
+    w = watch()
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    w.page.click('nav > a[data-view="projects"]')
+    w.wait("main #np", "экран проектов")
+    assert not w.page.locator("main #cap").count()
+    assert w.page.eval_on_selector("#np", "el => el.labels[0]?.textContent.trim()")
+    main = w.page.inner_text("main")
+    assert main.count("больше одного шага") == 1, main  # подзаголовок и пустой экран не дублируют друг друга
+    w.page.click('main [data-act="newproj"]')
+    assert w.page.inner_text("#npmsg") and w.page.evaluate("document.activeElement.id") == "np"
+    assert not A.rows("select id from projects")
+    w.page.fill("#np", "Дача")
+    w.page.press("#np", "Enter")
+    w.wait('main .it.pj .t:text-is("Дача")', "проект в списке")
+    w.wait("#toast:not([hidden])", "тост: создан")
+    assert "Дача" in w.page.inner_text("#toast .tx") and w.page.input_value("#np") == ""
+    assert not w.page.inner_text("#npmsg")
+    w.page.fill("#np", "дача")
+    w.page.click('main [data-act="newproj"]')
+    w.wait('#toast .tx:has-text("уже есть")', "тост: уже есть")
+    assert len(A.rows("select id from projects")) == 1
+    w.check("итог")
+
+
+def test_touch_drag_grip_and_tip(watch):
+    """Item 6 (G6): на сенсорном экране у карточки видна ручка ⠿ — тянуть за неё можно сразу, без удержания; над
+    списком — разовая подсказка, как переставлять. Перетащил один раз (или закрыл) — подсказки больше нет.
+    Мышью ручки нет: тянется вся карточка."""
+    w = watch(viewport=PHONE, touch=True)
+    uid = A.run("insert into users(tg_id,name,created,checklist_hidden) values(0,'Smoke',%s,true) returning id",
+                (int(time.time()),))
+    first, second, third = (A.capture(uid, f"{t} @дом")["id"] for t in ("Первая", "Вторая", "Третья"))
+    w.goto("/dev-login")
+    w.goto("/next")  # на телефоне меню в выезжающей панели — сразу по адресу раздела
+    w.wait('main .dnd > .it', "Next")
+    assert w.page.evaluate("matchMedia('(pointer: coarse)').matches")
+    grip = f'main .it[data-id="{first}"] .grip'
+    assert w.page.is_visible(grip)
+    box = w.page.locator(grip).bounding_box()
+    assert box["width"] >= 44 and box["height"] >= 44, box  # под палец
+    w.wait("main .dndtip", "подсказка")
+    assert w.page.is_visible("main .dndtip") and "⠿" in w.page.inner_text("main .dndtip")
+    step = (w.page.locator(f'main .it[data-id="{second}"]').bounding_box()["y"]
+            - w.page.locator(f'main .it[data-id="{first}"]').bounding_box()["y"])
+    w.page.eval_on_selector(grip, """(el, dy) => {
+      const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const ev = (kind, t, yy) => t.dispatchEvent(new PointerEvent(kind, {bubbles: true, cancelable: true, pointerId: 9,
+        pointerType: 'touch', isPrimary: true, button: kind === 'pointermove' ? -1 : 0, clientX: x, clientY: yy}));
+      ev('pointerdown', el, y);
+      ev('pointermove', document.elementFromPoint(x, y + 20) || el, y + 20);  // сразу повёл — это перетаскивание
+      window.__dragging = !!document.querySelector('main .it.dragging');
+      ev('pointermove', document.elementFromPoint(x, y + dy) || el, y + dy);
+      ev('pointerup', document.elementFromPoint(x, y + dy) || el, y + dy);
+    }""", step * 1.6)
+    assert w.page.evaluate("window.__dragging"), "ручка не начала перетаскивание сразу"
+    assert screen_order(w) == [second, first, third]
+    wait_db(w, lambda: db_order(uid, "next") == [second, first, third], "порядок не сохранился")
+    w.page.reload()
+    w.wait("main .dnd > .it", "после перезагрузки")
+    assert not w.page.locator("main .dndtip").count()  # подсказка разовая
+    # Во Inbox у карточек ряд кнопок списков — ручка всё равно видна и под палец
+    A.capture(uid, "Во входящих")
+    w.goto("/")
+    grip = "main > .dnd > .it .grip"  # список самого Inbox (Next ниже — свой)
+    w.wait(grip, "Inbox")
+    box = w.page.locator(grip).bounding_box()
+    assert w.page.is_visible(grip) and box["width"] >= 44 and box["height"] >= 44, box
+    card = w.page.locator("main > .dnd > .it").bounding_box()
+    for sel in (grip, "main > .dnd > .it a.num", "main > .dnd > .it .act button.del"):  # ничего не вылезает за карточку
+        b = w.page.locator(sel).bounding_box()
+        assert b["x"] + b["width"] <= card["x"] + card["width"] + 0.5, (sel, b, card)
+    assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0]
+    w.check("итог")
+
+
+def test_no_grip_or_tip_with_mouse(watch):
+    w = watch()
+    order_user(w)
+    assert not w.page.is_visible("main .dnd > .it .grip") and not w.page.locator("main .dndtip").count()
+    w.check("итог")
+
+
+def test_phone_tap_targets(watch):
+    """G7 (остаток): на телефоне галочка «выполнено» и ссылка «#N» — не меньше 44×44 px; тап по краю зоны галочки
+    (мимо самого квадратика) тоже отмечает задачу. Имя галочки — название задачи, как раньше."""
+    w = watch(viewport=PHONE)
+    ids = smoke_user(w)
+    card = f'main .it[data-id="{ids["inbox"]}"]'
+    w.wait(card, "список")
+    for sel in (f"{card} .ck", f"{card} a.num"):
+        box = w.page.locator(sel).bounding_box()
+        assert box and box["width"] >= 44 and box["height"] >= 44, (sel, box)
+    assert w.page.get_by_role("checkbox", name="Позвонить маме").count() == 1
+    box = w.page.locator(f"{card} .ck").bounding_box()
+    w.page.mouse.click(box["x"] + 3, box["y"] + box["height"] - 3)  # угол зоны, не квадратик
+    wait_db(w, lambda: A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "done", "галочка")
+    assert not w.page.locator("#dlg[open]").count()
+    w.check("итог")
+
+
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_no_gap_after_onboarding(watch, viewport):
+    """G8: когда карточка «Первые шаги» исчезла, а во Inbox есть задачи, поле захвата не съезжает вниз — сверху
+    тот же небольшой отступ, что и под карточкой; пустого места на её месте нет. Совсем пустой Inbox — по центру."""
+    uid = A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s) returning id", (int(time.time()),))
+    A.capture(uid, "Задача")
+    w = watch(viewport=viewport)
+    w.goto("/dev-login")
+    w.wait("main .onb", "чек-лист")
+    pad = lambda: w.page.eval_on_selector("main .hero", "el => parseFloat(getComputedStyle(el).paddingTop)")  # noqa: E731
+    with_card = pad()
+    A.run("update users set checklist_hidden=true where id=%s", (uid,))
+    w.page.reload()
+    w.wait("main .hero", "без чек-листа")
+    assert not w.page.locator("main .onb").count() and not w.page.locator("main .hero.solo").count()
+    assert pad() == with_card <= 32, (pad(), with_card)
+    w.check("итог")
+
+
+def test_onboarding_bot_link(watch, monkeypatch):
+    """G9: «или боту» в чек-листе — ссылка на бота; без бота на сервере про бота не говорим."""
+    A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s)", (int(time.time()),))
+    w = watch()
+    w.goto("/dev-login")
+    w.wait("main .onb", "чек-лист без бота")
+    assert "бот" not in w.page.inner_text("main .onb div.onbi:first-of-type")
+    monkeypatch.setattr(A, "TOKEN", "smoke-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
+    w.page.reload()
+    link = 'main .onb div.onbi:first-of-type a[href="https://t.me/gtd_smoke_bot"]'
+    w.wait(link, "ссылка на бота")
+    assert w.page.get_attribute(link, "target") == "_blank" and "бот" in w.page.inner_text(link)
+    w.check("итог")
+
+
+def test_next_offers_context_chips(watch):
+    """G9: «→ Next» из Inbox не спрашивает контекст, но тост предлагает уже знакомые @контексты — один тап, и у задачи
+    есть контекст для фильтра в Next."""
+    w = watch()
+    ids = smoke_user(w)  # «Buy milk @home» — контекст уже есть
+    w.page.click(f'main .it[data-id="{ids["inbox"]}"] [data-act="mv"][data-st="next"]')
+    chip = '#toast [data-act="ctxset"][data-c="home"]'
+    w.wait(chip, "чип контекста в тосте")
+    w.page.click(chip)
+    wait_db(w, lambda: A.row("select context, status from items where id=%s", (ids["inbox"],))
+            == {"context": "home", "status": "next"}, "контекст из тоста")
+    assert "@home" in w.page.inner_text("#toast .tx")
+    w.check("итог")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
+    """G11: кнопки входа одной ширины (Google — шириной блока, строка почты, Telegram) и с одним глаголом
+    («Войти …» / «Sign in …»); кнопка Telegram не выглядит выключенной — тот же вид, что у «Войти по коду»."""
+    monkeypatch.setattr(A, "TOKEN", "smoke-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
+    w = watch(lang, viewport=viewport)
+    w.goto("/en/" if lang == "en" else "/")
+    w.wait("#signin .tgfb", "кнопки входа")
+    w.page.hover("#signin")  # виджеты грузятся, когда к блоку потянулись
+    w.page.wait_for_function("window.__gsi", timeout=WAIT_MS)
+    width = lambda sel: w.page.locator(sel).bounding_box()["width"]  # noqa: E731
+    box = width("#signin")
+    assert abs(width("#signin .cap") - box) < 1 and abs(width("#signin .tgfb") - box) < 1
+    gsi = w.page.evaluate("window.__gsi")
+    assert gsi["text"] == "signin_with" and abs(gsi["width"] - min(box, 400)) < 1, gsi
+    verb = "Войти " if lang == "ru" else "Sign in "
+    assert w.page.inner_text('#signin [data-act="emailsend"]').startswith(verb)
+    assert verb in w.page.inner_text("#signin .tgfb")
+    look = """el => { const c = getComputedStyle(el); return [c.color, c.borderColor, c.backgroundColor, c.fontWeight]; }"""
+    assert w.page.eval_on_selector("#signin .tgfb", look) == w.page.eval_on_selector('#signin [data-act="emailsend"]', look)
+    assert int(w.page.eval_on_selector("#signin .tgfb", "el => getComputedStyle(el).fontWeight")) >= 600
+    w.check("итог")
+
+
+@pytest.mark.parametrize("lang, label", [("ru", "Добавить"), ("en", "Add")])
+def test_capture_button_has_visible_label_on_wide_screens(watch, lang, label):
+    """G12: на широком экране у кнопки захвата есть видимая подпись, и она входит в её доступное имя; на телефоне —
+    только значок (место под поле), имя то же."""
+    for viewport, shown in (((1280, 900), True), (PHONE, False)):
+        w = watch(lang, viewport=viewport)
+        smoke_user(w, lang) if viewport != PHONE else w.goto("/dev-login")
+        btn = 'main [data-act="capture"]'
+        w.wait(btn, "кнопка захвата")
+        assert w.page.inner_text(btn).strip() == (label if shown else ""), viewport
+        assert w.page.get_attribute(btn, "aria-label").startswith(label)
+        w.check(f"{viewport}")
         w.close()
