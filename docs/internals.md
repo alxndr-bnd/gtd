@@ -63,6 +63,9 @@ no language at all — Russian.
 
 App sections: Inbox · Next (filter by @context) · Waiting · Calendar/reminders · Projects (⚠ without a next
 action) · Someday · Reference · Done · Weekly Review.
+Every section has its own address — `/` (Inbox), `/next`, `/projects`, `/p/<id>` (a project), `/account`… and the
+same under `/en/` — so Back (button or phone gesture) returns to the previous section instead of leaving the site.
+A task card opened from a list is its own history entry `/i/<N>`: Back closes it. Server: `app.APP_VIEWS`.
 
 Public pages are `pages.py`; the server renders the text (for search engines): landing for guests on `/` and
 `/en/`, “How it works” on `/about` and `/en/about`, privacy policy on `/privacy`, “What's new” on `/changes`

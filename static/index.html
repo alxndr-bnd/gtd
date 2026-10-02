@@ -382,6 +382,41 @@ function applyLang(){  // после /api/me: вошли на /en/ — запо�
 setLang(document.documentElement.lang);
 let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, pid:null, cfg:{}};
 
+// ── Адреса разделов (SERBITO-354): /next, /projects, /p/<id>… (на /en/ — /en/next). Переход — запись в истории
+// браузера, и Back (кнопка, жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Inbox — это /.
+// Карточка задачи — /i/<номер>: открыли из списка — своя запись, Back её закрывает. Список — app.APP_VIEWS
+const ROUTE_VIEWS = ['next','waiting','scheduled','projects','someday','reference','done','review','account','stats'];
+function routeOf(path = location.pathname){
+  const p = path.replace(/^\/en(?=\/|$)/, '') || '/';
+  let m;
+  if((m = p.match(/^\/i\/(\d+)$/))) return {card:+m[1]};
+  if((m = p.match(/^\/p\/(\d+)$/))) return {view:'projects', pid:+m[1]};
+  const v = p.slice(1);
+  return {view:ROUTE_VIEWS.includes(v) ? v : 'inbox', pid:null};
+}
+// S.en — разделы под /en/: вошли на /en/… и язык не выбран явно в «Аккаунте»
+function viewPath(view = S.view, pid = S.pid){
+  const p = view==='projects' && pid ? `/p/${pid}` : view==='inbox' ? '/' : '/'+view;
+  return S.en ? (p==='/' ? '/en/' : '/en'+p) : p;
+}
+function routeApply(r){ S.view = r.view || 'inbox'; S.pid = r.pid || null; S.ctx = null; S.sel = null; }
+// Перейти в раздел (проект): новая запись в истории, если адрес другой
+function go(view, pid = null){
+  routeApply({view, pid});
+  const path = viewPath();
+  if(location.pathname !== path) history.pushState(null, '', path);
+  return load();
+}
+S.en = pathEn();
+routeApply(routeOf());
+// Back / Forward: карточка /i/N — открыть её; иначе закрыть открытый диалог и показать раздел из адреса
+addEventListener('popstate', () => {
+  const r = routeOf(), d = $('#dlg');
+  if(r.card) return openByNum(r.card);
+  if(d.open) d.close();
+  if(r.view !== S.view || (r.pid || null) !== S.pid){ routeApply(r); load(); }
+});
+
 // Accept-Language — выбранный язык интерфейса: на нём сервер пишет ошибки и письма
 const hdrs = json => ({'Accept-Language': LANG, ...(json ? {'Content-Type':'application/json'} : {})});
 async function api(path, method='GET', body){
@@ -406,6 +441,9 @@ async function load(){
     if(!S.me){ S.me = await api('/me'); applyLang(); }  // имя для кнопки аккаунта и язык интерфейса
     S.projects = await api('/projects');
     S.contexts = await api('/contexts');
+    if(S.pid && !S.projects.some(p => p.id===S.pid)){  // чужой, удалённый или завершённый проект — список проектов
+      S.pid = null; if(!location.pathname.startsWith('/i/')) history.replaceState(null, '', viewPath());
+    }
     if(S.view==='account') S.me = await api('/me');
     else if(S.view==='stats') S.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) S.items=[];
@@ -427,9 +465,13 @@ async function load(){
 async function openDeepLink(){
   const m = location.pathname.match(/^\/i\/(\d+)$/); if(!m || S.deepDone) return;
   S.deepDone = true;
-  const it = await api('/items/n/'+m[1]);
-  if(it && it.id) openEdit(it.id, it);
-  else { history.replaceState(null, '', '/'); const h = $('.hint'); if(h) h.textContent = t('task_missing', {n:m[1]}); }
+  return openByNum(+m[1]);
+}
+async function openByNum(n){
+  const it = await api('/items/n/'+n);
+  if(it && it.id) return openEdit(it.id, it);
+  if($('#dlg').open) $('#dlg').close();
+  history.replaceState(null, '', viewPath()); const h = $('.hint'); if(h) h.textContent = t('task_missing', {n});
 }
 
 // Локально (DEV=1): страница сама обновляется, когда сервер перезапустился после правки .py
@@ -452,7 +494,8 @@ function devLiveReload(){
 
 async function loginScreen(){
   S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
-  S.view = 'inbox'; S.pid = null; S.onb = null; S.me = null; S.fromLogin = true;  // следующий вход может быть в другой аккаунт
+  routeApply(routeOf()); S.onb = null; S.me = null; S.fromLogin = true;  // следующий вход может быть в другой аккаунт;
+  // раздел — из адреса: вошёл со ссылки /next — после входа откроется Next
   setLang($('#signin') ? document.documentElement.lang : autoLang());
   devLiveReload();
   const c = S.cfg, parts = [];
@@ -656,7 +699,7 @@ function navHtml(){
   const cur = viewLabel();
   // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается».
   // Разделы — ссылки с href (SERBITO-349): без него <a> не получает фокус с клавиатуры и не читается как ссылка
-  const item = (k, l, n) => `<a href="#${k}" class="${S.view===k?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
+  const item = (k, l, n) => `<a href="${viewPath(k, null)}" class="${S.view===k?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
   return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <span class="tb-title">${cur}</span>${user}</div>
@@ -767,7 +810,7 @@ function projectHtml(pj, items){
     ${DONE_MODES.map(m => `<option value="${m}" ${m===mode?'selected':''}>${t('done_mode.'+m)}</option>`).join('')}</select>`;
   const sec = mode==='section' && done.length ? `<details class="donesec" data-done-of="${pj.id}" ${S.doneOpen[pj.id]?'open':''}>
     <summary>${t('done_section', {n:done.length})}</summary>${done.map(itemHtml).join('')}</details>` : '';
-  return `<p><a href="#" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
+  return `<p><a href="${viewPath('projects', null)}" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button>${dmode}</h2>
     ${dndHtml(shown, 'project') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
@@ -920,7 +963,7 @@ function reviewHtml(){
   return `<h2>${L.views.review}</h2>
   <div class="rv"><h3>${t('review.s1')}</h3>${t('review.s1_text')}</div>
   <div class="rv"><h3>${t('review.s2')}</h3>${t('review.s2_text', {n:c.inbox||0})}</div>
-  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="#projects" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
+  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="${viewPath('projects', p.id)}" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
   <div class="rv"><h3>${t('review.s4')}</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):t('review.s4_ok')}</div>
   <div class="rv"><h3>${t('review.s5')}</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):t('review.s5_none')}</div>
   <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
@@ -1012,8 +1055,13 @@ const itemLink = it => `${location.origin}/i/${it.num}`;
 function openEdit(id, found){
   const it = found || findItem(id); if(!it) return;
   const d = $('#dlg');
-  history.replaceState(null, '', `/i/${it.num}`);
-  d.onclose = () => { acClose(); if(location.pathname.startsWith('/i/')) history.replaceState(null, '', '/'); };
+  // Своя запись в истории: Back закрывает карточку. Пришли прямой ссылкой (или Forward) — адрес уже этот
+  if(location.pathname !== `/i/${it.num}`) history.pushState({card:it.num}, '', `/i/${it.num}`);
+  d.onclose = () => {  // закрыли (Esc, «Отмена», сохранение) — вернуться к разделу: назад по своей записи или заменой
+    acClose();
+    if(!location.pathname.startsWith('/i/')) return;  // закрыта по Back — адрес уже раздела
+    if(history.state?.card) history.back(); else history.replaceState(null, '', viewPath());
+  };
   d.innerHTML = `<form method="dialog" id="ef"><h3 style="margin:0 0 6px"><span id="dlg-h">${t('task_n', {n:it.num})}</span>
       <button type="button" class="sm" data-act="copylink" aria-label="${t('copy_link')}" title="${t('copy_link_to', {url:esc(itemLink(it))})}">🔗</button></h3>
     <label for="ef-title">${t('f_title')}</label><div class="capw"><input id="ef-title" name="title" value="${esc(it.title)}" required autofocus autocomplete="off" data-ac-src>
@@ -1088,7 +1136,8 @@ function openDeleteProject(pid){
   dlgShow(`[data-act=delproj][data-pid="${pid}"]`);
   d.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if(!b.dataset.del) return d.close();
-    try{ await projApi(pid, 'DELETE', null, '?items='+b.dataset.del); d.close(); if(S.pid===pid) S.pid=null; load(); }
+    try{ await projApi(pid, 'DELETE', null, '?items='+b.dataset.del); d.close();
+      if(S.pid===pid){ S.pid = null; history.replaceState(null, '', viewPath()); } load(); }
     catch(err){ $('#pdmsg').textContent = err.message; }
   });
 }
@@ -1143,7 +1192,8 @@ function cardClick(e){
 }
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-act],[data-view],[data-ctx],[data-pid]'); if(!el) return cardClick(e);
-  if(el.tagName==='A' && el.getAttribute('href')?.startsWith('#')) e.preventDefault();  // раздел, а не якорь в адресе
+  if(el.tagName==='A' && el.dataset.view && (e.metaKey || e.ctrlKey || e.shiftKey)) return;  // раздел в новой вкладке
+  if(el.tagName==='A' && (el.dataset.view || el.getAttribute('href')?.startsWith('#'))) e.preventDefault();  // переход — сами
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
   if(act==='drawer') return drawer(!$('nav').classList.contains('open'));
   if(act==='umenu'){ const m = el.parentElement.querySelector('.umenu'); m.hidden = !m.hidden; el.setAttribute('aria-expanded', !m.hidden); return; }
@@ -1169,20 +1219,20 @@ document.addEventListener('click', async e => {
   }
   if(act==='lang'){  // явный выбор (или «Авто») — сильнее входа на /en/: подсказку и адрес /en/ забываем
     S.me = await api('/me','PATCH',{lang:el.dataset.l || null}); langHint.del();
-    if(pathEn()) history.replaceState(null, '', '/');
+    if(S.en){ S.en = false; history.replaceState(null, '', viewPath()); }
     setLang(S.me.lang || autoLang()); return render();
   }
   if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
-  if(act==='back'){ e.preventDefault(); S.pid=null; return load(); }
+  if(act==='back') return go('projects');
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
   if(el.dataset.view){
     S.toBurger = !!el.closest('nav.open');  // выбрали в выезжающем меню — оно закроется, фокус вернётся на ☰
-    S.view=el.dataset.view; S.ctx=null; S.sel=null; S.zone='main'; S.pid=el.dataset.pid?+el.dataset.pid:null; return load();
+    S.zone='main'; return go(el.dataset.view, el.dataset.pid ? +el.dataset.pid : null);
   }
-  if(el.dataset.pid && el.classList.contains('pj')){ S.pid=+el.dataset.pid; return load(); }
+  if(el.dataset.pid && el.classList.contains('pj')) return go('projects', +el.dataset.pid);
 });
 document.addEventListener('change', async e => {
   if(e.target.dataset.act==='donemode'){  // режим показа выполненных — запоминается в проекте на сервере

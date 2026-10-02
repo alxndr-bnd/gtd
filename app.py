@@ -2588,3 +2588,21 @@ def item_page(num: int, request: Request):
     r = app_page(request)
     r.headers["X-Robots-Tag"] = "noindex"
     return r
+
+
+# Адреса разделов и проектов (SERBITO-354): переход в приложении — запись в истории браузера, и Back (кнопка,
+# жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Сервер отдаёт на них то же приложение, что
+# на /i/N: раздел выбирает фронт по адресу. Inbox — это / (и /en/). Список — тот же, что ROUTE_VIEWS в index.html
+APP_VIEWS = ("next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review", "account", "stats")
+
+
+def section_page(request: Request):
+    r = app_page(request, "en" if request.url.path.startswith("/en/") else "ru")
+    r.headers["X-Robots-Tag"] = "noindex"
+    return r
+
+
+for _prefix in ("", "/en"):
+    for _view in APP_VIEWS:
+        app.add_api_route(f"{_prefix}/{_view}", section_page, methods=["GET"], include_in_schema=False)
+    app.add_api_route(_prefix + "/p/{pid:int}", section_page, methods=["GET"], include_in_schema=False)

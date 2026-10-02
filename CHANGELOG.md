@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+- The Back button and the phone's back gesture now move between sections, projects and an open task instead of leaving the app. Each section has its own address, so a reload keeps you where you were.
+  - RU: Кнопка «Назад» и жест «назад» на телефоне теперь переходят между разделами, проектами и открытой задачей, а не уводят из приложения. У каждого раздела свой адрес, и после перезагрузки вы остаётесь там же.
+
 ### Fixed
 - A /ru/ address now opens the Russian site instead of a "Page not found" error, and a wrong address always shows a proper "Page not found" page.
   - RU: Адрес /ru/ теперь открывает русский сайт, а не ошибку «Страница не найдена», а неверный адрес всегда показывает нормальную страницу «Страница не найдена».

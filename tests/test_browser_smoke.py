@@ -213,7 +213,7 @@ def test_app_sections(watch, monkeypatch, lang):
     for has_items in (False, True):
         if has_items:
             ids = seed(uid)
-            w.page.reload()
+            w.goto("/")
             w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка с задачами")
         for view in SECTIONS + ["inbox"]:  # и обратно во Входящие: переходы между разделами
             open_section(w, view, has_items, lang)
@@ -247,6 +247,7 @@ def test_app_sections(watch, monkeypatch, lang):
     ("/", 200, '#signin a[href="/dev-login"]'),   # лендинг гостю: кнопки входа кладёт JS
     ("/en/", 200, '#signin a[href="/dev-login"]'),
     ("/i/1", 200, '#root .login a[href="/dev-login"]'),  # ссылка на задачу без входа — экран входа
+    ("/next", 200, '#root .login a[href="/dev-login"]'),  # адрес раздела без входа — тоже (SERBITO-354)
     ("/about", 200, "body"),
     ("/en/about", 200, "body"),
     ("/changes", 200, "section.rel"),
@@ -763,10 +764,7 @@ def test_project_completed_modes(watch, lang):
     assert not w.page.is_visible(f'main .it[data-id="{fresh}"]')  # блок свёрнут
     w.page.click("main details.donesec summary")
     assert cards("main details.donesec .it") == [fresh, old]  # свежие сверху
-    w.page.reload()  # после перезагрузки — снова Inbox: открываем проект заново
-    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка")
-    w.page.click('nav > a[data-view="projects"]')
-    w.page.click("main .it.pj .t")
+    w.page.reload()  # адрес проекта (SERBITO-354) — после перезагрузки тот же проект
     w.wait("main details.donesec", f"[{lang}] после перезагрузки")
     assert w.page.input_value("main select.dmode") == "section"
 
@@ -829,9 +827,8 @@ def test_drag_to_reorder_with_mouse(watch):
     until(lambda: db_order(uid, "next") == [second, third, first], "порядок не сохранился на сервере")
     w.page.wait_for_timeout(300)
     assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
-    w.page.reload()
-    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка")
-    w.page.click('nav > a[data-view="next"]')
+    w.page.reload()  # адрес раздела (SERBITO-354) — после перезагрузки снова Next
+    w.wait('nav > a.on[data-view="next"]', f"[{lang}] перезагрузка")
     w.wait('main .dnd > .it', f"[{lang}] Next после перезагрузки")
     assert screen_order(w) == [second, third, first]
     # С фильтром @контекста — тот же список, перестановка работает
@@ -1226,3 +1223,84 @@ def test_signin_widgets_load_when_visible(prod_browser, server, monkeypatch):
         w.check("итог")
     finally:
         w.close()
+
+
+# ── SERBITO-354: gtd UX ──
+def path_is(w, path, what):
+    """Ждём адрес: история и перерисовка после popstate — асинхронные."""
+    try:
+        w.page.wait_for_function("p => location.pathname === p", arg=path, timeout=WAIT_MS)
+    except PWTimeout:
+        pytest.fail(f"{what}: адрес {w.page.evaluate('location.pathname')}, ждали {path}", pytrace=False)
+    w.check(what)
+
+
+def test_back_button_stays_in_app(watch):
+    """G1: каждый раздел и проект — свой адрес и запись в истории. Back (кнопка браузера, жест на телефоне) ведёт
+    в прошлый раздел, а не с сайта; открытая карточка закрывается по Back; Forward возвращает. Адрес раздела
+    открывается заново после перезагрузки."""
+    w = watch()
+    ids = smoke_user(w)
+    pid = A.row("select project_id from items where id=%s", (ids["proj"],))["project_id"]
+    assert w.page.get_attribute('nav > a[data-view="next"]', "href") == "/next"
+    w.page.click('nav > a[data-view="next"]')
+    path_is(w, "/next", "Next")
+    w.page.click('nav > a[data-view="projects"]')
+    path_is(w, "/projects", "Projects")
+    w.page.click("main .it.pj .t")
+    path_is(w, f"/p/{pid}", "проект")
+    w.wait('main [data-act="back"]', "проект открыт")
+    w.page.click("main .it .t")
+    w.wait("#dlg[open] #ef", "карточка")
+    path_is(w, "/i/3", "карточка")
+
+    w.page.go_back()  # карточка закрывается, проект на месте
+    path_is(w, f"/p/{pid}", "Back из карточки")
+    w.page.wait_for_selector("#dlg:not([open])", state="attached", timeout=WAIT_MS)
+    assert w.page.locator('main [data-act="back"]').count()
+    w.page.go_back()
+    path_is(w, "/projects", "Back из проекта")
+    w.wait("main .it.pj", "список проектов")
+    w.page.go_back()
+    path_is(w, "/next", "Back в Next")
+    w.wait('nav > a.on[data-view="next"]', "Next после Back")
+    w.page.go_forward()
+    path_is(w, "/projects", "Forward")
+    w.wait('nav > a.on[data-view="projects"]', "Projects после Forward")
+    w.page.go_back()
+    w.page.go_back()
+    path_is(w, "/", "Back в Inbox")
+    w.wait('nav > a.on[data-view="inbox"]', "Inbox после Back")
+
+    # Адрес раздела переживает перезагрузку; проект — тоже
+    w.goto("/waiting")
+    w.wait('nav > a.on[data-view="waiting"]', "/waiting напрямую")
+    w.goto(f"/p/{pid}")
+    w.wait('main [data-act="back"]', "/p/N напрямую")
+    # «← Projects» — тоже переход с записью в истории
+    w.page.click('main [data-act="back"]')
+    path_is(w, "/projects", "← Projects")
+    w.page.go_back()
+    path_is(w, f"/p/{pid}", "Back к проекту")
+    w.wait('main [data-act="back"]', "проект после Back")
+    w.check("итог")
+
+
+def test_card_link_closes_to_its_section(watch):
+    """Карточка, открытая прямой ссылкой /i/N, закрывается в Inbox (/), без лишней записи в истории; на /en/…
+    разделы остаются под /en/."""
+    w = watch("en")
+    smoke_user(w, "en")
+    w.goto("/i/1")
+    w.wait("#dlg[open] #ef", "карточка по ссылке")
+    w.page.keyboard.press("Escape")
+    path_is(w, "/", "закрыта")
+    w.goto("/en/next")
+    w.wait('nav > a.on[data-view="next"]', "/en/next")
+    assert w.page.evaluate("document.documentElement.lang") == "en"
+    w.page.click('nav > a[data-view="someday"]')
+    path_is(w, "/en/someday", "раздел под /en/")
+    w.page.go_back()
+    path_is(w, "/en/next", "Back под /en/")
+    w.wait('nav > a.on[data-view="next"]', "Next после Back")
+    w.check("итог")
