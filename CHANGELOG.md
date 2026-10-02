@@ -42,6 +42,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
   - RU: На телефоне галочку и номер задачи легче нажать: у каждого теперь зона под палец.
 - After the "First steps" card goes away, the Inbox no longer leaves an empty gap above the capture field.
   - RU: Когда карточка «Первые шаги» исчезает, над полем ввода в Inbox больше не остаётся пустого места.
+- The sign-in buttons are the same width and say the same thing ("Sign in with…"), and the Telegram button no longer looks disabled.
+  - RU: Кнопки входа одной ширины и начинаются одинаково («Войти…»), а кнопка Telegram больше не выглядит выключенной.
 - A /ru/ address now opens the Russian site instead of a "Page not found" error, and a wrong address always shows a proper "Page not found" page.
   - RU: Адрес /ru/ теперь открывает русский сайт, а не ошибку «Страница не найдена», а неверный адрес всегда показывает нормальную страницу «Страница не найдена».
 

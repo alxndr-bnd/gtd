@@ -88,6 +88,9 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .login{max-width:420px;margin:12vh auto;text-align:center;padding:0 16px}
 .login .cap{margin:0}
 .gbtn{display:flex;min-height:44px} .login .gbtn{justify-content:center}
+/* Кнопки входа (SERBITO-354, G11): все во всю ширину блока, «Войти по коду» и Telegram — один заметный вид */
+#signin .tgfb,.login .tgfb{width:100%;min-height:44px}
+#signin .cap button:not(.pri),#signin .tgfb,.login .cap button:not(.pri),.login .tgfb{border-color:var(--ac);color:var(--ac);font-weight:600}
 .or{color:var(--mut);font-size:13px;margin:14px 0;display:flex;align-items:center;gap:10px}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
 .msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} #npmsg{margin:-10px 0 12px} .msg .rv{color:var(--tx);font-size:14px}
@@ -303,7 +306,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "cap_add": "Add to Inbox", "cap_project": "Add a task to #{p}",
   "task_missing": "Task #{n} not found",
   "login_page": "Sign in", "login_hint": "Sign in or sign up — the account is created automatically",
-  "get_code": "Get a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
+  "get_code": "Sign in with a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
   "error": "Something went wrong, try again",
   "merge_yes": "🔗 Merge into one", "merge_no": "Not now",
   "email_ph": "Email", "code_ph": "Code from the email", "confirm": "Confirm", "sign_in": "Sign in",
@@ -583,7 +586,9 @@ function mountGoogle(){
     google.accounts.id.initialize({client_id:S.cfg.google, callback: async ({credential}) => {
       try{ const lk = linking(); await authPost('google', {credential, link:lk}); ga(lk ? 'link_method' : 'login', {method:'google'}); load(); }catch(err){ authFail(err); }
     }});
-    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:LANG});
+    // Ширина — как у остальных кнопок входа (G11); Google принимает 200–400 px
+    google.accounts.id.renderButton(el, {theme:'outline', size:'large', text:linking()?'continue_with':'signin_with', locale:LANG,
+      width:Math.min(400, Math.max(200, el.clientWidth))});
   };
   if(window.google?.accounts) return go();
   const s = document.createElement('script');

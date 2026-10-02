@@ -29,7 +29,7 @@ WAIT_MS = 5000  # потолок ожидания одного условия р
 
 # Кнопка Google грузит скрипт с accounts.google.com — в тестах вместо него заглушка с тем же API
 GSI_STUB = ("window.google={accounts:{id:{initialize(){},"
-            "renderButton(el){el.textContent='Google';}}}};")
+            "renderButton(el,o){el.textContent='Google';window.__gsi=o;}}}};")  # o — параметры кнопки для проверки
 SECTIONS = ["inbox", "next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review"]
 
 
@@ -1537,4 +1537,30 @@ def test_next_offers_context_chips(watch):
     wait_db(w, lambda: A.row("select context, status from items where id=%s", (ids["inbox"],))
             == {"context": "home", "status": "next"}, "контекст из тоста")
     assert "@home" in w.page.inner_text("#toast .tx")
+    w.check("итог")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
+    """G11: кнопки входа одной ширины (Google — шириной блока, строка почты, Telegram) и с одним глаголом
+    («Войти …» / «Sign in …»); кнопка Telegram не выглядит выключенной — тот же вид, что у «Войти по коду»."""
+    monkeypatch.setattr(A, "TOKEN", "smoke-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
+    w = watch(lang, viewport=viewport)
+    w.goto("/en/" if lang == "en" else "/")
+    w.wait("#signin .tgfb", "кнопки входа")
+    w.page.hover("#signin")  # виджеты грузятся, когда к блоку потянулись
+    w.page.wait_for_function("window.__gsi", timeout=WAIT_MS)
+    width = lambda sel: w.page.locator(sel).bounding_box()["width"]  # noqa: E731
+    box = width("#signin")
+    assert abs(width("#signin .cap") - box) < 1 and abs(width("#signin .tgfb") - box) < 1
+    gsi = w.page.evaluate("window.__gsi")
+    assert gsi["text"] == "signin_with" and abs(gsi["width"] - min(box, 400)) < 1, gsi
+    verb = "Войти " if lang == "ru" else "Sign in "
+    assert w.page.inner_text('#signin [data-act="emailsend"]').startswith(verb)
+    assert verb in w.page.inner_text("#signin .tgfb")
+    look = """el => { const c = getComputedStyle(el); return [c.color, c.borderColor, c.backgroundColor, c.fontWeight]; }"""
+    assert w.page.eval_on_selector("#signin .tgfb", look) == w.page.eval_on_selector('#signin [data-act="emailsend"]', look)
+    assert int(w.page.eval_on_selector("#signin .tgfb", "el => getComputedStyle(el).fontWeight")) >= 600
     w.check("итог")
