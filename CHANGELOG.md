@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+- A /ru/ address now opens the Russian site instead of a "Page not found" error, and a wrong address always shows a proper "Page not found" page.
+  - RU: Адрес /ru/ теперь открывает русский сайт, а не ошибку «Страница не найдена», а неверный адрес всегда показывает нормальную страницу «Страница не найдена».
+
 ## [0.25.0] - 2026-10-02
 
 ### Fixed

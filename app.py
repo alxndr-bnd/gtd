@@ -2552,12 +2552,29 @@ def web_manifest(request: Request):
                         headers={"Vary": "Accept-Language", "Cache-Control": "public, max-age=86400"})
 
 
+@app.get("/ru", include_in_schema=False)
+@app.get("/ru/{rest:path}", include_in_schema=False)
+def ru_prefix(request: Request, rest: str = ""):
+    """Русский — на /, английский — на /en/ (SERBITO-354, G10). Угаданный /ru/… ведёт на ту же страницу без
+    префикса, а не в 404. Ведущие / и \\ срезаны: //host и /\\host браузер понял бы как чужой сайт."""
+    to = "/" + rest.lstrip("/\\")
+    if request.url.query:
+        to += "?" + request.url.query
+    return RedirectResponse(to, status_code=308)
+
+
+def wants_json(request: Request) -> bool:
+    """Клиент просит JSON, а не страницу: в Accept есть application/json и нет text/html."""
+    accept = request.headers.get("accept", "")
+    return "application/json" in accept and "text/html" not in accept
+
+
 @app.exception_handler(StarletteHTTPException)
 async def not_found_page(request: Request, exc: StarletteHTTPException):
-    """404 в браузере — страница с логотипом и ссылками вместо сырого JSON. /api/* и запросы без text/html
-    в Accept (fetch, curl, боты) получают JSON, как раньше; остальные ошибки — тоже."""
+    """404 — страница с логотипом и ссылками вместо сырого JSON: браузеру, curl, превью ссылок (SERBITO-354, G10).
+    /api/* и клиенты, которые просят JSON, получают JSON, как раньше; остальные ошибки — тоже."""
     path = request.url.path
-    if exc.status_code != 404 or (path + "/").startswith("/api/") or "text/html" not in request.headers.get("accept", ""):
+    if exc.status_code != 404 or (path + "/").startswith("/api/") or wants_json(request):
         return await http_exception_handler(request, exc)
     en = path == "/en" or path.startswith("/en/")
     lang = "en" if en else pages.pick_lang(request.headers.get("accept-language"))

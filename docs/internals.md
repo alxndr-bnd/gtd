@@ -73,8 +73,8 @@ The running version (`APP_VERSION` from the deploy tag, else `dev`) is in every 
 come from `scripts/og_image.py`. The logo is the “Inbox” mark (`pages.mark()`, color `#0F766E` — also the site
 accent); favicon and phone icons in `static/` are built by `scripts/icons.py`.
 Install to home screen — `/manifest.webmanifest` (`pages.manifest()`, description in the browser language), no
-service worker. Unknown address in a browser — 404 page (`pages.not_found()`); `/api/*` and non-`text/html`
-requests get JSON.
+service worker. Unknown address — 404 page (`pages.not_found()`), also for curl and link previews; only `/api/*`
+and clients that ask for `application/json` get JSON. `/ru/…` redirects (308) to the same page without the prefix.
 
 ## Analytics
 

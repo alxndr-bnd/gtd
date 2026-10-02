@@ -74,9 +74,9 @@ def test_html_404_for_browser(client, path, headers, lang):
 
 @pytest.mark.parametrize("path, accept", [
     ("/api/nope", BROWSER), ("/api", BROWSER), ("/api/nope", None),
-    ("/nope", None), ("/nope", "application/json"), ("/nope", "*/*"), ("/i/abc", "application/json"),
+    ("/nope", "application/json"), ("/i/abc", "application/json"),
 ])
-def test_json_404_for_api_and_non_html(client, path, accept):
+def test_json_404_for_api_and_json_clients(client, path, accept):
     r = client.get(path, headers={"accept": accept} if accept else {})
     assert r.status_code == 404 and r.headers["content-type"] == "application/json"
     assert r.json() == {"detail": "Not Found"}
@@ -107,4 +107,25 @@ def test_dev_login_404_in_prod_is_html_for_browser(client, monkeypatch):
     monkeypatch.setattr(A, "DEV", False)
     r = client.get("/dev-login", headers={"accept": BROWSER})
     assert r.status_code == 404 and "Страница не найдена" in r.text
-    assert client.get("/dev-login").json() == {"detail": "Not Found"}
+    assert client.get("/dev-login", headers={"accept": "application/json"}).json() == {"detail": "Not Found"}
+
+
+@pytest.mark.parametrize("accept", [None, "*/*", "text/plain"])
+def test_html_404_without_html_in_accept(client, accept):
+    """SERBITO-354 (G10): curl, link previews and simple clients send */* or nothing — they get the same HTML page,
+    not a bare JSON {"detail": ...}. Only /api/* and clients that ask for JSON get JSON."""
+    r = client.get("/nope", headers={"accept": accept} if accept else {})
+    assert r.status_code == 404 and r.headers["content-type"].startswith("text/html")
+    assert P.NOT_FOUND["ru"][0] in r.text
+
+
+@pytest.mark.parametrize("path, to", [
+    ("/ru", "/"), ("/ru/", "/"), ("/ru/about", "/about"), ("/ru/privacy", "/privacy"), ("/ru/changes", "/changes"),
+    ("/ru/i/5", "/i/5"), ("/ru/about?x=1", "/about?x=1"),
+    ("/ru//evil.example", "/evil.example"), ("/ru/%5Cevil.example", "/evil.example"),  # не открытый редирект
+])
+def test_ru_prefix_redirects_to_russian_root(client, path, to):
+    """SERBITO-354 (G10): Russian lives at /, English at /en/. A guessed /ru/… leads to the same page without
+    the prefix (permanent redirect), not to a 404."""
+    r = client.get(path, headers={"accept": BROWSER}, follow_redirects=False)
+    assert r.status_code == 308 and r.headers["location"] == to
