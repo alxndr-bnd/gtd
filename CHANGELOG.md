@@ -25,6 +25,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
   - RU: На экране проектов осталось одно подписанное поле «Новый проект». «Создать» без названия подсказывает, чего не хватает, а созданный проект подтверждается сообщением.
 - In Russian, the GTD list names (Inbox, Next, Waiting, Projects, Someday, Reference, Weekly Review) are now used the same way everywhere — in the app, on the site and in the bot — with the text around them in Russian.
   - RU: В русской версии названия списков GTD (Inbox, Next, Waiting, Projects, Someday, Reference, Weekly Review) теперь везде одинаковые — в приложении, на сайте и в боте, а текст вокруг них по-русски.
+- On a touch screen, tasks have a ⠿ handle: drag it to reorder right away, without holding. A one-time tip explains how to reorder.
+  - RU: На сенсорном экране у задач есть ручка ⠿: потяните за неё, чтобы сразу переставить задачу, без удержания. Разовая подсказка объясняет, как переставлять.
 - The Back button and the phone's back gesture now move between sections, projects and an open task instead of leaving the app. Each section has its own address, so a reload keeps you where you were.
   - RU: Кнопка «Назад» и жест «назад» на телефоне теперь переходят между разделами, проектами и открытой задачей, а не уводят из приложения. У каждого раздела свой адрес, и после перезагрузки вы остаётесь там же.
 - A project page has its own "Add a task" field: what you type there goes straight into that project. Elsewhere, a message tells you where a new task went, with Undo.

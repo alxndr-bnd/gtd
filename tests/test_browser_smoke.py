@@ -82,10 +82,11 @@ class Watch:
     """Страница, которая копит всё, что считается поломкой: ошибки консоли, необработанные исключения,
     ответы ≥400 своего сервера и попытки сходить наружу."""
 
-    def __init__(self, browser, base, lang="ru", stubs=None, viewport=(1280, 900)):
-        """stubs — {начало внешнего URL: тело JS}: локальные подмены внешних скриптов (GA на «проде»)."""
+    def __init__(self, browser, base, lang="ru", stubs=None, viewport=(1280, 900), touch=False):
+        """stubs — {начало внешнего URL: тело JS}: локальные подмены внешних скриптов (GA на «проде»).
+        touch — телефон с сенсорным экраном: pointer: coarse."""
         self.base, self.errors, self.expected_404, self.stubs = base, [], set(), stubs or {}
-        self.ctx = browser.new_context(locale="en-US" if lang == "en" else "ru-RU",
+        self.ctx = browser.new_context(locale="en-US" if lang == "en" else "ru-RU", has_touch=touch, is_mobile=touch,
                                        viewport={"width": viewport[0], "height": viewport[1]})
         self.ctx.route("**/*", self._route)
         self.page = self.ctx.new_page()
@@ -160,8 +161,8 @@ class Watch:
 def watch(browser, server):
     opened = []
 
-    def make(lang="ru", viewport=(1280, 900)):
-        w = Watch(browser, server, lang, viewport=viewport)
+    def make(lang="ru", viewport=(1280, 900), touch=False):
+        w = Watch(browser, server, lang, viewport=viewport, touch=touch)
         opened.append(w)
         return w
     yield make
@@ -1422,4 +1423,50 @@ def test_projects_screen_one_clear_input(watch):
     w.page.click('main [data-act="newproj"]')
     w.wait('#toast .tx:has-text("уже есть")', "тост: уже есть")
     assert len(A.rows("select id from projects")) == 1
+    w.check("итог")
+
+
+def test_touch_drag_grip_and_tip(watch):
+    """Item 6 (G6): на сенсорном экране у карточки видна ручка ⠿ — тянуть за неё можно сразу, без удержания; над
+    списком — разовая подсказка, как переставлять. Перетащил один раз (или закрыл) — подсказки больше нет.
+    Мышью ручки нет: тянется вся карточка."""
+    w = watch(viewport=PHONE, touch=True)
+    uid = A.run("insert into users(tg_id,name,created,checklist_hidden) values(0,'Smoke',%s,true) returning id",
+                (int(time.time()),))
+    first, second, third = (A.capture(uid, f"{t} @дом")["id"] for t in ("Первая", "Вторая", "Третья"))
+    w.goto("/dev-login")
+    w.goto("/next")  # на телефоне меню в выезжающей панели — сразу по адресу раздела
+    w.wait('main .dnd > .it', "Next")
+    assert w.page.evaluate("matchMedia('(pointer: coarse)').matches")
+    grip = f'main .it[data-id="{first}"] .grip'
+    assert w.page.is_visible(grip)
+    box = w.page.locator(grip).bounding_box()
+    assert box["width"] >= 44 and box["height"] >= 44, box  # под палец
+    w.wait("main .dndtip", "подсказка")
+    assert w.page.is_visible("main .dndtip") and "⠿" in w.page.inner_text("main .dndtip")
+    step = (w.page.locator(f'main .it[data-id="{second}"]').bounding_box()["y"]
+            - w.page.locator(f'main .it[data-id="{first}"]').bounding_box()["y"])
+    w.page.eval_on_selector(grip, """(el, dy) => {
+      const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const ev = (kind, t, yy) => t.dispatchEvent(new PointerEvent(kind, {bubbles: true, cancelable: true, pointerId: 9,
+        pointerType: 'touch', isPrimary: true, button: kind === 'pointermove' ? -1 : 0, clientX: x, clientY: yy}));
+      ev('pointerdown', el, y);
+      ev('pointermove', document.elementFromPoint(x, y + 20) || el, y + 20);  // сразу повёл — это перетаскивание
+      window.__dragging = !!document.querySelector('main .it.dragging');
+      ev('pointermove', document.elementFromPoint(x, y + dy) || el, y + dy);
+      ev('pointerup', document.elementFromPoint(x, y + dy) || el, y + dy);
+    }""", step * 1.6)
+    assert w.page.evaluate("window.__dragging"), "ручка не начала перетаскивание сразу"
+    assert screen_order(w) == [second, first, third]
+    wait_db(w, lambda: db_order(uid, "next") == [second, first, third], "порядок не сохранился")
+    w.page.reload()
+    w.wait("main .dnd > .it", "после перезагрузки")
+    assert not w.page.locator("main .dndtip").count()  # подсказка разовая
+    w.check("итог")
+
+
+def test_no_grip_or_tip_with_mouse(watch):
+    w = watch()
+    order_user(w)
+    assert not w.page.is_visible("main .dnd > .it .grip") and not w.page.locator("main .dndtip").count()
     w.check("итог")

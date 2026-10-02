@@ -68,7 +68,12 @@ button.sm:hover{color:var(--tx)}
 /* Перетаскивание (SERBITO-328): поднятая карточка — с тенью поверх соседей */
 .dnd > .it.dragging{position:relative;z-index:5;box-shadow:0 10px 28px #0003;border-color:var(--ac);cursor:grabbing;transition:none}
 body.dnd-on,body.dnd-on *{-webkit-user-select:none;user-select:none;cursor:grabbing}
-@media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
+@media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
+/* Ручка ⠿ (SERBITO-354): на сенсорном экране тянуть за неё можно сразу, без удержания; мышью тянется вся карточка */
+.it .grip{display:none}
+@media(pointer:coarse){.dnd > .it .grip{display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;
+  margin:-10px -12px -10px -4px;align-self:stretch;color:var(--mut);font-size:18px;touch-action:none;cursor:grab}}
+.dndtip{display:flex;align-items:center;gap:8px;margin:0 0 10px} .dndtip span{flex:1}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
 .pjh select.dmode{font-size:12.5px;font-weight:400;color:var(--mut);padding:3px 6px;border:1px solid var(--bd);border-radius:8px;
   background:var(--card);vertical-align:middle;max-width:100%}
 .fl{display:block;color:var(--mut);font-size:13px;margin:0 0 4px}
@@ -234,6 +239,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "new_project": "Новый проект", "create": "Создать",
   "to_project": "→ Project", "pick_project": "В какой проект?", "new_project_opt": "+ Новый проект…",
   "new_project_name": "Название нового проекта", "project_name_needed": "Напиши название проекта",
+  "dnd_tip": "Чтобы переставить задачу, удерживай её или тяни за ⠿", "dnd_tip_close": "Понятно",
   "new_project_ph": "Например, Ремонт кухни", "project_created": "Проект #{p} создан", "project_exists": "Проект #{p} уже есть", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
   "complete": "Завершить",
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
@@ -326,6 +332,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "new_project": "New project", "create": "Create",
   "to_project": "→ Project", "pick_project": "Which project?", "new_project_opt": "+ New project…",
   "new_project_name": "New project name", "project_name_needed": "Type a project name",
+  "dnd_tip": "To reorder, hold a task or drag it by ⠿", "dnd_tip_close": "Got it",
   "new_project_ph": "For example, Kitchen remodel", "project_created": "Project #{p} created", "project_exists": "Project #{p} already exists", "open_n": "{n} open", "no_next": "⚠ no next action",
   "complete": "Complete",
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
@@ -740,7 +747,7 @@ function itemHtml(it){
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
-    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}</div>`;
+    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}<span class="grip" aria-hidden="true">⠿</span></div>`;
 }
 
 // Стрелка, входящая в лоток: «положить во входящие»
@@ -801,6 +808,7 @@ function render(){
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || (topCap ? capHtml() : '')}${body}</main></div>`;
   if(S.view==='account'){ mountGoogle(); mountTelegram(); }
+  dndTip.draw();
   const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
   capFit(cap); capHint(cap);
   docTitle();  // и длинный SEO-заголовок лендинга после входа сменится
@@ -844,12 +852,25 @@ let moveQ = Promise.resolve(), moving = 0;
 // Порядок уходит на сервер по одному (иначе быстрые Alt+↓ посчитались бы от устаревших соседей); экран уже
 // переставлен — перечитываем данные, когда очередь опустела
 function dndSave(el){
+  dndTipDone();
   const id = +el.dataset.id, nb = x => x?.dataset.id ? +x.dataset.id : null;
   const body = {prev:nb(el.previousElementSibling), next:nb(el.nextElementSibling), scope:el.parentElement.dataset.scope};
   moving++;
   moveQ = moveQ.then(() => api(`/items/${id}/move`, 'POST', body)).catch(() => {})
     .finally(() => { if(--moving===0) load(); });
 }
+// Разовая подсказка на сенсорном экране (SERBITO-354): над первым списком, где есть что переставлять, пока человек
+// не перетащил задачу или не закрыл подсказку. Мышью — не нужна: тянется сама карточка, курсор это показывает
+const dndTip = {
+  seen(){ try{ return localStorage.getItem('gtd-dnd-tip') === '1'; }catch{ return true; } },
+  draw(){
+    if(this.seen() || !matchMedia('(pointer: coarse)').matches) return;
+    const box = [...document.querySelectorAll('main .dnd')].find(b => b.children.length > 1);
+    box?.insertAdjacentHTML('beforebegin', `<div class="hint dndtip"><span>${t('dnd_tip')}</span>
+      <button class="sm" data-act="dndtip">${t('dnd_tip_close')}</button></div>`);
+  },
+};
+function dndTipDone(){ try{ localStorage.setItem('gtd-dnd-tip', '1'); }catch{} $('main .dndtip')?.remove(); }
 const dndOrder = box => [...box.children].map(c => c.dataset.id).join();
 function dndReset(){
   clearTimeout(DND.timer);
@@ -889,7 +910,8 @@ document.addEventListener('pointerdown', e => {
   const el = e.target.closest('main .dnd > .it[data-id]');
   if(!el || e.button !== 0 || DND.el || e.target.closest('a,button,input,select,textarea,label') || $('#dlg').open) return;
   Object.assign(DND, {el, box:el.parentElement, x:e.clientX, y:e.clientY, pid:e.pointerId, touch:e.pointerType==='touch'});
-  if(DND.touch) DND.timer = setTimeout(dndStart, HOLD_MS);
+  if(DND.touch && e.target.closest('.grip')) dndStart();  // за ручку — сразу, без удержания (SERBITO-354)
+  else if(DND.touch) DND.timer = setTimeout(dndStart, HOLD_MS);
 });
 document.addEventListener('pointermove', e => {
   if(!DND.el || e.pointerId !== DND.pid) return;
@@ -1288,6 +1310,7 @@ document.addEventListener('click', async e => {
   }
   if(act==='mv') return moveItem(id, el.dataset.st);
   if(act==='toproj') return openToProject(id);
+  if(act==='dndtip') return dndTipDone();
   if(act==='undo') return toastUndo();
   if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
