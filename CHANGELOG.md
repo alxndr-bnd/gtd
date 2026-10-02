@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-02
+
 ### Added
 - Inbox tasks have a "→ Project" button: pick a project or create a new one right there. The task dialog's project list also has "+ New project".
   - RU: У задач в Inbox есть кнопка «→ Project»: выберите проект или сразу создайте новый. В списке проектов в карточке задачи тоже есть «+ Новый проект».
@@ -292,7 +294,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/alxndr-bnd/gtd/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/alxndr-bnd/gtd/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/alxndr-bnd/gtd/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/alxndr-bnd/gtd/compare/v0.22.0...v0.23.0
