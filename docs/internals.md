@@ -58,6 +58,10 @@ no language at all — Russian.
   is stored in `users.tg_lang` — reminders use it. `/login` for an English user links to `/en/`.
 - Texts: SPA — the `#i18n` dictionary in `static/index.html`; bot and server — `TEXTS` in `app.py`. ru/en keys
   match and English has no Cyrillic (`tests/test_i18n.py`).
+- GTD terms in Russian (owner decision, SERBITO-354): the lists — Inbox, Next, Waiting, Projects, Someday, Reference,
+  Weekly Review — are proper nouns, written in English and not declined (“в Inbox”, “из Next”); the sentences around
+  them are Russian. Other sections (Календарь, Готово, Аккаунт) are ordinary UI words and are translated. Same rule
+  in the app, the public pages and the bot (`test_ru_gtd_terms_are_proper_nouns`).
 
 ## Public pages and UI
 

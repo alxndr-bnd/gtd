@@ -215,7 +215,7 @@ def test_app_sections(watch, monkeypatch, lang):
             ids = seed(uid)
             w.goto("/")
             w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] перезагрузка с задачами")
-        for view in SECTIONS + ["inbox"]:  # и обратно во Входящие: переходы между разделами
+        for view in SECTIONS + ["inbox"]:  # и обратно в Inbox: переходы между разделами
             open_section(w, view, has_items, lang)
         # «Аккаунт» — в свёрнутом меню пользователя; кнопка Google — из заглушки GSI
         w.page.click("nav .navfoot button.user")
@@ -651,7 +651,7 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
 
 
 # ── Экран Inbox: что делать дальше (SERBITO-326) ──
-INBOX_TEXT = {"ru": {"empty": "Входящие пусты", "due": "Скоро срок", "next": "Next", "over": "просрочено"},
+INBOX_TEXT = {"ru": {"empty": "Inbox пуст", "due": "Скоро срок", "next": "Next", "over": "просрочено"},
               "en": {"empty": "Inbox is empty", "due": "Due soon", "next": "Next", "over": "overdue"}}
 
 

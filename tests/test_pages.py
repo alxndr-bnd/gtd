@@ -93,7 +93,7 @@ def test_about_content(client):
     ru = client.get("/about").text
     for w in ("Дэвида Аллена", "«Getting Things Done» (2001", "«Как привести дела в порядок»",
               "Собрать", "Обработать", "Организовать", "Пересмотреть", "Делать",
-              "Поле захвата", "Inbox", "Next, Waiting, Проекты, Someday, Reference, Календарь", "Weekly Review",
+              "Поле захвата", "Inbox", "Next, Waiting, Projects, Someday, Reference, Календарь", "Weekly Review",
               "@контексту", "позвонить маме завтра в 10:00", "отчёт #Работа @комп", "@gtdsrbot",
               "<kbd>C</kbd>", "<kbd>N</kbd>", "<kbd>Enter</kbd>", "<kbd>↑</kbd>"):
         assert w in ru, w
