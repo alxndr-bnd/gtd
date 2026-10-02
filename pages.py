@@ -249,10 +249,16 @@ function gtag(){ dataLayer.push(arguments); }
     if(e.target.closest('[data-cc-open]')){ e.preventDefault(); show(true); }  // «Настройки cookie»
   });
   addEventListener('resize', fit);
+  // Окно вернуло фокус (другое приложение, вкладка) — браузер снова шлёт focusin тому же элементу: это не ход
+  // клавиатуры, не крутим (SERBITO-374). Фиксированный элемент прокрутка не откроет — его тоже не трогаем
+  let away = null;
+  addEventListener('blur', e => { if(e.target === window) away = document.activeElement; });
+  const fixed = n => { for(; n && n.nodeType === 1; n = n.parentElement) if(getComputedStyle(n).position === 'fixed') return true; };
   // Фокус (Tab) попал под баннер — докручиваем: scrollIntoView учитывает scroll-padding-bottom выше. Браузер сам
   // прокручивает только к элементу за краем окна, а этот на экране — просто закрыт баннером
   document.addEventListener('focusin', e => {
-    if(!el || el.hidden || el.contains(e.target)) return;
+    const back = e.target === away; away = null;
+    if(back || !el || el.hidden || el.contains(e.target) || fixed(e.target)) return;
     const b = el.getBoundingClientRect(), r = e.target.getBoundingClientRect();
     if(r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right) e.target.scrollIntoView({block: 'nearest'});
   });
