@@ -1462,6 +1462,18 @@ def test_touch_drag_grip_and_tip(watch):
     w.page.reload()
     w.wait("main .dnd > .it", "после перезагрузки")
     assert not w.page.locator("main .dndtip").count()  # подсказка разовая
+    # Во Inbox у карточек ряд кнопок списков — ручка всё равно видна и под палец
+    A.capture(uid, "Во входящих")
+    w.goto("/")
+    grip = "main > .dnd > .it .grip"  # список самого Inbox (Next ниже — свой)
+    w.wait(grip, "Inbox")
+    box = w.page.locator(grip).bounding_box()
+    assert w.page.is_visible(grip) and box["width"] >= 44 and box["height"] >= 44, box
+    card = w.page.locator("main > .dnd > .it").bounding_box()
+    for sel in (grip, "main > .dnd > .it a.num", "main > .dnd > .it .act button.del"):  # ничего не вылезает за карточку
+        b = w.page.locator(sel).bounding_box()
+        assert b["x"] + b["width"] <= card["x"] + card["width"] + 0.5, (sel, b, card)
+    assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0]
     w.check("итог")
 
 

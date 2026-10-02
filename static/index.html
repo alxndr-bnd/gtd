@@ -136,7 +136,8 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   /* Зоны тапа ≥44px (SERBITO-354, G7): галочка — во всю высоту от левого края карточки, «#N» — квадрат 44 */
   .it .ck{min-width:44px;min-height:44px;margin:-10px -6px -10px -12px;align-items:center;justify-content:center}
   .it .num{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin:-10px -6px -10px 0}
-  .toast{bottom:12px}
+  .toast{bottom:12px;flex-wrap:wrap;row-gap:8px}
+  .toast .cxs{order:5;flex-basis:100%}  /* @контексты — отдельной строкой: текст «… → Next» не обрезается */
 }
 .it.sel,.it:focus-visible{outline:2px solid var(--ac);outline-offset:-1px}
 nav a.kb{outline:2px solid var(--ac);outline-offset:2px}  /* снаружи с зазором — видна и на синем активном */
