@@ -1564,3 +1564,18 @@ def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
     assert w.page.eval_on_selector("#signin .tgfb", look) == w.page.eval_on_selector('#signin [data-act="emailsend"]', look)
     assert int(w.page.eval_on_selector("#signin .tgfb", "el => getComputedStyle(el).fontWeight")) >= 600
     w.check("итог")
+
+
+@pytest.mark.parametrize("lang, label", [("ru", "Добавить"), ("en", "Add")])
+def test_capture_button_has_visible_label_on_wide_screens(watch, lang, label):
+    """G12: на широком экране у кнопки захвата есть видимая подпись, и она входит в её доступное имя; на телефоне —
+    только значок (место под поле), имя то же."""
+    for viewport, shown in (((1280, 900), True), (PHONE, False)):
+        w = watch(lang, viewport=viewport)
+        smoke_user(w, lang) if viewport != PHONE else w.goto("/dev-login")
+        btn = 'main [data-act="capture"]'
+        w.wait(btn, "кнопка захвата")
+        assert w.page.inner_text(btn).strip() == (label if shown else ""), viewport
+        assert w.page.get_attribute(btn, "aria-label").startswith(label)
+        w.check(f"{viewport}")
+        w.close()

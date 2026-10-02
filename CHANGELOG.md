@@ -26,6 +26,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
   - RU: В чек-листе «Первые шаги» есть ссылка на Telegram-бота.
 
 ### Changed
+- On a wide screen, the capture button now says "Add" next to its icon.
+  - RU: На широком экране у кнопки добавления рядом со значком есть подпись «Добавить».
 - The Projects screen has a single labelled "New project" field. Pressing Create with an empty name tells you what's missing, and a new project is confirmed with a message.
   - RU: На экране проектов осталось одно подписанное поле «Новый проект». «Создать» без названия подсказывает, чего не хватает, а созданный проект подтверждается сообщением.
 - In Russian, the GTD list names (Inbox, Next, Waiting, Projects, Someday, Reference, Weekly Review) are now used the same way everywhere — in the app, on the site and in the bot — with the text around them in Russian.

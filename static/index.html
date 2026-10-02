@@ -23,7 +23,10 @@ body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-app
 .app{display:flex;min-height:100vh}
 nav{width:230px;padding:16px 10px;border-right:1px solid var(--bd);background:var(--card);flex-shrink:0}
 nav h1{font-size:17px;margin:0 8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px} nav h1 img,.login h1 img{display:block} nav h1:hover{color:var(--ac)}
-button.icon{display:flex;align-items:center;justify-content:center;padding:0 16px} .hero button.icon svg{width:26px;height:26px}
+button.icon{display:flex;align-items:center;justify-content:center;gap:8px;padding:0 16px}
+/* Подпись кнопки захвата (SERBITO-354, G12): на широком экране — значок и слово, на телефоне — только значок;
+   aria-label начинается с этого слова */
+.cap .lbl{font-weight:600} @media(max-width:700px){.cap .lbl{display:none}} .hero button.icon svg{width:26px;height:26px}
 nav a{display:flex;justify-content:space-between;align-items:baseline;padding:8px 10px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
 nav a:hover{background:var(--bg)} nav a.on{background:var(--ac);color:var(--on-ac)}
 nav a .n{opacity:.7;font-size:13px;font-variant-numeric:tabular-nums}  /* по базовой линии названия, а не по верху */
@@ -209,7 +212,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть", "ctx_offer": "Контекст:",
   "cap_hints": ["Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»",
     "Что сделать? «завтра в 10:00 #дом @телефон»", "Что нужно сделать? #проект @контекст", "Что нужно сделать?", "Задача…"],
-  "cap_add": "Добавить в Inbox", "cap_project": "Добавить задачу в #{p}",
+  "cap_add": "Добавить в Inbox", "cap_btn": "Добавить", "cap_project": "Добавить задачу в #{p}",
   "task_missing": "Задача #{n} не найдена",
   "login_page": "Вход", "login_hint": "Вход или регистрация — аккаунт создастся сам",
   "get_code": "Войти по коду", "tg_signin": "Войти через Telegram", "or": "или", "no_methods": "Способы входа не настроены.",
@@ -303,7 +306,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "onb_title": "First steps in GTD", "onb_close": "Hide", "ctx_offer": "Context:",
   "cap_hints": ["Quick capture: “call the bank tomorrow at 10am #home @phone”",
     "What to do? “tomorrow at 10am #home @phone”", "What needs doing? #project @context", "What needs doing?", "Task…"],
-  "cap_add": "Add to Inbox", "cap_project": "Add a task to #{p}",
+  "cap_add": "Add to Inbox", "cap_btn": "Add", "cap_project": "Add a task to #{p}",
   "task_missing": "Task #{n} not found",
   "login_page": "Sign in", "login_hint": "Sign in or sign up — the account is created automatically",
   "get_code": "Sign in with a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
@@ -780,7 +783,7 @@ const capHtml = (pj = null) => {
   const add = pj ? t('cap_project', {p:esc(pj.title)}) : t('cap_add');
   return `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${pj ? add : CAP_HINTS[0]}"
     ${pj ? `data-pid="${pj.id}"` : ''} autofocus></textarea><div id="ac" class="ac" role="listbox" hidden></div></div>
-  <button class="pri icon" data-act="capture" aria-label="${add}" title="${add}">${ICON_INBOX}</button></div>`;
+  <button class="pri icon" data-act="capture" aria-label="${add}" title="${add}">${ICON_INBOX}<span class="lbl">${t('cap_btn')}</span></button></div>`;
 };
 
 function render(){
