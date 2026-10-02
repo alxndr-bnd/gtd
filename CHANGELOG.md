@@ -33,6 +33,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
   - RU: На странице проекта есть своё поле «Добавить задачу»: всё, что вы там пишете, попадает сразу в этот проект. В других разделах сообщение показывает, куда ушла новая задача, и её можно отменить.
 
 ### Fixed
+- On a phone, the checkbox and the task number are easier to tap: each now has a finger-sized area.
+  - RU: На телефоне галочку и номер задачи легче нажать: у каждого теперь зона под палец.
 - A /ru/ address now opens the Russian site instead of a "Page not found" error, and a wrong address always shows a proper "Page not found" page.
   - RU: Адрес /ru/ теперь открывает русский сайт, а не ошибку «Страница не найдена», а неверный адрес всегда показывает нормальную страницу «Страница не найдена».
 

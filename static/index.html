@@ -42,7 +42,7 @@ button.sm{padding:3px 8px;font-size:12.5px;color:var(--mut)}
 button.sm:hover{color:var(--tx)}
 .hint{color:var(--mut);font-size:13px;margin:-8px 0 14px}
 .it{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px}
-.it input[type=checkbox]{margin-top:4px;width:17px;height:17px}
+.it .ck{display:flex;flex-shrink:0;cursor:pointer} .it input[type=checkbox]{margin:4px 0 0;width:17px;height:17px}
 .it .b{flex:1;min-width:0}
 .it .num{color:var(--mut);font-size:12.5px;text-decoration:none;margin-top:2px;flex-shrink:0;font-variant-numeric:tabular-nums}
 .it .num:hover{color:var(--ac)}
@@ -124,7 +124,10 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   .it .act button.sm{min-height:44px;font-size:15px;color:var(--tx);padding:0 6px;white-space:nowrap}
   .it .act .ar{display:none}  /* на узкой кнопке «→» лишняя — слово влезает целиком */
   .it .act button.del{grid-column:3;grid-row:1 / span 3}  /* во Inbox — три ряда: Next, Project, Waiting, Someday, Ref */
-  .it input[type=checkbox]{width:24px;height:24px}
+  .it input[type=checkbox]{width:24px;height:24px;margin:0}
+  /* Зоны тапа ≥44px (SERBITO-354, G7): галочка — во всю высоту от левого края карточки, «#N» — квадрат 44 */
+  .it .ck{min-width:44px;min-height:44px;margin:-10px -6px -10px -12px;align-items:center;justify-content:center}
+  .it .num{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin:-10px -6px -10px 0}
   .toast{bottom:12px}
 }
 .it.sel,.it:focus-visible{outline:2px solid var(--ac);outline-offset:-1px}
@@ -743,7 +746,7 @@ function itemHtml(it){
   else if(it.status==='done') acts.push(['next',t('restore')]);
   // tabindex=-1: карточку фокусирует выбор стрелками и возврат из диалога, в порядок Tab она не входит
   return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}" tabindex="-1">
-    <input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}>
+    <label class="ck"><input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}></label>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}

@@ -1470,3 +1470,21 @@ def test_no_grip_or_tip_with_mouse(watch):
     order_user(w)
     assert not w.page.is_visible("main .dnd > .it .grip") and not w.page.locator("main .dndtip").count()
     w.check("итог")
+
+
+def test_phone_tap_targets(watch):
+    """G7 (остаток): на телефоне галочка «выполнено» и ссылка «#N» — не меньше 44×44 px; тап по краю зоны галочки
+    (мимо самого квадратика) тоже отмечает задачу. Имя галочки — название задачи, как раньше."""
+    w = watch(viewport=PHONE)
+    ids = smoke_user(w)
+    card = f'main .it[data-id="{ids["inbox"]}"]'
+    w.wait(card, "список")
+    for sel in (f"{card} .ck", f"{card} a.num"):
+        box = w.page.locator(sel).bounding_box()
+        assert box and box["width"] >= 44 and box["height"] >= 44, (sel, box)
+    assert w.page.get_by_role("checkbox", name="Позвонить маме").count() == 1
+    box = w.page.locator(f"{card} .ck").bounding_box()
+    w.page.mouse.click(box["x"] + 3, box["y"] + box["height"] - 3)  # угол зоны, не квадратик
+    wait_db(w, lambda: A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "done", "галочка")
+    assert not w.page.locator("#dlg[open]").count()
+    w.check("итог")
