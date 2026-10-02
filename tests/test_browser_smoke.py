@@ -1488,3 +1488,22 @@ def test_phone_tap_targets(watch):
     wait_db(w, lambda: A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "done", "галочка")
     assert not w.page.locator("#dlg[open]").count()
     w.check("итог")
+
+
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_no_gap_after_onboarding(watch, viewport):
+    """G8: когда карточка «Первые шаги» исчезла, а во Inbox есть задачи, поле захвата не съезжает вниз — сверху
+    тот же небольшой отступ, что и под карточкой; пустого места на её месте нет. Совсем пустой Inbox — по центру."""
+    uid = A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s) returning id", (int(time.time()),))
+    A.capture(uid, "Задача")
+    w = watch(viewport=viewport)
+    w.goto("/dev-login")
+    w.wait("main .onb", "чек-лист")
+    pad = lambda: w.page.eval_on_selector("main .hero", "el => parseFloat(getComputedStyle(el).paddingTop)")  # noqa: E731
+    with_card = pad()
+    A.run("update users set checklist_hidden=true where id=%s", (uid,))
+    w.page.reload()
+    w.wait("main .hero", "без чек-листа")
+    assert not w.page.locator("main .onb").count() and not w.page.locator("main .hero.solo").count()
+    assert pad() == with_card <= 32, (pad(), with_card)
+    w.check("итог")

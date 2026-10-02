@@ -35,6 +35,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 ### Fixed
 - On a phone, the checkbox and the task number are easier to tap: each now has a finger-sized area.
   - RU: На телефоне галочку и номер задачи легче нажать: у каждого теперь зона под палец.
+- After the "First steps" card goes away, the Inbox no longer leaves an empty gap above the capture field.
+  - RU: Когда карточка «Первые шаги» исчезает, над полем ввода в Inbox больше не остаётся пустого места.
 - A /ru/ address now opens the Russian site instead of a "Page not found" error, and a wrong address always shows a proper "Page not found" page.
   - RU: Адрес /ru/ теперь открывает русский сайт, а не ошибку «Страница не найдена», а неверный адрес всегда показывает нормальную страницу «Страница не найдена».
 

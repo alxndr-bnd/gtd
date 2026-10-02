@@ -62,7 +62,6 @@ button.sm:hover{color:var(--tx)}
 .onb{position:relative;margin:4px 0 0} .onb h3{margin:0 0 8px;padding-right:32px}
 .onb .onbx{position:absolute;top:6px;right:6px;border:0;background:none;font-size:14px}
 .onbi{padding:3px 0} .onbi span{color:var(--mut);font-size:13px} .onbi.ok b{text-decoration:line-through;color:var(--mut)}
-.hero.onbh{padding-top:32px}
 .pj{cursor:pointer} .pj .warn{color:var(--warn)}
 .it.done{background:none}
 /* Перетаскивание (SERBITO-328): поднятая карточка — с тенью поверх соседей */
@@ -95,7 +94,9 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .rv .cap{margin:8px 0 0}
 .capw{position:relative;flex:1;display:flex} .capw input,.capw textarea{width:100%}
 .ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;z-index:10;overflow:hidden}
-.hero{padding-top:22vh;text-align:center}
+/* Сверху — небольшой отступ, как под чек-листом: исчез чек-лист — поле не съезжает вниз (SERBITO-354, G8).
+   По центру экрана — только совсем пустой Inbox (.solo) */
+.hero{padding-top:32px;text-align:center}
 .hero.solo{padding-top:calc(50vh - 100px)}  /* поле в центре экрана; верх зафиксирован — растёт только вниз */
 .hero h2{font-size:24px;margin-bottom:14px}
 .hero .cap{margin-bottom:10px}
@@ -140,7 +141,7 @@ nav small.ver{color:var(--mut);margin-left:4px} nav .newdot{display:inline-block
 .below{margin-top:56px} .below h3{font-size:17px;margin:0 0 4px} .below .hint{margin:0 0 12px}
 .dnd + .below,.below + .below{margin-top:32px}  /* под задачами Inbox — ближе: это продолжение того же экрана */
 .hero .inbox-empty{font-weight:600;margin:0 0 4px}
-@media(max-width:700px){.hero{padding-top:8vh}.hero.solo{padding-top:calc(50vh - 150px)}}
+@media(max-width:700px){.hero.solo{padding-top:calc(50vh - 150px)}}
 .aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:var(--on-ac)}
 .aco small{opacity:.7;margin-left:6px}
 /* Аккаунт: одна кнопка, раскрывает «Аккаунт» и «Выйти» */
@@ -800,7 +801,7 @@ function render(){
       const next = S.nextItems.filter(i => !dueIds.has(i.id));
       const sec = (cls, title, hint, list, cards = list.map(itemHtml).join('')) => list.length
         ? `<section class="below ${cls}"><h3>${title}</h3><div class="hint">${hint}</div>${cards}</section>` : '';
-      hero = `${onb}<section class="hero ${onb?'onbh':items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
+      hero = `${onb}<section class="hero ${onb||items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
         ${items.length?`<div class="hint">${HELP.inbox}</div>`
           :`<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
       body = dndHtml(items) + sec('due-soon', t('due_soon'), t('due_hint'), due)  // «Скоро срок» — по дате, не переставляется
