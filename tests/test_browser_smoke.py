@@ -997,7 +997,7 @@ def test_task_dialog_labels_and_focus_return(watch):
     assert w.page.get_by_role("dialog", name="Задача #1").count() == 1
     fields = w.page.eval_on_selector_all("#ef input, #ef select, #ef textarea",
                                          "els => els.map(x => [x.name, x.labels[0]?.textContent.trim() || ''])")
-    assert len(fields) == 6 and all(label for _, label in fields), fields
+    assert len(fields) == 7 and all(label for _, label in fields), fields  # 7-е — имя нового проекта (SERBITO-354)
     w.page.keyboard.press("Escape")
     w.page.wait_for_function("!document.querySelector('#dlg[open]')", timeout=WAIT_MS)
     assert w.page.evaluate(FOCUSED)["card"] == str(ids["inbox"])
@@ -1226,6 +1226,16 @@ def test_signin_widgets_load_when_visible(prod_browser, server, monkeypatch):
 
 
 # ── SERBITO-354: gtd UX ──
+def wait_db(w, cond, what):
+    """Как until, но ждём через Playwright: пока тест спит в time.sleep, перехват запросов (ctx.route) не крутится
+    и запрос страницы к серверу стоит."""
+    deadline = time.monotonic() + WAIT_MS / 1000
+    while not cond():
+        assert time.monotonic() < deadline, what
+        w.page.wait_for_timeout(50)
+    w.check(what)
+
+
 def path_is(w, path, what):
     """Ждём адрес: история и перерисовка после popstate — асинхронные."""
     try:
@@ -1327,7 +1337,7 @@ def test_capture_on_project_page(watch, lang):
     w.wait("#toast:not([hidden])", "тост")
     assert "#Проект Альфа" in w.page.inner_text("#toast .tx")
     w.page.click('#toast [data-act="undo"]')  # «Отменить» — задачи нет
-    until(lambda: not A.row("select id from items where title='Купить плитку'"), "отмена записи")
+    wait_db(w, lambda: not A.row("select id from items where title='Купить плитку'"), "отмена записи")
 
     w.page.click('nav > a[data-view="waiting"]')
     w.wait('nav > a.on[data-view="waiting"]', "Waiting")
@@ -1336,4 +1346,50 @@ def test_capture_on_project_page(watch, lang):
     w.wait("#toast:not([hidden])", "тост в Waiting")
     assert "Inbox" in w.page.inner_text("#toast .tx")
     assert A.row("select status, project_id from items where title='Мысль'") == {"status": "inbox", "project_id": None}
+    w.check("итог")
+
+
+def test_inbox_item_to_project(watch):
+    """Items 2a, 2b: у задачи во Inbox есть «→ Project» — выбрать проект или создать новый, задача уходит в него
+    (в Next) с тостом и «Отменить». В карточке задачи в списке проектов есть «+ Новый проект»."""
+    w = watch()
+    ids = smoke_user(w)
+    alpha = A.row("select project_id from items where id=%s", (ids["proj"],))["project_id"]
+    card = f'main .it[data-id="{ids["inbox"]}"]'
+    w.page.click(f'{card} [data-act="toproj"]')
+    w.wait("#dlg[open] #tp", "выбор проекта")
+    assert w.page.locator("#dlg").get_attribute("aria-labelledby") == "dlg-h"
+    w.page.click('#tp [data-pick]:has-text("#Проект Альфа")')
+    wait_db(w, lambda: A.row("select project_id, status from items where id=%s", (ids["inbox"],))
+          == {"project_id": alpha, "status": "next"}, "задача не ушла в проект")
+    w.wait("#toast:not([hidden])", "тост")
+    assert "#Проект Альфа" in w.page.inner_text("#toast .tx")
+    w.page.click('#toast [data-act="undo"]')  # вернуть как было: Inbox, без проекта
+    wait_db(w, lambda: A.row("select project_id, status from items where id=%s", (ids["inbox"],))
+          == {"project_id": None, "status": "inbox"}, "отмена")
+
+    # Новый проект прямо из Inbox; пустое название — подсказка, проект не создан
+    w.wait(f'{card} [data-act="toproj"]', "кнопка после отмены")
+    w.page.click(f'{card} [data-act="toproj"]')
+    w.wait("#dlg[open] #tp", "выбор проекта снова")
+    n = A.row("select count(*) n from projects")["n"]
+    w.page.click('#tp [data-pick="new"]')
+    assert w.page.inner_text("#tpmsg") and A.row("select count(*) n from projects")["n"] == n
+    w.page.fill("#tp-new", "Отпуск")
+    w.page.press("#tp-new", "Enter")
+    wait_db(w, lambda: (A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s",
+                         (ids["inbox"],)) or {}).get("title") == "Отпуск", "новый проект из Inbox")
+    w.page.wait_for_selector("#dlg:not([open])", state="attached", timeout=WAIT_MS)
+
+    # Карточка задачи: «+ Новый проект» в списке проектов
+    w.page.click('nav > a[data-view="someday"]')
+    w.page.click(f'main .it[data-id="{ids["someday"]}"] .t')
+    w.wait("#dlg[open] #ef", "карточка")
+    assert w.page.is_hidden("#ef-newproj")
+    w.page.select_option("#ef-project", "new")
+    assert w.page.is_visible("#ef-newproj") and w.page.evaluate("document.activeElement.id") == "ef-newproj"
+    w.page.fill("#ef-newproj", "Ремонт")
+    w.page.click("#ef button.pri")
+    wait_db(w, lambda: (A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s",
+                         (ids["someday"],)) or {}).get("title") == "Ремонт", "новый проект из карточки")
     w.check("итог")

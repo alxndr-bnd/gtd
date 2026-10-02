@@ -71,6 +71,7 @@ body.dnd-on,body.dnd-on *{-webkit-user-select:none;user-select:none;cursor:grabb
 @media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
 .pjh select.dmode{font-size:12.5px;font-weight:400;color:var(--mut);padding:3px 6px;border:1px solid var(--bd);border-radius:8px;
   background:var(--card);vertical-align:middle;max-width:100%}
+.pjpick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px} .pjpick button{min-height:40px}
 .donesec{margin-top:18px} .donesec summary{cursor:pointer;color:var(--mut);font-weight:600;padding:6px 0;margin-bottom:6px}
 .rv{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .rv h3{margin:0 0 6px;font-size:15px} .rv a{color:var(--ac);cursor:pointer}
@@ -116,7 +117,7 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   .it .act.has-del{grid-template-columns:1fr 1fr 52px}
   .it .act button.sm{min-height:44px;font-size:15px;color:var(--tx);padding:0 6px;white-space:nowrap}
   .it .act .ar{display:none}  /* на узкой кнопке «→» лишняя — слово влезает целиком */
-  .it .act button.del{grid-column:3;grid-row:1 / span 2}
+  .it .act button.del{grid-column:3;grid-row:1 / span 3}  /* во Inbox — три ряда: Next, Project, Waiting, Someday, Ref */
   .it input[type=checkbox]{width:24px;height:24px}
   .toast{bottom:12px}
 }
@@ -229,7 +230,9 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
   "all": "все", "back_projects": "← Проекты", "rename": "Переименовать", "delete": "Удалить",
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.",
-  "new_project": "Новый проект", "create": "Создать", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
+  "new_project": "Новый проект", "create": "Создать",
+  "to_project": "→ Project", "pick_project": "В какой проект?", "new_project_opt": "+ Новый проект…",
+  "new_project_name": "Название нового проекта", "project_name_needed": "Напиши название проекта", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
   "complete": "Завершить",
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
     "s2": "2. Inbox → ноль", "s2_text": "В инбоксе: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">разобрать</a>",
@@ -318,7 +321,9 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action.",
-  "new_project": "New project", "create": "Create", "open_n": "{n} open", "no_next": "⚠ no next action",
+  "new_project": "New project", "create": "Create",
+  "to_project": "→ Project", "pick_project": "Which project?", "new_project_opt": "+ New project…",
+  "new_project_name": "New project name", "project_name_needed": "Type a project name", "open_n": "{n} open", "no_next": "⚠ no next action",
   "complete": "Complete",
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
     "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">process it</a>",
@@ -720,7 +725,8 @@ const dueHtml = it => overdue(it) ? `<span class="due over">⏰ ${fmtTs(it.remin
   : `<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`;
 function itemHtml(it){
   const acts = [];
-  if(it.status==='inbox') acts.push(['next','→ Next'],['waiting','→ Waiting'],['someday','→ Someday'],['reference','→ Ref'],['trash','🗑']);
+  // «→ Project» (SERBITO-354) — не список, а выбор проекта: своя кнопка (data-act=toproj), задача уходит в Next проекта
+  if(it.status==='inbox') acts.push(['next','→ Next'],['project',t('to_project')],['waiting','→ Waiting'],['someday','→ Someday'],['reference','→ Ref'],['trash','🗑']);
   else if(it.status==='next') acts.push(['waiting','→ Waiting'],['someday','→ Someday']);
   else if(it.status==='waiting') acts.push(['next','→ Next']);
   else if(it.status==='someday') acts.push(['next','→ Next']);
@@ -730,7 +736,7 @@ function itemHtml(it){
     <input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
-      ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" data-act="mv" data-st="${s}" ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
+      ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
     </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}</div>`;
 }
 
@@ -1038,7 +1044,7 @@ const draft = {
   // Выход: черновики задач не должны достаться следующему человеку за этим компьютером (SERBITO-360, GTD-14)
   clear(){ try{ Object.keys(localStorage).filter(k => k.startsWith('gtd-draft:')).forEach(k => localStorage.removeItem(k)); }catch{} },
 };
-const ITEM_FIELDS = ['title','notes','status','project_id','context','remind'];
+const ITEM_FIELDS = ['title','notes','status','project_id','newproj','context','remind'];
 
 // Диалог (карточка задачи, проект): закрыли — фокус туда, откуда открыли (SERBITO-349), а не на <body>. Открывший
 // элемент мог пропасть — список перерисовался после сохранения: тогда такой же по селектору back. Возвращает
@@ -1072,7 +1078,9 @@ function openEdit(id, found){
       <div class="ac" role="listbox" hidden></div></div>
     <label for="ef-notes">${t('f_notes')}</label><textarea id="ef-notes" name="notes" rows="3">${esc(it.notes)}</textarea>
     <label for="ef-status">${t('f_list')}</label><select id="ef-status" name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
-    <label for="ef-project">${t('f_project')}</label><select id="ef-project" name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}</select>
+    <label for="ef-project">${t('f_project')}</label><select id="ef-project" name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}
+      <option value="new">${t('new_project_opt')}</option></select>
+    <div class="newproj" hidden><label for="ef-newproj">${t('new_project_name')}</label><input id="ef-newproj" name="newproj" autocomplete="off"></div>
     <label for="ef-context">${t('f_context')}</label><input id="ef-context" name="context" value="${esc(it.context||'')}" placeholder="${t('f_context_ph')}">
     <label for="ef-remind">${t('f_remind')}</label><input id="ef-remind" type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
     <div class="draftnote" hidden>${t('draft')} · <a href="#" data-act="dropdraft">${t('draft_drop')}</a></div>
@@ -1084,13 +1092,23 @@ function openEdit(id, found){
   }
   const keep = () => draft.set(key, Object.fromEntries(ITEM_FIELDS.map(k => [k, form.elements[k].value])));
   form.addEventListener('input', keep); form.addEventListener('change', keep);
+  // «+ Новый проект…» в списке проектов (SERBITO-354) — под ним поле названия, обязательное, пока оно выбрано
+  const np = form.querySelector('.newproj'), npSync = focus => {
+    const on = form.elements.project_id.value === 'new';
+    np.hidden = !on; form.elements.newproj.required = on;
+    if(on && focus) form.elements.newproj.focus();
+  };
+  npSync(false);
+  form.elements.project_id.addEventListener('change', () => npSync(true));
   form.querySelector('[data-act=dropdraft]').onclick = e => { e.preventDefault(); draft.del(key); openEdit(id, it); };
   const back = dlgShow(`main .it[data-id="${id}"]`);
   $('#ef').onsubmit = async e => {
     draft.del(key);
     const f = new FormData(e.target);
+    let pid = f.get('project_id');
+    if(pid === 'new') pid = (await api('/projects','POST',{title:f.get('newproj').trim()})).id;
     await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
-      project_id:f.get('project_id')?+f.get('project_id'):null, context:f.get('context'),
+      project_id:pid?+pid:null, context:f.get('context'),
       remind_at:f.get('remind')?Math.floor(new Date(f.get('remind')).getTime()/1000):null});
     await load(); back();
   };
@@ -1102,6 +1120,38 @@ function openEdit(id, found){
   };
   // Без confirm: удаление отменяется из тоста «Отменить»
   d.querySelector('[data-act=del]').onclick = () => { draft.del(key); d.close(); deleteItem(id); };
+}
+
+// «→ Project» на задаче во Inbox (SERBITO-354): выбрать проект или сразу создать новый. Задача уходит в Next
+// этого проекта, тост — с «Отменить» (вернуть список и проект, как были)
+function openToProject(id){
+  const it = findItem(id); if(!it) return;
+  const d = $('#dlg');
+  d.innerHTML = `<div id="tp"><h3 id="dlg-h" style="margin:0 0 4px">${t('pick_project')}</h3>
+    <p class="hint" style="margin:0 0 10px">${esc(it.title)}</p>
+    <div class="pjpick">${S.projects.map(p => `<button type="button" data-pick="${p.id}">#${esc(p.title)}</button>`).join('')}</div>
+    <label for="tp-new">${t('new_project')}</label>
+    <div class="cap" style="margin:0"><input id="tp-new" autocomplete="off"><button type="button" class="pri" data-pick="new">${t('create')}</button></div>
+    <div class="msg" id="tpmsg"></div>
+    <div class="row"><span></span><button type="button" data-tp="cancel">${t('cancel')}</button></div></div>`;
+  dlgShow(`main .it[data-id="${id}"] [data-act=toproj]`);
+  if(!S.projects.length) $('#tp-new').focus();
+  const pick = async b => {
+    let pid = b.dataset.pick, title;
+    if(pid === 'new'){
+      title = $('#tp-new').value.trim();
+      if(!title){ $('#tpmsg').textContent = t('project_name_needed'); return $('#tp-new').focus(); }
+      pid = (await api('/projects','POST',{title})).id;
+    } else title = S.projects.find(p => p.id === +pid)?.title;
+    const prev = {status:it.status, project_id:it.project_id ?? null};
+    try{ await api('/items/'+id, 'PATCH', {project_id:+pid, status:'next'}); }
+    catch{ $('#tpmsg').textContent = t('failed'); return; }
+    d.close(); await load();
+    toast(t('moved', {title:it.title, to:'#'+title}), {undo: () => api('/items/'+id, 'PATCH', prev)});
+  };
+  d.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => pick(b));
+  $('#tp-new').onkeydown = e => { if(e.key==='Enter'){ e.preventDefault(); pick(d.querySelector('[data-pick=new]')); } };
+  d.querySelector('[data-tp=cancel]').onclick = () => d.close();
 }
 
 // ── Проекты: переименование и удаление (с задачами или только снять проект с задач)
@@ -1220,6 +1270,7 @@ document.addEventListener('click', async e => {
     e.preventDefault(); return openEdit(id);
   }
   if(act==='mv') return moveItem(id, el.dataset.st);
+  if(act==='toproj') return openToProject(id);
   if(act==='undo') return toastUndo();
   if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
