@@ -114,6 +114,7 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   width:min(560px,calc(100vw - 24px));background:#1f2733;color:#fff;border-radius:12px;padding:12px 14px 14px;box-shadow:0 8px 30px #0005;overflow:hidden}
 .toast .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toast button{background:none;border:1px solid #fff6;color:#fff;font-weight:600;min-height:40px;padding:0 14px}
+.toast .cxs{display:flex;gap:6px;flex-shrink:0} .toast button.cx{font-weight:400;padding:0 10px;border-radius:99px}
 .toast .sec{font-variant-numeric:tabular-nums;opacity:.7;min-width:2ch;text-align:right}
 .toast .bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--ac);transform-origin:left;animation:shrink linear forwards}
 @keyframes shrink{from{transform:scaleX(1)}to{transform:scaleX(0)}}
@@ -198,10 +199,11 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "inbox_empty": "Inbox пуст 🎉",
   "due_soon": "⏰ Скоро срок", "due_hint": "Просроченные и на ближайшие 3 дня — из всех списков", "overdue": "просрочено",
   "ex": "Например: «{ex}»",
-  "onb": [["capture", "Запиши 3 мысли", "в поле ниже или боту, не разбирая"],
+  "onb": [["capture", "Запиши 3 мысли", "в поле ниже, не разбирая"],
     ["process", "Разбери Inbox", "реши, что делать с задачей: → Next, → Waiting, → Someday…"],
     ["telegram", "Подключи Telegram-бота", "записывать с телефона и получать напоминания — в <a href=\"#account\" data-view=\"account\">Аккаунте</a>"]],
-  "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть",
+  "onb_capture_bot": "в поле ниже или <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">боту в Telegram</a>, не разбирая",
+  "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть", "ctx_offer": "Контекст:",
   "cap_hints": ["Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»",
     "Что сделать? «завтра в 10:00 #дом @телефон»", "Что нужно сделать? #проект @контекст", "Что нужно сделать?", "Задача…"],
   "cap_add": "Добавить в Inbox", "cap_project": "Добавить задачу в #{p}",
@@ -291,10 +293,11 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "inbox_empty": "Inbox is empty 🎉",
   "due_soon": "⏰ Due soon", "due_hint": "Overdue or due in the next 3 days, from all lists", "overdue": "overdue",
   "ex": "For example: “{ex}”",
-  "onb": [["capture", "Capture 3 thoughts", "in the field below or to the bot, no sorting yet"],
+  "onb": [["capture", "Capture 3 thoughts", "in the field below, no sorting yet"],
     ["process", "Clarify your Inbox", "decide what each task needs: → Next, → Waiting, → Someday…"],
     ["telegram", "Connect the Telegram bot", "capture from your phone and get reminders — under <a href=\"#account\" data-view=\"account\">Account</a>"]],
-  "onb_title": "First steps in GTD", "onb_close": "Hide",
+  "onb_capture_bot": "in the field below or to the <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">Telegram bot</a>, no sorting yet",
+  "onb_title": "First steps in GTD", "onb_close": "Hide", "ctx_offer": "Context:",
   "cap_hints": ["Quick capture: “call the bank tomorrow at 10am #home @phone”",
     "What to do? “tomorrow at 10am #home @phone”", "What needs doing? #project @context", "What needs doing?", "Task…"],
   "cap_add": "Add to Inbox", "cap_project": "Add a task to #{p}",
@@ -987,7 +990,8 @@ function onbHtml(){
   const o = S.counts.onboarding, steps = onbSteps();
   if(!o || o.hidden || steps.every(([k]) => o[k])) return '';
   return `<section class="rv onb"><button class="onbx" data-act="onbclose" aria-label="${t('onb_close')}" title="${t('onb_close')}">✕</button>
-    <h3>${t('onb_title')}</h3>${steps.map(([k,title,d]) => `<div class="onbi ${o[k]?'ok':''}">${o[k]?'✅':'⬜'} <b>${title}</b> <span>— ${d}</span></div>`).join('')}</section>`;
+    <h3>${t('onb_title')}</h3>${steps.map(([k,title,d]) => (d = k==='capture' && S.cfg.bot  // «или боту» — ссылкой (G9)
+      ? t('onb_capture_bot', {url:`https://t.me/${encodeURIComponent(S.cfg.bot)}`}) : d, `<div class="onbi ${o[k]?'ok':''}">${o[k]?'✅':'⬜'} <b>${title}</b> <span>— ${d}</span></div>`)).join('')}</section>`;
 }
 // GA onboarding_step: пункт стал выполнен у нас на глазах (между двумя загрузками) — шлём только его номер.
 // Выполненные к первой загрузке страницы не шлём: не отличить новое от давнего (например, сделанного в боте).
@@ -1031,14 +1035,16 @@ function gaPage(){
 // ── Undo-тост: после действия с задачей — «Отменить» с обратным отсчётом (5/10/30 с из настроек).
 // Новое действие делает предыдущее окончательным. Удаление отложено до конца таймера.
 let TOAST = null;
-function toast(text, {undo, commit} = {}){
+// chips — {label, c}: короткие варианты действия прямо в тосте (контекст после «→ Next»), pick(c) — по нажатию
+function toast(text, {undo, commit, chips, pick} = {}){
   toastEnd(true);
   const sec = S.me?.undo_seconds || 30, el = $('#toast');
-  el.innerHTML = `<span class="tx">${esc(text)}</span>${undo?`<button data-act="undo">${t('undo')}</button>`:''}
+  el.innerHTML = `<span class="tx">${esc(text)}</span>${chips?.length ? `<span class="cxs" role="group" aria-label="${t('ctx_offer')}">${chips.map(c =>
+      `<button class="cx" data-act="ctxset" data-c="${esc(c)}">@${esc(c)}</button>`).join('')}</span>` : ''}${undo?`<button data-act="undo">${t('undo')}</button>`:''}
     <b class="sec">${sec}</b><i class="bar" style="animation-duration:${sec}s"></i>`;
   el.hidden = false;
   let left = sec;
-  TOAST = {undo, commit,
+  TOAST = {undo, commit, pick,
     tick: setInterval(() => { left--; const b = el.querySelector('.sec'); if(b) b.textContent = Math.max(left, 0); }, 1000),
     end: setTimeout(() => toastEnd(true), sec * 1000)};
 }
@@ -1052,12 +1058,17 @@ function toastEnd(commit){
 async function toastUndo(){ const tt = toastEnd(false); if(tt?.undo) await tt.undo(); load(); }
 addEventListener('pagehide', () => toastEnd(true));  // закрыли вкладку — отложенное удаление всё равно выполнится
 const findItem = id => S.items.concat(S.dueItems||[], S.nextItems||[]).find(i => i.id===id);
+// Из Inbox в Next без контекста — тост предлагает до трёх знакомых @контекстов (SERBITO-354, G9): контекст не
+// обязателен и не добавляет шага, но с ним работает фильтр Next
 async function moveItem(id, status){
   const it = findItem(id); if(!it) return;
   const prev = it.status;
   await api('/items/'+id, 'PATCH', {status});
   load();
-  toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev})});
+  const chips = status==='next' && prev==='inbox' && !it.context ? S.contexts.slice(0, 3) : [];
+  toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev}), chips,
+    pick: async c => { await api('/items/'+id, 'PATCH', {context:c}); load();
+      toast(t('moved', {title:it.title, to:`${L.moved_to.next} @${c}`}), {undo: () => api('/items/'+id, 'PATCH', {context:null})}); }});
 }
 S.pendingDel = new Set();  // удалённые, но ещё не отправленные на сервер (ждут конца таймера)
 function deleteItem(id){
@@ -1316,6 +1327,7 @@ document.addEventListener('click', async e => {
   if(act==='toproj') return openToProject(id);
   if(act==='dndtip') return dndTipDone();
   if(act==='undo') return toastUndo();
+  if(act==='ctxset') return TOAST?.pick?.(el.dataset.c);
   if(act==='onbclose'){ S.counts.onboarding.hidden = true; render(); return api('/me','PATCH',{checklist_hidden:true}); }
   if(act==='undosec'){ S.me = await api('/me','PATCH',{undo_seconds:+el.dataset.n}); return render(); }
   if(act==='logout'){ draft.clear(); await api('/logout','POST'); S.me = null; return location.assign(LANG==='en' ? '/en/' : '/'); }  // на лендинг: его текст — с сервера

@@ -1507,3 +1507,34 @@ def test_no_gap_after_onboarding(watch, viewport):
     assert not w.page.locator("main .onb").count() and not w.page.locator("main .hero.solo").count()
     assert pad() == with_card <= 32, (pad(), with_card)
     w.check("итог")
+
+
+def test_onboarding_bot_link(watch, monkeypatch):
+    """G9: «или боту» в чек-листе — ссылка на бота; без бота на сервере про бота не говорим."""
+    A.run("insert into users(tg_id,name,created) values(0,'Smoke',%s)", (int(time.time()),))
+    w = watch()
+    w.goto("/dev-login")
+    w.wait("main .onb", "чек-лист без бота")
+    assert "бот" not in w.page.inner_text("main .onb div.onbi:first-of-type")
+    monkeypatch.setattr(A, "TOKEN", "smoke-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
+    w.page.reload()
+    link = 'main .onb div.onbi:first-of-type a[href="https://t.me/gtd_smoke_bot"]'
+    w.wait(link, "ссылка на бота")
+    assert w.page.get_attribute(link, "target") == "_blank" and "бот" in w.page.inner_text(link)
+    w.check("итог")
+
+
+def test_next_offers_context_chips(watch):
+    """G9: «→ Next» из Inbox не спрашивает контекст, но тост предлагает уже знакомые @контексты — один тап, и у задачи
+    есть контекст для фильтра в Next."""
+    w = watch()
+    ids = smoke_user(w)  # «Buy milk @home» — контекст уже есть
+    w.page.click(f'main .it[data-id="{ids["inbox"]}"] [data-act="mv"][data-st="next"]')
+    chip = '#toast [data-act="ctxset"][data-c="home"]'
+    w.wait(chip, "чип контекста в тосте")
+    w.page.click(chip)
+    wait_db(w, lambda: A.row("select context, status from items where id=%s", (ids["inbox"],))
+            == {"context": "home", "status": "next"}, "контекст из тоста")
+    assert "@home" in w.page.inner_text("#toast .tx")
+    w.check("итог")

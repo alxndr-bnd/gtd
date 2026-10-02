@@ -20,6 +20,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Inbox tasks have a "→ Project" button: pick a project or create a new one right there. The task dialog's project list also has "+ New project".
   - RU: У задач во Inbox есть кнопка «→ Project»: выберите проект или сразу создайте новый. В списке проектов в карточке задачи тоже есть «+ Новый проект».
 
+- After you move a task from the Inbox to Next, the message offers your usual @contexts: one tap adds one, so the Next filter works.
+  - RU: Когда вы переносите задачу из Inbox в Next, сообщение предлагает ваши обычные @контексты: одно нажатие — и контекст добавлен, фильтр в Next работает.
+- The "First steps" checklist links to the Telegram bot.
+  - RU: В чек-листе «Первые шаги» есть ссылка на Telegram-бота.
+
 ### Changed
 - The Projects screen has a single labelled "New project" field. Pressing Create with an empty name tells you what's missing, and a new project is confirmed with a message.
   - RU: На экране проектов осталось одно подписанное поле «Новый проект». «Создать» без названия подсказывает, чего не хватает, а созданный проект подтверждается сообщением.
