@@ -370,3 +370,21 @@ def test_index_has_checklist_and_empty_states(client):
     page = client.get("/").text
     for s in ("onboarding_step", "Запиши 3 мысли", "Разбери Inbox", "Подключи Telegram-бота", "checklist_hidden"):
         assert s in page, s
+
+
+def test_capture_into_project(client, login, new_client):
+    """SERBITO-354 (item 3): поле захвата на странице проекта кладёт задачу в этот проект (как #проект в тексте —
+    сразу в Next). Явный #другой в тексте важнее страницы. Чужой или несуществующий проект — 404, задача не создана."""
+    login(client)
+    pid = client.post("/api/projects", json={"title": "Ремонт кухни"}).json()["id"]
+    it = client.post("/api/capture", json={"text": "выбрать плитку завтра в 10:00", "project_id": pid}).json()
+    assert (it["project_id"], it["project"], it["status"], it["title"]) == (pid, "Ремонт кухни", "next", "выбрать плитку")
+    assert it["remind_at"]
+    other = client.post("/api/capture", json={"text": "купить краску #Дача", "project_id": pid}).json()
+    assert other["project"] == "Дача" and other["project_id"] != pid
+    stranger = new_client()
+    login(stranger, "bob@example.com")
+    n = A.row("select count(*) n from items")["n"]
+    assert stranger.post("/api/capture", json={"text": "x", "project_id": pid}).status_code == 404
+    assert stranger.post("/api/capture", json={"text": "x", "project_id": "1"}).status_code == 400
+    assert A.row("select count(*) n from items")["n"] == n

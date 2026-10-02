@@ -19,6 +19,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 ### Changed
 - The Back button and the phone's back gesture now move between sections, projects and an open task instead of leaving the app. Each section has its own address, so a reload keeps you where you were.
   - RU: Кнопка «Назад» и жест «назад» на телефоне теперь переходят между разделами, проектами и открытой задачей, а не уводят из приложения. У каждого раздела свой адрес, и после перезагрузки вы остаётесь там же.
+- A project page has its own "Add a task" field: what you type there goes straight into that project. Elsewhere, a message tells you where a new task went, with Undo.
+  - RU: На странице проекта есть своё поле «Добавить задачу»: всё, что вы там пишете, попадает сразу в этот проект. В других разделах сообщение показывает, куда ушла новая задача, и её можно отменить.
 
 ### Fixed
 - A /ru/ address now opens the Russian site instead of a "Page not found" error, and a wrong address always shows a proper "Page not found" page.

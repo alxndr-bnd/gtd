@@ -182,7 +182,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "someday": ["Идеи на потом: не сейчас, но жалко потерять. Из Inbox — кнопкой «→ Someday»", "выучить испанский"],
     "reference": ["Полезное без действия: инструкции, адреса, номера. Из Inbox — кнопкой «→ Ref»", "размер фильтра для пылесоса"],
     "done": ["Отметь задачу галочкой — она окажется здесь", ""],
-    "project": ["В проекте пока нет задач — допиши к задаче его #название", "заказать образцы #{p}"]},
+    "project": ["В проекте пока нет задач — добавь первую в поле выше", ""]},
   "empty_default": "Пусто 🎉",
   "inbox_empty": "Входящие пусты 🎉",
   "due_soon": "⏰ Скоро срок", "due_hint": "Просроченные и на ближайшие 3 дня — из всех списков", "overdue": "просрочено",
@@ -193,7 +193,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть",
   "cap_hints": ["Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»",
     "Что сделать? «завтра в 10:00 #дом @телефон»", "Что нужно сделать? #проект @контекст", "Что нужно сделать?", "Задача…"],
-  "cap_add": "Добавить в Inbox",
+  "cap_add": "Добавить в Inbox", "cap_project": "Добавить задачу в #{p}",
   "task_missing": "Задача #{n} не найдена",
   "login_page": "Вход", "login_hint": "Вход или регистрация — аккаунт создастся сам",
   "get_code": "Войти по коду", "tg_signin": "Войти через Telegram", "or": "или", "no_methods": "Способы входа не настроены.",
@@ -271,7 +271,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "someday": ["Ideas for later: not now, but too good to lose. From the Inbox, press “→ Someday”", "learn Spanish"],
     "reference": ["Useful info with no action: instructions, addresses, numbers. From the Inbox, press “→ Ref”", "vacuum filter size"],
     "done": ["Tick a task off and it lands here", ""],
-    "project": ["No tasks in this project yet — add its #name to a task", "order samples #{p}"]},
+    "project": ["No tasks in this project yet — add the first one in the field above", ""]},
   "empty_default": "Empty 🎉",
   "inbox_empty": "Inbox is empty 🎉",
   "due_soon": "⏰ Due soon", "due_hint": "Overdue or due in the next 3 days, from all lists", "overdue": "overdue",
@@ -282,7 +282,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "onb_title": "First steps in GTD", "onb_close": "Hide",
   "cap_hints": ["Quick capture: “call the bank tomorrow at 10am #home @phone”",
     "What to do? “tomorrow at 10am #home @phone”", "What needs doing? #project @context", "What needs doing?", "Task…"],
-  "cap_add": "Add to Inbox",
+  "cap_add": "Add to Inbox", "cap_project": "Add a task to #{p}",
   "task_missing": "Task #{n} not found",
   "login_page": "Sign in", "login_hint": "Sign in or sign up — the account is created automatically",
   "get_code": "Get a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
@@ -741,19 +741,23 @@ const ICON_INBOX = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" 
 // Поле захвата — textarea в одну строку: длинный текст переносится, и поле растёт вниз (capFit)
 // Подсказка — самая длинная из вариантов CAP_HINTS, что целиком влезает в текущую ширину поля (capHint)
 function capHint(el = $('#cap')){
-  if(!el || !el.clientWidth) return;
+  if(!el || !el.clientWidth || el.dataset.pid) return;  // в проекте подсказка своя — «Добавить задачу в #…»
   const cs = getComputedStyle(el), ctx = (capHint.ctx ||= document.createElement('canvas').getContext('2d'));
   ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
   const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
   el.placeholder = CAP_HINTS.find(h => ctx.measureText(h).width <= room) || CAP_HINTS.at(-1);
 }
-const capHtml = () => `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${CAP_HINTS[0]}" autofocus></textarea>
-    <div id="ac" class="ac" role="listbox" hidden></div></div>
-  <button class="pri icon" data-act="capture" aria-label="${t('cap_add')}" title="${t('cap_add')}">${ICON_INBOX}</button></div>`;
+// pj — страница проекта (SERBITO-354): поле добавляет задачу в этот проект, подсказка и кнопка говорят об этом
+const capHtml = (pj = null) => {
+  const add = pj ? t('cap_project', {p:esc(pj.title)}) : t('cap_add');
+  return `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${pj ? add : CAP_HINTS[0]}"
+    ${pj ? `data-pid="${pj.id}"` : ''} autofocus></textarea><div id="ac" class="ac" role="listbox" hidden></div></div>
+  <button class="pri icon" data-act="capture" aria-label="${add}" title="${add}">${ICON_INBOX}</button></div>`;
+};
 
 function render(){
   if(DND.on){ DND.rerender = true; return; }  // идёт перетаскивание — перерисуем, когда карточку отпустят
-  let body='', hero='';
+  let body='', hero='', topCap = true;  // topCap — общее поле захвата над разделом
   const live = l => (l||[]).filter(i => !S.pendingDel.has(i.id));
   S.items = live(S.items); S.nextItems = live(S.nextItems); S.dueItems = live(S.dueItems);
   if(S.view==='review') body = reviewHtml();
@@ -782,11 +786,11 @@ function render(){
           :`<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
       body = dndHtml(items) + sec('due-soon', t('due_soon'), t('due_hint'), due)  // «Скоро срок» — по дате, не переставляется
         + sec('next-sec', VIEWS[1][1], HELP.next, next, dndHtml(next));
-    } else if(pj) body = projectHtml(pj, items);
+    } else if(pj){ body = projectHtml(pj, items); topCap = false; }  // поле захвата — своё, под заголовком проекта
     else body = `<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}
       ${chips}${(DND_VIEWS.includes(S.view) ? dndHtml(items) : items.map(itemHtml).join('')) || emptyHtml(S.view)}`;
   }
-  $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || capHtml()}${body}</main></div>`;
+  $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || (topCap ? capHtml() : '')}${body}</main></div>`;
   if(S.view==='account'){ mountGoogle(); mountTelegram(); }
   const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
   capFit(cap); capHint(cap);
@@ -813,7 +817,7 @@ function projectHtml(pj, items){
   return `<p><a href="${viewPath('projects', null)}" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button>${dmode}</h2>
-    ${dndHtml(shown, 'project') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
+    ${capHtml(pj)}${dndHtml(shown, 'project') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
 }
 S.doneOpen = {};  // блок «Выполненные» раскрыт — по проектам, до перезагрузки страницы
 document.addEventListener('toggle', e => {
@@ -1142,11 +1146,18 @@ function openDeleteProject(pid){
   });
 }
 
+// Куда ушла задача, видно не всегда: на странице проекта она в нём, в Waiting или Done — в Inbox. Кроме Inbox
+// (там она в списке или в Next ниже) — тост «… → куда» с «Отменить» (SERBITO-354)
 async function capture(){
   const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
-  inp.value=''; acClose(); draft.del('cap'); await api('/capture','POST',{text:v});
+  const pid = inp.dataset.pid ? +inp.dataset.pid : undefined;
+  inp.value=''; acClose(); draft.del('cap');
+  const it = await api('/capture','POST',{text:v, project_id:pid});
   ga('task_capture', {channel:'web'});  // только факт — текст задачи в GA не уходит
   await load(); $('#cap')?.focus();  // записываем подряд, не кликая в поле снова
+  if(it?.id && S.view!=='inbox')
+    toast(t('moved', {title:it.title, to:it.project ? '#'+it.project : L.moved_to[it.status]||it.status}),
+      {undo: () => api('/items/'+it.id, 'DELETE')});
 }
 
 // ── Подсказки в поле захвата и в заголовке карточки (SERBITO-298): «@» — существующие контексты,

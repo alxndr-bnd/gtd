@@ -685,11 +685,12 @@ END_POS = "(select coalesce(max(position), 0) + 1024 from items where user_id=%s
 END_PPOS = "(select coalesce(max(ppos), 0) + 1024 from items where user_id=%s and project_id=%s)"
 
 
-def capture(uid: int, raw: str, source: str = "web") -> dict:
-    """Умный захват: текст [@контекст] [#проект] [когда] -> задача."""
+def capture(uid: int, raw: str, source: str = "web", project_id: int | None = None) -> dict:
+    """Умный захват: текст [@контекст] [#проект] [когда] -> задача. project_id — проект страницы, на которой
+    записали (SERBITO-354); #проект в самом тексте важнее."""
     track(uid, "telegram" if source == "telegram" else "web")
     p = parse_task(uid, raw)
-    title, ctx, proj_id, remind = p["title"], p["context"], p["project_id"], p["remind_at"]
+    title, ctx, proj_id, remind = p["title"], p["context"], p["project_id"] or project_id, p["remind_at"]
     status = "next" if (ctx or proj_id) else "inbox"
     iid = run(
         # Номер — из счётчика пользователя, атомарно в одной команде (изменяющий подзапрос — только в WITH)
@@ -2248,7 +2249,12 @@ def api_capture(body: dict, uid: int = Depends(current_user)):
     text = (body.get("text") or "").strip()
     if not text:
         raise HTTPException(400, "empty")
-    return capture(uid, text, "web")
+    pid = body.get("project_id")  # записали на странице проекта — задача в нём (SERBITO-354)
+    if pid is not None:
+        if type(pid) is not int:
+            raise HTTPException(400, "project_id")
+        project_get(uid, pid)  # только свой: чужой — 404
+    return capture(uid, text, "web", pid)
 
 
 @app.patch("/api/items/{iid}")

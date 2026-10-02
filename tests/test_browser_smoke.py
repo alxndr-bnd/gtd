@@ -1304,3 +1304,36 @@ def test_card_link_closes_to_its_section(watch):
     path_is(w, "/en/next", "Back под /en/")
     w.wait('nav > a.on[data-view="next"]', "Next после Back")
     w.check("итог")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_capture_on_project_page(watch, lang):
+    """Items 2c, 3: на странице проекта поле «добавить задачу» — под его заголовком и пишет в этот проект; тост
+    говорит, куда ушла задача. В других разделах (кроме Inbox) тост тоже говорит куда — задача не пропадает молча."""
+    w = watch(lang)
+    ids = smoke_user(w, lang)
+    pid = A.row("select project_id from items where id=%s", (ids["proj"],))["project_id"]
+    w.goto(f"/p/{pid}")
+    w.wait('main [data-act="back"]', "проект")
+    order = w.page.eval_on_selector_all("main h2.pjh, main #cap", "els => els.map(e => e.tagName)")
+    assert order == ["H2", "TEXTAREA"], order  # поле — под заголовком проекта
+    assert "Проект Альфа" in w.page.get_attribute("#cap", "placeholder")
+    assert "Проект Альфа" in w.page.get_attribute('main [data-act="capture"]', "aria-label")
+    w.page.fill("#cap", "Купить плитку")
+    w.page.press("#cap", "Enter")
+    w.wait('main .dnd .it .t:text-is("Купить плитку")', "задача в списке проекта")
+    it = A.row("select project_id, status from items where title='Купить плитку'")
+    assert (it["project_id"], it["status"]) == (pid, "next")
+    w.wait("#toast:not([hidden])", "тост")
+    assert "#Проект Альфа" in w.page.inner_text("#toast .tx")
+    w.page.click('#toast [data-act="undo"]')  # «Отменить» — задачи нет
+    until(lambda: not A.row("select id from items where title='Купить плитку'"), "отмена записи")
+
+    w.page.click('nav > a[data-view="waiting"]')
+    w.wait('nav > a.on[data-view="waiting"]', "Waiting")
+    w.page.fill("#cap", "Мысль")
+    w.page.press("#cap", "Enter")
+    w.wait("#toast:not([hidden])", "тост в Waiting")
+    assert "Inbox" in w.page.inner_text("#toast .tx")
+    assert A.row("select status, project_id from items where title='Мысль'") == {"status": "inbox", "project_id": None}
+    w.check("итог")
