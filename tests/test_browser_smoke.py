@@ -1393,3 +1393,33 @@ def test_inbox_item_to_project(watch):
     wait_db(w, lambda: (A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s",
                          (ids["someday"],)) or {}).get("title") == "Ремонт", "новый проект из карточки")
     w.check("итог")
+
+
+def test_projects_screen_one_clear_input(watch):
+    """Item 4 (G4): на экране проектов одно поле — «Новый проект» с подписью; общего поля захвата нет. «Создать»
+    без названия — подсказка, а не тишина; создан — тост; такой уже есть — тост об этом. Пустой экран не повторяет
+    подзаголовок дважды."""
+    A.run("insert into users(tg_id,name,created,checklist_hidden) values(0,'Smoke',%s,true)", (int(time.time()),))
+    w = watch()
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    w.page.click('nav > a[data-view="projects"]')
+    w.wait("main #np", "экран проектов")
+    assert not w.page.locator("main #cap").count()
+    assert w.page.eval_on_selector("#np", "el => el.labels[0]?.textContent.trim()")
+    main = w.page.inner_text("main")
+    assert main.count("больше одного шага") == 1, main  # подзаголовок и пустой экран не дублируют друг друга
+    w.page.click('main [data-act="newproj"]')
+    assert w.page.inner_text("#npmsg") and w.page.evaluate("document.activeElement.id") == "np"
+    assert not A.rows("select id from projects")
+    w.page.fill("#np", "Дача")
+    w.page.press("#np", "Enter")
+    w.wait('main .it.pj .t:text-is("Дача")', "проект в списке")
+    w.wait("#toast:not([hidden])", "тост: создан")
+    assert "Дача" in w.page.inner_text("#toast .tx") and w.page.input_value("#np") == ""
+    assert not w.page.inner_text("#npmsg")
+    w.page.fill("#np", "дача")
+    w.page.click('main [data-act="newproj"]')
+    w.wait('#toast .tx:has-text("уже есть")', "тост: уже есть")
+    assert len(A.rows("select id from projects")) == 1
+    w.check("итог")

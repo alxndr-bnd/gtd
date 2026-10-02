@@ -71,6 +71,7 @@ body.dnd-on,body.dnd-on *{-webkit-user-select:none;user-select:none;cursor:grabb
 @media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
 .pjh select.dmode{font-size:12.5px;font-weight:400;color:var(--mut);padding:3px 6px;border:1px solid var(--bd);border-radius:8px;
   background:var(--card);vertical-align:middle;max-width:100%}
+.fl{display:block;color:var(--mut);font-size:13px;margin:0 0 4px}
 .pjpick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px} .pjpick button{min-height:40px}
 .donesec{margin-top:18px} .donesec summary{cursor:pointer;color:var(--mut);font-weight:600;padding:6px 0;margin-bottom:6px}
 .rv{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
@@ -85,7 +86,7 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .gbtn{display:flex;min-height:44px} .login .gbtn{justify-content:center}
 .or{color:var(--mut);font-size:13px;margin:14px 0;display:flex;align-items:center;gap:10px}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
-.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} .msg .rv{color:var(--tx);font-size:14px}
+.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} #npmsg{margin:-10px 0 12px} .msg .rv{color:var(--tx);font-size:14px}
 .rv .cap{margin:8px 0 0}
 .capw{position:relative;flex:1;display:flex} .capw input,.capw textarea{width:100%}
 .ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;z-index:10;overflow:hidden}
@@ -232,7 +233,8 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.",
   "new_project": "Новый проект", "create": "Создать",
   "to_project": "→ Project", "pick_project": "В какой проект?", "new_project_opt": "+ Новый проект…",
-  "new_project_name": "Название нового проекта", "project_name_needed": "Напиши название проекта", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
+  "new_project_name": "Название нового проекта", "project_name_needed": "Напиши название проекта",
+  "new_project_ph": "Например, Ремонт кухни", "project_created": "Проект #{p} создан", "project_exists": "Проект #{p} уже есть", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
   "complete": "Завершить",
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
     "s2": "2. Inbox → ноль", "s2_text": "В инбоксе: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">разобрать</a>",
@@ -323,7 +325,8 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action.",
   "new_project": "New project", "create": "Create",
   "to_project": "→ Project", "pick_project": "Which project?", "new_project_opt": "+ New project…",
-  "new_project_name": "New project name", "project_name_needed": "Type a project name", "open_n": "{n} open", "no_next": "⚠ no next action",
+  "new_project_name": "New project name", "project_name_needed": "Type a project name",
+  "new_project_ph": "For example, Kitchen remodel", "project_created": "Project #{p} created", "project_exists": "Project #{p} already exists", "open_n": "{n} open", "no_next": "⚠ no next action",
   "complete": "Complete",
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
     "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">process it</a>",
@@ -769,7 +772,7 @@ function render(){
   if(S.view==='review') body = reviewHtml();
   else if(S.view==='account') body = accountHtml();
   else if(S.view==='stats') body = statsHtml();
-  else if(S.view==='projects' && !S.pid) body = projectsHtml();
+  else if(S.view==='projects' && !S.pid){ body = projectsHtml(); topCap = false; }
   else{
     let items = S.items;
     let chips='';
@@ -931,9 +934,13 @@ function reorderKey(e){
   return true;
 }
 
+// Экран проектов (SERBITO-354): одно поле — новый проект, с подписью; общего поля захвата здесь нет (render).
+// Подзаголовок — только над списком: у пустого экрана своё объяснение (emptyHtml), без повтора
 function projectsHtml(){
-  return `<h2>${L.views.projects}</h2><div class="hint">${t('projects_hint')}</div>
-  <div class="cap"><input id="np" placeholder="${t('new_project')}"><button data-act="newproj">${t('create')}</button></div>
+  return `<h2>${L.views.projects}</h2>${S.projects.length ? `<div class="hint">${t('projects_hint')}</div>` : ''}
+  <label class="fl" for="np">${t('new_project')}</label>
+  <div class="cap"><input id="np" autocomplete="off" placeholder="${t('new_project_ph')}"><button class="pri" data-act="newproj">${t('create')}</button></div>
+  <div class="msg" id="npmsg" role="alert"></div>
   ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}" tabindex="-1"><div class="b"><div class="t">${esc(p.title)}</div>
     <div class="meta"><span>${t('open_n', {n:p.open_count})}</span>${p.next_count?'':`<span class="warn">${t('no_next')}</span>`}</div></div>
     <button class="sm" data-act="renameproj" data-pid="${p.id}" title="${t('rename')}">✏️</button>
@@ -1198,6 +1205,16 @@ function openDeleteProject(pid){
 
 // Куда ушла задача, видно не всегда: на странице проекта она в нём, в Waiting или Done — в Inbox. Кроме Inbox
 // (там она в списке или в Next ниже) — тост «… → куда» с «Отменить» (SERBITO-354)
+async function newProject(){
+  const inp = $('#np'), v = inp.value.trim();
+  if(!v){ $('#npmsg').textContent = t('project_name_needed'); return inp.focus(); }
+  const had = S.projects.find(p => p.title.toLowerCase() === v.toLowerCase());  // сервер вернёт тот же проект
+  await api('/projects','POST',{title:v});
+  await load();
+  toast(t(had ? 'project_exists' : 'project_created', {p:had ? had.title : v}));
+  $('#np')?.focus();
+}
+
 async function capture(){
   const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
   const pid = inp.dataset.pid ? +inp.dataset.pid : undefined;
@@ -1284,7 +1301,7 @@ document.addEventListener('click', async e => {
     if(S.en){ S.en = false; history.replaceState(null, '', viewPath()); }
     setLang(S.me.lang || autoLang()); return render();
   }
-  if(act==='newproj'){ const v=$('#np').value.trim(); if(v){ await api('/projects','POST',{title:v}); load(); } return; }
+  if(act==='newproj') return newProject();
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
@@ -1386,7 +1403,7 @@ function captureKey(e){
   if(e.code!=='KeyC' && e.code!=='KeyN') return false;
   if(e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || $('#dlg').open) return false;
   if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return false;
-  const cap = $('#cap'); if(!cap) return false;
+  const cap = $('#cap') || $('#np'); if(!cap) return false;  // на экране проектов — поле нового проекта
   e.preventDefault();  // иначе буква впечатается в поле
   closeDrawer(); S.zone = 'main'; S.sel = null; selDraw();
   cap.focus(); cap.setSelectionRange(cap.value.length, cap.value.length);

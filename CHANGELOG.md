@@ -21,6 +21,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
   - RU: У задач во Inbox есть кнопка «→ Project»: выберите проект или сразу создайте новый. В списке проектов в карточке задачи тоже есть «+ Новый проект».
 
 ### Changed
+- The Projects screen has a single labelled "New project" field. Pressing Create with an empty name tells you what's missing, and a new project is confirmed with a message.
+  - RU: На экране проектов осталось одно подписанное поле «Новый проект». «Создать» без названия подсказывает, чего не хватает, а созданный проект подтверждается сообщением.
 - The Back button and the phone's back gesture now move between sections, projects and an open task instead of leaving the app. Each section has its own address, so a reload keeps you where you were.
   - RU: Кнопка «Назад» и жест «назад» на телефоне теперь переходят между разделами, проектами и открытой задачей, а не уводят из приложения. У каждого раздела свой адрес, и после перезагрузки вы остаётесь там же.
 - A project page has its own "Add a task" field: what you type there goes straight into that project. Elsewhere, a message tells you where a new task went, with Undo.
