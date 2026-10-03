@@ -190,6 +190,10 @@ def seed(uid):
 
 
 def open_section(w, view, has_items, lang):
+    # Снимаем отметку текущего раздела (SERBITO-367): клик по уже открытому разделу (Inbox → Inbox) иначе сразу
+    # «дождётся» старой отметки, пока его load() ещё идёт. Дальше каждый шаг ловит позднюю перерисовку прошлого
+    # (render берёт уже новый S.view), и последняя закрывает меню пользователя на занятой машине
+    w.page.eval_on_selector_all("nav > a.on", "els => els.forEach(e => e.classList.remove('on'))")
     w.page.click(f'nav > a[data-view="{view}"]')
     w.wait(f'nav > a.on[data-view="{view}"]', f"[{lang}] раздел {view}")
     main = w.page.locator("main")
