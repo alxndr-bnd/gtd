@@ -1251,7 +1251,9 @@ def test_signin_widgets_load_when_visible(prod_browser, server, monkeypatch):
         w.wait('#signin .gbtn:has-text("Google")', "кнопка Google")
         w.wait("#signin .tgw iframe", "виджет Telegram")
         assert sorted(u.split("/")[2] for u in asked) == ["accounts.google.com", "telegram.org"], asked
-        assert w.page.evaluate(below) == y
+        # Допуск 2 px: в CI без локальных шрифтов настоящая кнопка Google меняет метрики строки на доли пикселя
+        # (763 vs 761.8). Сдвиг, который ловим, — высота виджета, это десятки пикселей
+        assert abs(w.page.evaluate(below) - y) <= 2, (w.page.evaluate(below), y)
         w.check("итог")
     finally:
         w.close()
