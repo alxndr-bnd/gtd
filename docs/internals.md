@@ -30,6 +30,24 @@ link, where the person confirming isn't the one in the browser); one with tasks 
 (a button on the web, “🔗 Merge” in the bot). Only the initiator confirms. The merge is one transaction:
 tasks, projects (same-name projects are joined), sessions and missing sign-in methods move into one account.
 
+## MCP for AI assistants
+
+`/mcp` — an MCP server for Claude and other clients (SERBITO-375), code in `mcp_server.py`, user guide in the README.
+
+- **Auth** — only `Authorization: Bearer gtd_…`, a personal API token from “👤 Account” (`/api/tokens`, cookie
+  session only). The table `api_tokens` keeps the SHA-256 of the token, its name, `created` and `last_used`
+  (written at most once a minute). Revoke deletes the row. The session cookie does not open `/mcp`; the token does not
+  open `/api/*`. Tokens move with an account merge and are deleted with an emptied account.
+- **Transport** — the official `mcp` SDK (2.x, `MCPServer`), Streamable HTTP, stateless, JSON responses: Cloud
+  Run keeps nothing between requests. A fresh SDK session manager serves each request, so `/mcp` needs no app
+  lifespan. Both protocol eras work: the `initialize` handshake (2025-xx) and the stateless 2026-07-28 one.
+- **Limits** (`auth_limits`) — 120 requests a minute per token, 30 wrong tokens per IP in 10 minutes → 429 with
+  `Retry-After`.
+- **Isolation** — tools take `uid` from the token, never from arguments; tasks are addressed by the user's own
+  number `#N`. Tools: `capture`, `list_tasks`, `list_projects`, `list_contexts`, `complete_task`, `move_task`.
+- **Logs** — no token values and no task text; SDK loggers (`mcp.*`) log warnings only.
+- **Phase 2** — OAuth 2.1 for claude.ai connectors: [docs/plans/2026-10-03-mcp-oauth.md](plans/2026-10-03-mcp-oauth.md).
+
 ## Telegram capture
 
 - `Call the bank tomorrow at 10:00` → Inbox + reminder
@@ -88,7 +106,7 @@ and clients that ask for `application/json` get JSON. `/ru/…` redirects (308) 
 Nothing leaves the app: no task titles, texts, emails or `user_id`.
 
 - **Statistics** in the app — owner only (`ADMIN_USER_IDS`, account ids): users, DAU/WAU/MAU, channels
-  (site/bot), sign-in methods, tasks — all aggregates from the `activity` table (user × day × channel → action count).
+  (site/bot; MCP requests count as the `mcp` channel), sign-in methods, tasks — all aggregates from the `activity` table (user × day × channel → action count).
 - **Google Analytics 4** — only if `GA_MEASUREMENT_ID` is set, and only on the production domain; enhanced
   measurement off. Pages are sent as the section only (`/inbox`, `/next`…; `/i/N` goes as `/inbox`). Events:
   `login` / `link_method` (method), `task_capture`, `about_view` (language); every app event has a `language`
