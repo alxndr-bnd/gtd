@@ -19,11 +19,46 @@ FastAPI + PostgreSQL, one container. English and Russian.
   action) · Someday · Reference · Done · Weekly Review.
 - **Telegram bot:** send a message — it lands in the Inbox; reminders come with ✅ Done / 💤 +1h / ⏭ Next buttons.
 - **Sign-in** by email code, Google or Telegram; methods link into one account, accounts can be merged.
+- **AI assistants:** connect Claude (or any MCP client) with a personal token — see [Connect Claude](#connect-claude-mcp).
 - **Keyboard-first** web app, installable to the phone home screen.
 - **Privacy:** analytics never include task content, emails or user ids.
 
 Details for contributors: [docs/internals.md](docs/internals.md). What changed in each version:
 [CHANGELOG.md](CHANGELOG.md) (also on the site: [What's new](https://gtd.serbito.rs/en/changes)).
+
+## Connect Claude (MCP)
+
+Claude and other MCP clients can work with your tasks: capture to the Inbox, list and search tasks, projects and
+contexts, complete a task, move it to another list, project or context.
+
+1. In the app, open **👤 Account → 🤖 AI assistants (MCP)**. Enter a token name and press **Create token**.
+   Copy the token at once: the app shows it only once.
+2. Connect the client. The server address is `https://gtd.serbito.rs/mcp` (on your own server — `BASE_URL/mcp`).
+   - **Claude Code:** the app shows this command with your token filled in:
+     ```bash
+     claude mcp add --transport http gtd https://gtd.serbito.rs/mcp --header "Authorization: Bearer gtd_…"
+     ```
+   - **Other clients** with remote MCP servers: transport “Streamable HTTP”, the address above, and the header
+     `Authorization: Bearer gtd_…`.
+   - **Clients that start only local servers** (for example, Claude Desktop through its config file): use the
+     `mcp-remote` bridge — command `npx`, arguments
+     `["mcp-remote", "https://gtd.serbito.rs/mcp", "--header", "Authorization: Bearer gtd_…"]`.
+3. Ask, for example: “add ‘call the bank tomorrow 10am’ to my inbox”, “what are my next actions @phone?”,
+   “complete #42”, “move #17 to the Renovation project”.
+
+| Tool | What it does |
+| --- | --- |
+| `capture` | Captures a task, like the app and the bot: dates, `#Project` and `@context` in the text work |
+| `list_tasks` | Lists a list (Inbox, Next, Waiting, Scheduled, Someday, Reference, Done, all); filters by project, context, text |
+| `list_projects` | Active projects with counts; marks projects without a next action |
+| `list_contexts` | Contexts with counts of open tasks |
+| `complete_task` | Marks task #N done |
+| `move_task` | Moves task #N to a list, a project (created if missing) and/or a context |
+
+A token opens every task of its account. The database keeps only its SHA-256 hash. “👤 Account” shows when each
+token was last used; **Revoke** cuts access at once (“Sign out on all devices” does not revoke tokens). The limit is
+120 requests a minute per token. Connectors on claude.ai (sign-in with OAuth instead of a token) are planned:
+[docs/plans/2026-10-03-mcp-oauth.md](docs/plans/2026-10-03-mcp-oauth.md).
 
 ## Run locally
 

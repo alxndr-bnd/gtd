@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --root-user-action=ignore --require-hashes --no-deps -r requirements.txt && \
     find /usr/local/lib -type f \( -name 'bom.cdx.json' -o -name 'vendor.txt' \) -path '*/pip/_vendor/*' -delete
 # CHANGELOG.md разбирается при старте: из него страница «Что нового» (/changes)
-COPY app.py pages.py changelog.py CHANGELOG.md ./
+COPY app.py mcp_server.py pages.py changelog.py CHANGELOG.md ./
 COPY static static
 # Не от root: приложению не нужно ничего писать в образ
 RUN useradd --system --no-create-home app
