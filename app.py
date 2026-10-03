@@ -1616,7 +1616,10 @@ def attach(uid: int, field: str, value) -> int | None:
     """Привязывает способ входа к аккаунту uid. Если он уже у другого аккаунта: пустой (без задач
     и проектов) — забираем, опустевший без способов входа удаляем; с данными — ничего не меняем
     и возвращаем его id, чтобы вызывающий предложил объединить аккаунты."""
-    assert field in IDENTITIES
+    # field попадает в SQL как имя колонки, поэтому только из белого списка. Не assert:
+    # под python -O он исчезает (SERBITO-385).
+    if field not in IDENTITIES:
+        raise ValueError(f"not a sign-in field: {field!r}")
     other = row(f"select * from users where {field}=%s", (value,))
     if other and other["id"] != uid:
         if has_data(other["id"]):
