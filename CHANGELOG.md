@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-03
+
 ### Added
 - Connect Claude and other AI assistants over MCP: create a personal token under "Account", then capture, list, complete and move tasks from the assistant.
   - RU: Подключение Claude и других AI-ассистентов по MCP: создайте личный токен в «Аккаунте» и записывайте, смотрите, закрывайте и переносите задачи прямо из ассистента.
@@ -308,7 +310,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/alxndr-bnd/gtd/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/alxndr-bnd/gtd/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/alxndr-bnd/gtd/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/alxndr-bnd/gtd/compare/v0.24.0...v0.25.0
