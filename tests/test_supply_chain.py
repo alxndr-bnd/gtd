@@ -50,3 +50,10 @@ def test_dev_lock_uses_the_same_versions_as_the_image():
     version = lambda block: block.split("==")[1].split()[0]  # noqa: E731
     assert prod.keys() <= dev.keys(), prod.keys() - dev.keys()
     assert {p: version(b) for p, b in prod.items()} == {p: version(dev[p]) for p in prod}
+
+
+def test_image_copies_every_root_module():
+    """Каждый .py из корня репо попадает в образ. Иначе контейнер падает на импорте (v0.29.0: забыли oauth.py)."""
+    copy = re.search(r"^COPY app\.py .*$", DOCKERFILE, re.M).group(0).split()[1:-1]
+    modules = sorted(p.name for p in ROOT.glob("*.py"))
+    assert set(modules) <= set(copy), sorted(set(modules) - set(copy))

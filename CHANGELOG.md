@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+- Version 0.29.0 did not start on the server. This version ships all of its changes: the Claude connector, project reorder, the reorder hint and the green macOS icon.
+  - RU: Версия 0.29.0 не запустилась на сервере. Эта версия выпускает все её изменения: коннектор для Claude, порядок проектов, подсказку про перестановку и зелёную иконку на macOS.
+
 ## [0.29.0] - 2026-10-03
 
 ### Added
