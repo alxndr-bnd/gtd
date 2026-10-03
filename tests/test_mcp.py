@@ -179,7 +179,7 @@ def test_mcp_wrong_tokens_limited_per_ip(client, monkeypatch):
 def test_tools_listed(alice):
     tools = rpc(alice["mcp"], alice["tok"], "tools/list").json()["result"]["tools"]
     assert {t["name"] for t in tools} == {"list_tasks", "list_projects", "list_contexts", "capture",
-                                         "complete_task", "move_task"}
+                                         "complete_task", "move_task", "update_task", "weekly_review"}
     by_name = {t["name"]: t for t in tools}
     assert by_name["list_tasks"]["annotations"]["readOnlyHint"] is True
     assert "ctx" not in by_name["capture"]["inputSchema"]["properties"]  # контекст MCP — не аргумент
@@ -303,3 +303,70 @@ def test_official_client(alice, mode):
     assert "capture" in names and not got.is_error
     assert got.structured_content["title"] == "via sdk"
     assert [t["title"] for t in listed.structured_content["tasks"]] == ["via sdk"]
+
+
+# ── этап 2: update_task и weekly_review ──
+
+def test_update_task(alice):
+    mcp, tok, uid = alice["mcp"], alice["tok"], alice["uid"]
+    A.capture(uid, "draft the report")
+    t = call(mcp, tok, "update_task", number=1, title="write the report", notes="two pages")
+    assert (t["title"], t["notes"], t["list"], t["due"]) == ("write the report", "two pages", "inbox", None)
+    t = call(mcp, tok, "update_task", number=1, due="2026-12-01")
+    assert t["due"].startswith("2026-12-01T09:00")  # дата без времени — 9:00, как при захвате
+    t = call(mcp, tok, "update_task", number=1, due="2026-12-02T15:30")
+    assert t["due"].startswith("2026-12-02T15:30")
+    t = call(mcp, tok, "update_task", number=1, due="tomorrow 10am")
+    assert "T10:00" in t["due"]
+    assert A.row("select reminded from items where num=1 and user_id=%s", (uid,))["reminded"] == 0
+    # Явный срок важнее даты в новом заголовке
+    t = call(mcp, tok, "update_task", number=1, title="write the report tomorrow", due="2026-12-03")
+    assert t["title"] == "write the report" and t["due"].startswith("2026-12-03")
+    assert call(mcp, tok, "update_task", number=1, due="")["due"] is None
+    assert "Cannot read the date" in call_error(mcp, tok, "update_task", number=1, due="someday soon")
+    assert "Nothing to change" in call_error(mcp, tok, "update_task", number=1)
+    assert "Empty title" in call_error(mcp, tok, "update_task", number=1, title="  ")
+    assert "not found" in call_error(mcp, tok, "update_task", number=5, notes="x")
+
+
+def test_update_task_waiting_for(alice):
+    mcp, tok, uid = alice["mcp"], alice["tok"], alice["uid"]
+    A.capture(uid, "contract signed")
+    A.item_patch(uid, A.item_by_num(uid, 1)["id"], {"notes": "scan it"})
+    t = call(mcp, tok, "update_task", number=1, waiting_for="  Bob   from legal ")
+    assert (t["list"], t["notes"]) == ("waiting", "Waiting for: Bob from legal\nscan it")
+    t = call(mcp, tok, "update_task", number=1, waiting_for="Анна")  # строка заменяется, а не копится
+    assert t["notes"] == "Ждём: Анна\nscan it"
+    A.run("update users set lang='en' where id=%s", (uid,))
+    assert call(mcp, tok, "update_task", number=1, waiting_for="Анна")["notes"] == "Waiting for: Анна\nscan it"
+    t = call(mcp, tok, "update_task", number=1, waiting_for="")
+    assert (t["notes"], t["list"]) == ("scan it", "waiting")
+    t = call(mcp, tok, "update_task", number=1, notes="new notes", waiting_for="Carol")
+    assert t["notes"] == "Waiting for: Carol\nnew notes"
+
+
+def test_weekly_review(alice):
+    mcp, tok, uid = alice["mcp"], alice["tok"], alice["uid"]
+    now = int(A.time.time())
+    A.capture(uid, "inbox one")
+    A.capture(uid, "inbox two")
+    A.capture(uid, "fix the roof #House @home")       # 3: next в House
+    A.capture(uid, "pick a color #Kitchen")           # 4: Kitchen без next
+    A.capture(uid, "answer from Bob")                 # 5: waiting, давно
+    A.capture(uid, "answer from Ann")                 # 6: waiting, недавно
+    A.capture(uid, "pay rent")                        # 7: просрочено
+    A.capture(uid, "dentist")                         # 8: через 2 дня
+    A.capture(uid, "idea")                            # 9: someday
+    A.capture(uid, "old overdue but done")            # 10: done — не в обзоре
+    st = lambda n, s: A.run("update items set status=%s where user_id=%s and num=%s", (s, uid, n))
+    st(4, "waiting"), st(5, "waiting"), st(6, "waiting"), st(9, "someday"), st(10, "done")
+    A.run("update items set created=%s where user_id=%s and num=5", (now - 10 * 86400, uid))
+    A.run("update items set remind_at=%s where user_id=%s and num in (7, 10)", (now - 3600, uid))
+    A.run("update items set remind_at=%s where user_id=%s and num=8", (now + 2 * 86400, uid))
+    r = call(mcp, tok, "weekly_review")
+    assert r["inbox_count"] == 4  # inbox one, inbox two, pay rent, dentist
+    assert r["projects_without_next_action"] == [{"name": "Kitchen", "open_tasks": 1}]
+    assert [t["number"] for t in r["overdue"]] == [7]
+    assert [(t["number"], t["waiting_over_a_week"]) for t in r["waiting"]] == [(5, True), (4, False), (6, False)]
+    assert [t["number"] for t in r["upcoming_7_days"]] == [8]
+    assert r["someday_count"] == 1

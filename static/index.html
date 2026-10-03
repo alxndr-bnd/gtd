@@ -82,7 +82,7 @@ body.dnd-on,body.dnd-on *{-webkit-user-select:none;user-select:none;cursor:grabb
 .pjpick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px} .pjpick button{min-height:40px}
 .donesec{margin-top:18px} .donesec summary{cursor:pointer;color:var(--mut);font-weight:600;padding:6px 0;margin-bottom:6px}
 .rv{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
-.rv h3{margin:0 0 6px;font-size:15px} .rv a{color:var(--ac);cursor:pointer}
+.rv h3{margin:0 0 6px;font-size:15px} .rv h4{margin:12px 0 4px;font-size:14px} .rv a{color:var(--ac);cursor:pointer}
 dialog{border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);width:min(480px,94vw);padding:18px}
 dialog::backdrop{background:#0008}
 dialog label{display:block;margin:10px 0 3px;color:var(--mut);font-size:13px}
@@ -231,7 +231,12 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "sessions": "Сеансы", "sessions_text": "Открыто в браузерах и на устройствах: {n}.",
   "logout_all": "Выйти на всех устройствах", "logout_all_q": "Выйти из аккаунта на всех устройствах, включая это?",
   "mcp": "🤖 AI-ассистенты (MCP)",
-  "mcp_text": "Подключи Claude или другой MCP-клиент: он сможет записывать задачи в Inbox, показывать списки, закрывать задачи и переносить их в проекты и контексты. Нужны адрес сервера и токен.",
+  "mcp_text": "Подключи Claude или другой MCP-клиент: он сможет записывать задачи в Inbox, показывать списки, закрывать и править задачи, переносить их в проекты и контексты и проводить Weekly Review.",
+  "mcp_connector": "<b>claude.ai</b> (сайт, Claude Desktop, телефон): Настройки → Коннекторы → добавить свой коннектор с адресом ниже. Токен не нужен — войдёшь в GTD и подтвердишь доступ.",
+  "mcp_token_text": "<b>Claude Code</b> и другие клиенты с заголовком: нужны адрес сервера и токен.",
+  "apps": "Подключённые приложения", "apps_none": "Пока ничего не подключено.",
+  "app_meta": "{host} · подключено {created} · последний запрос: {used}", "app_disconnect": "Отключить",
+  "app_disconnect_q": "Отключить «{name}»? Приложение сразу потеряет доступ к задачам.",
   "mcp_url": "Адрес сервера:", "mcp_help": "Как подключить",
   "token_name_ph": "Название токена, например «Claude на ноутбуке»", "token_create": "Создать токен", "token_name_needed": "Дай токену название",
   "token_once": "Скопируй токен сейчас — больше он не покажется. Храни его как пароль.",
@@ -240,7 +245,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "tokens_none": "Токенов пока нет.", "token_meta": "создан {created} · последний запрос: {used}",
   "token_never": "ещё не было", "token_revoke": "Отозвать",
   "token_revoke_q": "Отозвать токен «{name}»? Ассистент с ним сразу потеряет доступ.",
-  "mcp_note": "Токен открывает все задачи этого аккаунта. «Выйти на всех устройствах» токены не отзывает.",
+  "mcp_note": "Токен и подключённое приложение открывают все задачи этого аккаунта. «Выйти на всех устройствах» их не отключает.",
   "account": "👤 Аккаунт", "account_short": "Аккаунт", "account_hint": "Любой привязанный способ открывает этот же аккаунт.",
   "linked": "✅ Привязан", "not_configured": "Не настроен на сервере",
   "email": "Почта", "email_linked": "✅ {email} — вход по одноразовому коду", "email_none": "Не привязана",
@@ -336,7 +341,12 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "sessions": "Sessions", "sessions_text": "Signed in on browsers and devices: {n}.",
   "logout_all": "Sign out on all devices", "logout_all_q": "Sign out of this account on all devices, including this one?",
   "mcp": "🤖 AI assistants (MCP)",
-  "mcp_text": "Connect Claude or another MCP client: it can capture tasks to your Inbox, show your lists, complete tasks and move them to projects and contexts. You need the server address and a token.",
+  "mcp_text": "Connect Claude or another MCP client: it can capture tasks to your Inbox, show your lists, complete and edit tasks, move them to projects and contexts, and run the Weekly Review.",
+  "mcp_connector": "<b>claude.ai</b> (web, Claude Desktop, phone): Settings → Connectors → add a custom connector with the address below. No token needed: you sign in to GTD and confirm the access.",
+  "mcp_token_text": "<b>Claude Code</b> and other clients with a header: you need the server address and a token.",
+  "apps": "Connected apps", "apps_none": "Nothing connected yet.",
+  "app_meta": "{host} · connected {created} · last request: {used}", "app_disconnect": "Disconnect",
+  "app_disconnect_q": "Disconnect “{name}”? The app loses access to your tasks at once.",
   "mcp_url": "Server address:", "mcp_help": "How to connect",
   "token_name_ph": "Token name, e.g. “Claude on my laptop”", "token_create": "Create token", "token_name_needed": "Give the token a name",
   "token_once": "Copy the token now — it won't be shown again. Keep it like a password.",
@@ -345,7 +355,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "tokens_none": "No tokens yet.", "token_meta": "created {created} · last request: {used}",
   "token_never": "none yet", "token_revoke": "Revoke",
   "token_revoke_q": "Revoke the token “{name}”? The assistant that uses it loses access at once.",
-  "mcp_note": "A token opens all tasks of this account. “Sign out on all devices” doesn't revoke tokens.",
+  "mcp_note": "A token or a connected app opens all tasks of this account. “Sign out on all devices” doesn't disconnect them.",
   "account": "👤 Account", "account_short": "Account", "account_hint": "Any linked method opens this same account.",
   "linked": "✅ Linked", "not_configured": "Not set up on the server",
   "email": "Email", "email_linked": "✅ {email} — sign in with a one-time code", "email_none": "Not linked",
@@ -492,6 +502,7 @@ async function load(){
       if(!S.cfg.user) return loginScreen();
     }
     S.counts = await api('/counts');
+    const resume = oauthResume(); if(resume) return location.replace(resume);  // вошли ради подключения приложения
     onbTrack(S.counts.onboarding);
     if(!S.me){ S.me = await api('/me'); applyLang(); }  // имя для кнопки аккаунта и язык интерфейса
     S.projects = await api('/projects');
@@ -500,7 +511,7 @@ async function load(){
       S.pid = null; if(!location.pathname.startsWith('/i/')) history.replaceState(null, '', viewPath());
     }
     if(S.view!=='account') S.newToken = null;  // показанный токен не переживает уход из «Аккаунта»
-    if(S.view==='account'){ S.me = await api('/me'); S.tokens = await api('/tokens'); }
+    if(S.view==='account'){ S.me = await api('/me'); [S.tokens, S.apps] = await Promise.all([api('/tokens'), api('/oauth/apps')]); }
     else if(S.view==='stats') S.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) S.items=[];
     else if(S.view==='projects'){  // выполненные сервер отдаёт, только если проект их показывает (SERBITO-327)
@@ -515,6 +526,18 @@ async function load(){
     render();
     await openDeepLink();
   }catch(e){ if(e.message==='auth') return loginScreen(); console.error(e); }
+}
+
+// Вход ради подключения AI-приложения (SERBITO-375, OAuth): гостю страница /authorize запомнила свой адрес
+// в sessionStorage (oauth.RESUME_KEY) и отправила на вход. Вошёл — возвращаем на экран согласия. Только свой
+// /authorize и только полчаса: ссылка из хранилища не уведёт ни на чужой сайт, ни в давно брошенный вход
+function oauthResume(){
+  try{
+    const v = JSON.parse(sessionStorage.getItem('gtd-oauth-next') || 'null');
+    sessionStorage.removeItem('gtd-oauth-next');
+    if(v && typeof v.u==='string' && v.u.startsWith('/authorize?') && Date.now() - v.t < 30*60e3) return v.u;
+  }catch{}
+  return '';
 }
 
 // Пришли по ссылке /i/N: после входа открываем карточку. Чужой или удалённой задачи просто нет.
@@ -723,6 +746,13 @@ function mcpHtml(){
   const copyRow = (v, what) => `<div class="tokrow"><code>${esc(v)}</code><button class="sm" data-act="copytok" data-v="${what}">${t('copy')}</button></div>`;
   return `<div class="rv" id="mcp"><h3>${t('mcp')}</h3>${t('mcp_text')}
     <div class="tokrow">${t('mcp_url')} <code>${esc(mcpUrl())}</code> <a href="${MCP_DOCS}" target="_blank" rel="noopener">${t('mcp_help')}</a></div>
+    <p>${t('mcp_connector')}</p>
+    <h4>${t('apps')}</h4>
+    ${(S.apps||[]).map(a => `<div class="tok app"><span><b>${esc(a.name)}</b><br><small>${t('app_meta',
+      {host:esc(a.host), created:fmtTs(a.created), used:a.last_used ? fmtTs(a.last_used) : t('token_never')})}</small></span>
+      <button class="sm del" data-act="disconnectapp" data-id="${a.id}">${t('app_disconnect')}</button></div>`).join('')
+      || `<div class="tokrow">${t('apps_none')}</div>`}
+    <p>${t('mcp_token_text')}</p>
     ${nt ? `<div class="newtok"><b>${t('token_once')}</b>${copyRow(nt.token, 'token')}
       <div>${t('token_cmd')}</div>${copyRow(mcpCmd(nt.token), 'cmd')}
       <button class="sm" data-act="tokhide">${t('token_hide')}</button></div>` : ''}
@@ -745,6 +775,11 @@ async function copyToken(btn){
   try{ await navigator.clipboard.writeText(btn.dataset.v==='cmd' ? mcpCmd(nt.token) : nt.token); btn.textContent = t('copied'); }
   catch{ btn.textContent = t('error'); }
   setTimeout(() => btn.textContent = t('copy'), 1500);
+}
+async function disconnectApp(id){
+  const a = (S.apps||[]).find(x => x.id===id);
+  if(!a || !confirm(t('app_disconnect_q', {name:a.name}))) return;
+  await api('/oauth/apps/'+id, 'DELETE'); S.apps = await api('/oauth/apps'); render();
 }
 async function revokeToken(id){
   const k = (S.tokens||[]).find(x => x.id===id);
@@ -1421,6 +1456,7 @@ document.addEventListener('click', async e => {
   if(act==='copytok') return copyToken(el);
   if(act==='tokhide'){ S.newToken = null; return render(); }
   if(act==='revoketok') return revokeToken(+el.dataset.id);
+  if(act==='disconnectapp') return disconnectApp(+el.dataset.id);
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }

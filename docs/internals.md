@@ -32,21 +32,61 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
 
 ## MCP for AI assistants
 
-`/mcp` — an MCP server for Claude and other clients (SERBITO-375), code in `mcp_server.py`, user guide in the README.
+`/mcp` — an MCP server for Claude and other clients (SERBITO-375), code in `mcp_server.py` (transport, tools) and
+`oauth.py` (OAuth 2.1), user guide in the README.
 
-- **Auth** — only `Authorization: Bearer gtd_…`, a personal API token from “👤 Account” (`/api/tokens`, cookie
-  session only). The table `api_tokens` keeps the SHA-256 of the token, its name, `created` and `last_used`
-  (written at most once a minute). Revoke deletes the row. The session cookie does not open `/mcp`; the token does not
-  open `/api/*`. Tokens move with an account merge and are deleted with an emptied account.
+- **Auth** — `Authorization: Bearer …` with one of two token kinds:
+  - **personal API token** `gtd_…` from “👤 Account” (`/api/tokens`, cookie session only). The table `api_tokens`
+    keeps the SHA-256 of the token, its name, `created` and `last_used` (written at most once a minute). Revoke
+    deletes the row.
+  - **OAuth access token** `gtdo_…` (claude.ai custom connectors, Claude Code without a header). See below.
+
+  The session cookie does not open `/mcp`; no token opens `/api/*`. Without a valid token `/mcp` answers 401 with
+  `WWW-Authenticate: Bearer resource_metadata="BASE_URL/.well-known/oauth-protected-resource/mcp", scope="tasks"`.
+- **OAuth 2.1** (`oauth.py`, design: [docs/plans/2026-10-03-mcp-oauth.md](plans/2026-10-03-mcp-oauth.md)) — gtd
+  is its own authorization server; issuer = `BASE_URL`, resource = `BASE_URL/mcp`, one scope `tasks`.
+  - Metadata: `/.well-known/oauth-protected-resource` (also `…/mcp`, RFC 9728) and
+    `/.well-known/oauth-authorization-server` (RFC 8414). Only these have CORS `*`. Models from the `mcp` SDK.
+  - `POST /register` (RFC 7591): public clients only (`token_endpoint_auth_method` is always `none`). Redirect URIs:
+    `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` or loopback
+    `http://localhost|127.0.0.1|[::1]:port/path`. 10 registrations per IP an hour. Clients without connections and
+    unused for 90 days are deleted on the next registration.
+  - `GET /authorize`: unknown client or a redirect URI that is not an exact match → error page, never a redirect.
+    Other errors go back to the client with `error`, `state` and `iss` (RFC 9207). PKCE S256 only; `resource`, if
+    given, must be `/mcp`. Not signed in → a page that saves its own URL in `sessionStorage` (`gtd-oauth-next`) and
+    sends the user to sign in; after any sign-in method the SPA (`oauthResume`) returns to `/authorize` (same-site
+    path only, 30 minutes). Signed in → consent page: client name, account, return host; Allow / Deny.
+  - `POST /authorize` — the consent form: same-origin only (403 otherwise), re-validates every parameter.
+    Consent pages use `Referrer-Policy: same-origin` (with `no-referrer` the browser sends `Origin: null` and the
+    same-origin check fails); the redirect with the code uses `no-referrer`.
+  - `POST /token` (form body): `authorization_code` (code single use, 10 minutes, bound to client, redirect URI,
+    PKCE verifier and resource) and `refresh_token` (rotates on every use). Access token 1 hour, refresh token
+    90 days. 30 requests per client a minute.
+  - Theft signals revoke the whole connection: a reused code, a reused (already rotated) refresh token, a refresh
+    token from another client.
+  - `POST /revoke` (RFC 7009): always 200; a refresh token revokes the connection, an access token only itself.
+  - Tables: `oauth_clients`; `oauth_grants` (one connection per account and client — new consent replaces the old
+    one); `oauth_codes` and `oauth_tokens` (SHA-256 only). Tokens live in their own table, not in `api_tokens` as
+    the design first said: the personal-token list and its limit stay untouched. Grants and codes move with an
+    account merge.
+  - “👤 Account → Connected apps”: `GET /api/oauth/apps`, `DELETE /api/oauth/apps/{id}` (cookie session). The list
+    drops connections without a live refresh token.
 - **Transport** — the official `mcp` SDK (2.x, `MCPServer`), Streamable HTTP, stateless, JSON responses: Cloud
   Run keeps nothing between requests. A fresh SDK session manager serves each request, so `/mcp` needs no app
   lifespan. Both protocol eras work: the `initialize` handshake (2025-xx) and the stateless 2026-07-28 one.
-- **Limits** (`auth_limits`) — 120 requests a minute per token, 30 wrong tokens per IP in 10 minutes → 429 with
-  `Retry-After`.
+- **Limits** (`auth_limits`) — 120 requests a minute per personal token or OAuth connection, 30 wrong tokens per IP
+  in 10 minutes → 429 with `Retry-After`.
 - **Isolation** — tools take `uid` from the token, never from arguments; tasks are addressed by the user's own
-  number `#N`. Tools: `capture`, `list_tasks`, `list_projects`, `list_contexts`, `complete_task`, `move_task`.
-- **Logs** — no token values and no task text; SDK loggers (`mcp.*`) log warnings only.
-- **Phase 2** — OAuth 2.1 for claude.ai connectors: [docs/plans/2026-10-03-mcp-oauth.md](plans/2026-10-03-mcp-oauth.md).
+  number `#N`. Tools: `capture`, `list_tasks`, `list_projects`, `list_contexts`, `complete_task`, `move_task`,
+  `update_task`, `weekly_review`.
+- **`update_task`** — title (parsed like the card: `#Project`, `@context`, a date), notes, due date (ISO 8601 or
+  capture words; date only → 09:00; an explicit `due` wins over a date in the new title), `waiting_for`. A task has
+  no “waiting for” field: `waiting_for` moves it to Waiting and writes `Waiting for: …` / `Ждём: …` (account
+  language) as the first line of the notes; `""` removes that line.
+- **`weekly_review`** — read-only: Inbox count, projects without a next action, overdue (open tasks with a past
+  date), Waiting (oldest first, `waiting_over_a_week` by creation date — there is no “moved to Waiting” time),
+  next 7 days, Someday count.
+- **Logs** — no token values, codes or task text; SDK loggers (`mcp.*`) log warnings only.
 
 ## Telegram capture
 

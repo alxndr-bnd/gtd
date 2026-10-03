@@ -19,7 +19,8 @@ FastAPI + PostgreSQL, one container. English and Russian.
   action) · Someday · Reference · Done · Weekly Review.
 - **Telegram bot:** send a message — it lands in the Inbox; reminders come with ✅ Done / 💤 +1h / ⏭ Next buttons.
 - **Sign-in** by email code, Google or Telegram; methods link into one account, accounts can be merged.
-- **AI assistants:** connect Claude (or any MCP client) with a personal token — see [Connect Claude](#connect-claude-mcp).
+- **AI assistants:** connect Claude as a custom connector (sign in, no token) or any MCP client with a personal
+  token — see [Connect Claude](#connect-claude-mcp).
 - **Keyboard-first** web app, installable to the phone home screen.
 - **Privacy:** analytics never include task content, emails or user ids.
 
@@ -29,22 +30,44 @@ Details for contributors: [docs/internals.md](docs/internals.md). What changed i
 ## Connect Claude (MCP)
 
 Claude and other MCP clients can work with your tasks: capture to the Inbox, list and search tasks, projects and
-contexts, complete a task, move it to another list, project or context.
+contexts, complete and edit a task, move it to another list, project or context, and run the Weekly Review.
+The server address is `https://gtd.serbito.rs/mcp` (on your own server — `BASE_URL/mcp`).
+
+### claude.ai, Claude Desktop and the Claude mobile app — a custom connector (OAuth)
+
+You need only the address. No token.
+
+1. In Claude, open **Settings → Connectors → Add custom connector**.
+2. Enter a name (for example, `GTD`) and the URL `https://gtd.serbito.rs/mcp`. Leave the OAuth fields empty.
+   Press **Add**, then **Connect**.
+3. GTD opens. Sign in (Google, email or Telegram) if you are not signed in. Check the app name and the return
+   address (`claude.ai`), then press **Allow**.
+4. Claude returns to the chat with the connector on. A connector added on claude.ai also works in Claude Desktop
+   and on the phone.
+
+To disconnect, open **👤 Account → 🤖 AI assistants → Connected apps** and press **Disconnect**. Access stops at
+once. Removing the connector in Claude may leave access open in GTD; disconnect it in GTD too.
+
+### Claude Code and other clients — a personal token
 
 1. In the app, open **👤 Account → 🤖 AI assistants (MCP)**. Enter a token name and press **Create token**.
    Copy the token at once: the app shows it only once.
-2. Connect the client. The server address is `https://gtd.serbito.rs/mcp` (on your own server — `BASE_URL/mcp`).
+2. Connect the client.
    - **Claude Code:** the app shows this command with your token filled in:
      ```bash
      claude mcp add --transport http gtd https://gtd.serbito.rs/mcp --header "Authorization: Bearer gtd_…"
      ```
+     Without `--header`, Claude Code signs in with OAuth instead: run `/mcp` in Claude Code and choose
+     **Authenticate**.
    - **Other clients** with remote MCP servers: transport “Streamable HTTP”, the address above, and the header
      `Authorization: Bearer gtd_…`.
-   - **Clients that start only local servers** (for example, Claude Desktop through its config file): use the
-     `mcp-remote` bridge — command `npx`, arguments
+   - **Clients that start only local servers:** use the `mcp-remote` bridge — command `npx`, arguments
      `["mcp-remote", "https://gtd.serbito.rs/mcp", "--header", "Authorization: Bearer gtd_…"]`.
-3. Ask, for example: “add ‘call the bank tomorrow 10am’ to my inbox”, “what are my next actions @phone?”,
-   “complete #42”, “move #17 to the Renovation project”.
+
+### What Claude can do
+
+Ask, for example: “add ‘call the bank tomorrow 10am’ to my inbox”, “what are my next actions @phone?”,
+“complete #42”, “move #17 to the Renovation project”, “#12 is waiting for Anna”, “let's do the weekly review”.
 
 | Tool | What it does |
 | --- | --- |
@@ -54,11 +77,18 @@ contexts, complete a task, move it to another list, project or context.
 | `list_contexts` | Contexts with counts of open tasks |
 | `complete_task` | Marks task #N done |
 | `move_task` | Moves task #N to a list, a project (created if missing) and/or a context |
+| `update_task` | Changes the title, notes or due date of task #N, or sets who it waits for (moves it to Waiting) |
+| `weekly_review` | Read-only summary: Inbox count, projects without a next action, overdue, Waiting, next 7 days, Someday count |
 
-A token opens every task of its account. The database keeps only its SHA-256 hash. “👤 Account” shows when each
-token was last used; **Revoke** cuts access at once (“Sign out on all devices” does not revoke tokens). The limit is
-120 requests a minute per token. Connectors on claude.ai (sign-in with OAuth instead of a token) are planned:
-[docs/plans/2026-10-03-mcp-oauth.md](docs/plans/2026-10-03-mcp-oauth.md).
+### Security
+
+- A token or a connected app opens every task of its account, and nothing of other accounts.
+- The database keeps only SHA-256 hashes of tokens. OAuth access tokens live 1 hour; refresh tokens live 90 days
+  and change on every use. A reused refresh token or code disconnects the app.
+- OAuth returns only to Claude's callback (`https://claude.ai/api/mcp/auth_callback`, the same on `claude.com`) or
+  to a program on your computer (`http://localhost`, `127.0.0.1`, `[::1]`), exact match.
+- “👤 Account” shows when each token and app was last used. **Revoke** and **Disconnect** cut access at once.
+  “Sign out on all devices” does not revoke tokens or apps. The limit is 120 requests a minute per token or app.
 
 ## Run locally
 
