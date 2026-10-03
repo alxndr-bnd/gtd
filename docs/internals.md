@@ -19,6 +19,15 @@ Sign-up is open: the first sign-in by any method creates an account.
 - **Requests** — state-changing `/api/*` and `POST /auth` must be same-origin (`Sec-Fetch-Site`/`Origin`);
   `/api/*` bodies must be `application/json`. Every response carries security headers; the CSP is report-only
   for now (reports go to Sentry when `SENTRY_DSN` is set). `/docs` and `/openapi.json` exist only with `DEV=1`.
+- **Known CSP reports** (SERBITO-412). The browser sends them straight to Sentry's security endpoint, not
+  through our server, so our code cannot filter them.
+  - `script-src` eval (GTD-2): `telegram.org/js/telegram-widget.js` line 6. The Login Widget compiles our
+    `data-onauth="onTelegramAuth(user)"` with `eval`. Only the sign-in page, only with the widget. To enforce
+    the CSP without `'unsafe-eval'`, the widget must go (SERBITO-316: move to "Log In With Telegram") or use
+    `data-auth-url` (a redirect, no eval). Many reports came from local headless Chrome runs against prod.
+  - `font-src` frontend-cdn.perplexity.ai (GTD-4): the Perplexity browser or extension injects its font into
+    the page. Not ours. Filter in Sentry, gtd and serbito projects: Settings → Security Headers → CSP →
+    "Use default ignored sources" on, "Additional ignored sources" + `frontend-cdn.perplexity.ai`.
 - **Bot** answers only in private chats.
 
 Google and an email code for the same address are one account. Other methods are linked under
