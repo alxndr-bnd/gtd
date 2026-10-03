@@ -284,3 +284,19 @@ jobs:
             --to-revisions "${PREV_REVISION}=100"
           echo "::error::The main page does not return 200 after the deploy. Traffic is back on $PREV_REVISION."
           exit 1
+
+      # SERBITO-348: заголовки безопасности на главной сервиса (run.app — это та же ревизия, что за
+      # gtd.serbito.rs). Без отката: страница работает, но без защиты. Запуск падает и шлёт письмо.
+      # Пересборка старого тега, в котором скрипта ещё нет, проверку пропускает с предупреждением.
+      - name: Security headers check
+        run: |
+          set -euo pipefail
+          if [ ! -f scripts/check_security_headers.sh ]; then
+            echo "::warning::scripts/check_security_headers.sh нет в этом теге — проверка заголовков пропущена."
+            exit 0
+          fi
+          SVC_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
+          if ! bash scripts/check_security_headers.sh "$SVC_URL/"; then
+            echo "::error::Main page of $SVC_URL is missing security headers (see the list above)."
+            exit 1
+          fi
