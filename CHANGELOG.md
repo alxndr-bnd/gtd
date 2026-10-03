@@ -16,6 +16,14 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+- Connect Claude and other AI assistants over MCP: create a personal token under "Account", then capture, list, complete and move tasks from the assistant.
+  - RU: Подключение Claude и других AI-ассистентов по MCP: создайте личный токен в «Аккаунте» и записывайте, смотрите, закрывайте и переносите задачи прямо из ассистента.
+
+### Security
+- MCP tokens are stored only as hashes, show when they were last used, and can be revoked at once.
+  - RU: MCP-токены хранятся только в виде хеша, показывают, когда ими пользовались, и отзываются сразу.
+
 ## [0.27.0] - 2026-10-03
 
 ### Security
