@@ -13,7 +13,8 @@ To run your own copy on any Docker host, see [self-host.md](self-host.md) instea
 | Bot | Telegram webhook `/tg/webhook` |
 | Reminders | Cloud Scheduler job `gtd-reminders`, every minute |
 | Errors | Sentry project `nohandoff/gtd` |
-| Dependencies | Dependabot (`.github/dependabot.yml`: pip, docker, actions — weekly) |
+| Dependencies | Locked with hashes (`requirements*.txt`, [README](../README.md#dependencies)); base image pinned by digest; Dependabot (`.github/dependabot.yml`: uv lock, docker digest, actions — weekly) |
+| CI | `.github/workflows/ci.yml` on every PR and push to `main`: pytest with the browser smoke, lock check, image build |
 
 ## Release
 
