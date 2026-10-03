@@ -17,10 +17,20 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 ## [Unreleased]
 
 ### Added
+- Reorder projects by drag & drop, with Alt+↑↓, or by the ⠿ handle on a phone. The project picker uses the same order.
+  - RU: Проекты можно переставлять: перетащите мышью, пальцем за ⠿ или Alt+↑↓. В выборе проекта тот же порядок.
 - Connect Claude as a custom connector: on claude.ai, Claude Desktop or the phone, add the gtd URL, sign in and press Allow. No token is needed. "Account" lists connected apps, and Disconnect cuts access at once.
   - RU: Claude подключается как свой коннектор: на claude.ai, в Claude Desktop или на телефоне добавьте адрес gtd, войдите и нажмите «Разрешить». Токен не нужен. В «Аккаунте» виден список подключённых приложений, «Отключить» сразу закрывает доступ.
 - New AI assistant tools: edit a task (title, notes, due date, who it waits for) and a Weekly Review summary.
   - RU: Новые инструменты для AI-ассистентов: правка задачи (название, заметки, срок, кого ждём) и сводка для Weekly Review.
+
+### Changed
+- It is now easy to see that tasks can be reordered: the ⠿ handle shows on hover, and a one-time hint explains drag and Alt+↑↓.
+  - RU: Теперь видно, что задачи можно переставлять: при наведении появляется ⠿, а разовая подсказка объясняет перетаскивание и Alt+↑↓.
+
+### Fixed
+- The installed app icon on macOS is green again instead of black.
+  - RU: Иконка установленного приложения на macOS снова зелёная, а не чёрная.
 
 ### Security
 - Every deploy now checks that the site sends its security headers. If one is missing, the deploy stops.
