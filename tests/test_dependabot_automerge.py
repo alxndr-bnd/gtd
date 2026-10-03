@@ -154,7 +154,9 @@ def test_all_green_merges_with_squash_on_the_tested_commit(fake_gh):
     ]
 
 
-@pytest.mark.parametrize("conclusion", ["failure", "cancelled", "timed_out", "skipped"])
+@pytest.mark.parametrize(
+    "conclusion", ["failure", "cancelled", "timed_out", "skipped", "neutral"]
+)
 def test_a_required_check_that_did_not_pass_blocks_the_merge(fake_gh, conclusion):
     runs = [_run(c) for c in REQUIRED[1:]] + [_run(REQUIRED[0], conclusion)]
     out, merges = fake_gh(runs)
@@ -163,9 +165,19 @@ def test_a_required_check_that_did_not_pass_blocks_the_merge(fake_gh, conclusion
     assert "Not merging" in out.stdout
 
 
-def test_any_other_red_check_blocks_the_merge(fake_gh):
-    out, merges = fake_gh([_run(c) for c in REQUIRED] + [_run("Analyze", "failure")])
+@pytest.mark.parametrize(
+    "conclusion", ["failure", "cancelled", "timed_out", "action_required", "stale"]
+)
+def test_any_other_red_check_blocks_the_merge(fake_gh, conclusion):
+    out, merges = fake_gh([_run(c) for c in REQUIRED] + [_run("Analyze", conclusion)])
     assert merges == [] and "Not merging" in out.stdout
+
+
+def test_a_neutral_other_check_does_not_block_the_merge(fake_gh):
+    # SERBITO-417: CodeQL default setup ends `neutral` on a Dependabot PR (javi #52).
+    out, merges = fake_gh([_run(c) for c in REQUIRED] + [_run("CodeQL", "neutral")])
+    assert out.returncode == 0, out.stderr
+    assert len(merges) == 1, out.stdout
 
 
 def test_missing_ci_never_merges(fake_gh):
