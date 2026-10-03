@@ -8,3 +8,5 @@ psycopg-pool>=3.3.3
 sentry-sdk[fastapi]>=2.71.0
 # MCP-сервер на /mcp для AI-ассистентов (SERBITO-375). API 2.x: FastMCP там называется MCPServer
 mcp>=2.3.0,<3
+# Проверка OIDC ID-токена Cloud Scheduler на /tasks/reminders (SERBITO-363); [requests] — транспорт за ключами Google
+google-auth[requests]>=2.59.1

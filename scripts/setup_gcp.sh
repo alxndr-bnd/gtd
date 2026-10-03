@@ -88,12 +88,17 @@ g iam service-accounts add-iam-policy-binding "$DEPLOYER" --role roles/iam.workl
   >/dev/null
 
 echo "==> Cloud Scheduler: будильник напоминаний раз в минуту"
+# SERBITO-363: будильник подписывается OIDC ID-токеном общего для serbito сервис-аккаунта scheduler-invoker,
+# а не секретом в заголовке (его видел любой с cloudscheduler.jobs.get). aud — адрес сервиса, его ждёт app.py
+INVOKER=scheduler-invoker@$PROJECT.iam.gserviceaccount.com
+g iam service-accounts describe "$INVOKER" >/dev/null 2>&1 \
+  || g iam service-accounts create scheduler-invoker --display-name "Cloud Scheduler OIDC identity"
 cron_args=(--location "$REGION" --schedule "* * * * *" --time-zone "Europe/Belgrade"
   --uri "https://gtd.serbito.rs/tasks/reminders" --http-method POST
-  --headers "X-Cron-Secret=$(g secrets versions access latest --secret gtd-cron-secret)"
+  --oidc-service-account-email "$INVOKER" --oidc-token-audience "https://gtd.serbito.rs"
   --attempt-deadline 60s)
 if g scheduler jobs describe gtd-reminders --location "$REGION" >/dev/null 2>&1; then
-  g scheduler jobs update http gtd-reminders "${cron_args[@]/--headers/--update-headers}" >/dev/null
+  g scheduler jobs update http gtd-reminders "${cron_args[@]}" --remove-headers X-Cron-Secret >/dev/null
 else
   g scheduler jobs create http gtd-reminders "${cron_args[@]}" >/dev/null
 fi

@@ -110,8 +110,17 @@ SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 # Google Analytics 4: поток данных для gtd.serbito.rs. Пусто — GA не подключается
 GA_ID = os.getenv("GA_MEASUREMENT_ID", "")
 GA_HOST = "gtd.serbito.rs"
-# Будильник напоминаний: Cloud Scheduler раз в минуту шлёт POST /tasks/reminders с этим секретом
+# Будильник напоминаний: Cloud Scheduler раз в минуту шлёт POST /tasks/reminders (cron_authorized).
+# SERBITO-363: доказательство — OIDC ID-токен Google от сервис-аккаунта scheduler-invoker в Authorization: Bearer,
+# aud — один из адресов сервиса. Старый общий секрет в X-Cron-Secret работает, пока джоба не переключена;
+# SCHEDULER_STATIC_TOKEN_ENABLED=0 закрывает этот путь
 CRON_SECRET = os.getenv("CRON_SECRET", "")
+CRON_SECRET_ENABLED = os.getenv("SCHEDULER_STATIC_TOKEN_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
+CRON_OIDC_EMAIL = os.getenv("SCHEDULER_OIDC_EMAIL", "scheduler-invoker@serbito.iam.gserviceaccount.com").strip()
+CRON_OIDC_AUDIENCES = {a.strip().rstrip("/") for a in os.getenv(
+    "SCHEDULER_OIDC_AUDIENCES",
+    "https://gtd.serbito.rs,https://gtd-aay5lcpxha-ew.a.run.app,https://gtd-488744139718.europe-west1.run.app",
+).split(",") if a.strip()}
 # Прод (https): Telegram сам шлёт апдейты вебхуком — инстанс спит, пока никто не пишет.
 # Локально (http): long polling, чтобы бот работал без публичного адреса.
 WEBHOOK = BASE_URL.startswith("https://")
@@ -2151,11 +2160,72 @@ async def tg_webhook(request: Request):
     return {"ok": True}
 
 
+class CachedCerts:
+    """Транспорт google-auth для verify_oauth2_token: публичные ключи Google живут в памяти час, а не качаются
+    на каждый вызов будильника. Google публикует новый ключ задолго до того, как начнёт им подписывать."""
+    TTL = 3600
+
+    def __init__(self, inner=None):
+        self.inner, self.cache = inner, {}
+
+    def __call__(self, url, method="GET", body=None, headers=None, timeout=None, **kw):
+        if self.inner is None:  # requests и google-auth грузим при первом вызове: холодный старт не платит
+            import google.auth.transport.requests
+            self.inner = google.auth.transport.requests.Request()
+        if method != "GET" or body is not None:
+            return self.inner(url, method=method, body=body, headers=headers, timeout=timeout, **kw)
+        hit = self.cache.get(url)
+        if hit and hit[0] > time.monotonic():
+            return hit[1]
+        r = self.inner(url, method=method, headers=headers, timeout=timeout or 10, **kw)
+        if r.status == 200:
+            self.cache[url] = (time.monotonic() + self.TTL, r)
+        return r
+
+
+CRON_CERTS = CachedCerts()
+
+
+def cron_oidc_error(token: str) -> str | None:
+    """None — ID-токен выписан Google нашему scheduler-invoker для этого сервиса; иначе причина отказа."""
+    if not CRON_OIDC_EMAIL or not CRON_OIDC_AUDIENCES:
+        return "OIDC not configured"
+    if token.count(".") != 2:
+        return "not a JWT"
+    if token.endswith(".SIGNATURE_REMOVED_BY_GOOGLE"):  # Cloud Run сам проверил и срезал подпись — нам не проверить
+        return "signature removed by Cloud Run"
+    import google.auth.exceptions
+    from google.oauth2 import id_token
+    try:  # подпись, срок и издателя проверяет google-auth, остальное — мы
+        claims = id_token.verify_oauth2_token(token, CRON_CERTS, audience=None, clock_skew_in_seconds=10)
+    except (ValueError, google.auth.exceptions.GoogleAuthError) as e:
+        return f"invalid ID token ({type(e).__name__})"
+    if str(claims.get("aud") or "").rstrip("/") not in CRON_OIDC_AUDIENCES:
+        return "wrong audience"
+    if claims.get("email") != CRON_OIDC_EMAIL or claims.get("email_verified") is not True:
+        return "wrong service account"
+    return None
+
+
+async def cron_authorized(request: Request) -> bool:
+    """Будильник пришёл от нашего Cloud Scheduler: OIDC ID-токен или (пока не выключен) старый секрет."""
+    got = request.headers.get("x-cron-secret", "")
+    if got and CRON_SECRET_ENABLED and CRON_SECRET and hmac.compare_digest(got, CRON_SECRET):
+        return True
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return False
+    # Ключи Google качаются раз в час, но синхронно — не держим event loop
+    reason = await asyncio.to_thread(cron_oidc_error, token.strip())
+    if reason:
+        log.warning("cron call rejected: %s", reason)
+    return reason is None
+
+
 @app.post("/tasks/reminders")
 async def cron_reminders(request: Request):
     """Будильник от Cloud Scheduler (раз в минуту): рассылает наступившие напоминания."""
-    got = request.headers.get("x-cron-secret", "")
-    if not CRON_SECRET or not hmac.compare_digest(got, CRON_SECRET):
+    if not await cron_authorized(request):
         raise HTTPException(403)
     return {"sent": await send_due_reminders()}
 

@@ -49,7 +49,9 @@ those of the tag. A refresh and a release share one concurrency group and never 
 
 - The bot runs on a **webhook** (`/tg/webhook`); the secret header is derived from the bot token.
 - Reminders are woken by **Cloud Scheduler** `gtd-reminders` once a minute:
-  `POST /tasks/reminders` with `X-Cron-Secret`.
+  `POST /tasks/reminders` with a Google OIDC ID token of `scheduler-invoker@serbito.iam.gserviceaccount.com`
+  (audience `https://gtd.serbito.rs`, SERBITO-363). The legacy `X-Cron-Secret` still works while
+  `SCHEDULER_STATIC_TOKEN_ENABLED` is not `0` and `CRON_SECRET` is set.
 - No background loops, so `min-instances=0` and CPU only during requests: without traffic the service sleeps.
 - Locally (http `BASE_URL`) the bot uses long polling and refuses to start if the bot already has the
   production webhook set, so it never steals updates.
