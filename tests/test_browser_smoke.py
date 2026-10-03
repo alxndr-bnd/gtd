@@ -496,6 +496,22 @@ def test_click_anywhere_on_card_opens_it(watch):
     w.page.wait_for_function("location.pathname === '/'", timeout=WAIT_MS)  # close — событие, адрес меняется в нём
     assert not w.page.locator("#dlg[open]").count()
 
+    # ⌘/Ctrl-клик по номеру #N — обычная ссылка /i/N: приложение не отменяет переход (вкладку откроет браузер)
+    # и карточку здесь не открывает. Саму вкладку не ждём (SERBITO-411): её открывает Chromium, и на CI событие
+    # «page» однажды не пришло за 30 с. Проверяем свой контракт — событие click дошло до window без
+    # preventDefault — и гасим переход сами. Слушатель на window срабатывает после обработчиков на document
+    num = w.page.locator(f"{card} a.num")
+    assert num.get_attribute("href") == "/i/1"
+    w.page.evaluate("""() => addEventListener('click', e => {
+        if (!e.target.closest('a.num')) return;
+        window.__numClick = {prevented: e.defaultPrevented, modified: e.ctrlKey || e.metaKey};
+        e.preventDefault();
+    })""")
+    num.click(modifiers=["ControlOrMeta"])
+    w.page.wait_for_function("window.__numClick", timeout=WAIT_MS)
+    assert w.page.evaluate("window.__numClick") == {"prevented": False, "modified": True}
+    assert not w.page.locator("#dlg[open]").count() and w.page.url.endswith("/")
+
     # Выделили часть заголовка мышью — это не клик «открыть»
     box = w.page.locator(f"{card} .t").bounding_box()
     w.page.mouse.move(box["x"] + 2, box["y"] + box["height"] / 2)
@@ -504,13 +520,6 @@ def test_click_anywhere_on_card_opens_it(watch):
     w.page.mouse.up()
     assert w.page.evaluate("getSelection().toString()")
     w.page.wait_for_timeout(200)
-    assert not w.page.locator("#dlg[open]").count()
-
-    # ⌘/Ctrl-клик по номеру #N — ссылка /i/N в новой вкладке, здесь карточка не открывается
-    with w.ctx.expect_page() as tab:
-        w.page.click(f"{card} a.num", modifiers=["ControlOrMeta"])
-    assert tab.value.url.endswith("/i/1")
-    tab.value.close()
     assert not w.page.locator("#dlg[open]").count()
 
     # Кнопка списка — переносит задачу, карточку не открывает
