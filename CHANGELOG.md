@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-03
+
 ### Added
 - Connect ChatGPT, Cursor, VS Code and other AI assistants to GTD with sign-in, no token. The consent screen shows where access goes.
   - RU: ChatGPT, Cursor, VS Code и другие AI-ассистенты подключаются к GTD через вход, без токена. Экран согласия показывает, куда уходит доступ.
@@ -342,7 +344,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/alxndr-bnd/gtd/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/alxndr-bnd/gtd/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/alxndr-bnd/gtd/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/alxndr-bnd/gtd/compare/v0.27.0...v0.28.0
