@@ -1361,6 +1361,9 @@ def test_capture_on_project_page(watch, lang):
     with saves(w, "отмена записи", "DELETE", f"/api/items/{it['id']}"):
         w.page.click('#toast [data-act="undo"]')  # «Отменить» — задачи нет
     assert not A.row("select id from items where title='Купить плитку'"), "отмена записи"
+    # После отмены страница перечитывает проект; ушли в другой раздел раньше — её поздняя перерисовка заменит поле
+    # захвата под набранным текстом
+    w.page.wait_for_selector('main .it .t:text-is("Купить плитку")', state="detached", timeout=SAVE_MS)
 
     w.page.click('nav > a[data-view="waiting"]')
     w.wait('nav > a.on[data-view="waiting"]', "Waiting")
@@ -1580,7 +1583,7 @@ def test_next_offers_context_chips(watch):
         w.page.click(chip)
     assert A.row("select context, status from items where id=%s", (ids["inbox"],)) \
         == {"context": "home", "status": "next"}, "контекст из тоста"
-    assert "@home" in w.page.inner_text("#toast .tx")
+    w.wait('#toast .tx:has-text("@home")', "тост с контекстом")  # новый тост рисуется после ответа, не вместе с ним
     w.check("итог")
 
 
