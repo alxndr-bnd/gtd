@@ -34,6 +34,7 @@ router = APIRouter(include_in_schema=False)
 
 ISSUER = A.BASE_URL                      # без «/» на конце: так его сравнивают клиенты (RFC 8414 §3.3)
 RESOURCE = ISSUER + "/mcp"               # аудитория токенов (RFC 8707)
+OWN_HOST = urlsplit(ISSUER).hostname     # код на свой же сайт клиенту не нужен
 SCOPE = "tasks"                          # один scope: все задачи аккаунта (чтение и запись)
 PRM_PATH = "/.well-known/oauth-protected-resource"
 RESOURCE_METADATA = ISSUER + PRM_PATH + "/mcp"
@@ -47,13 +48,23 @@ CLIENT_IDLE = 90 * 86400      # клиентов без подключений, 
 GRANT_TOUCH = 60              # last_used подключения — не чаще раза в минуту
 REGISTER_RATE = (10, 3600)    # регистраций с одного IP в час
 TOKEN_RATE = (30, 60)         # запросов к /token на клиента в минуту
-NAME_MAX, REDIRECTS_MAX, URI_MAX = 80, 5, 300
+NAME_MAX, REDIRECTS_MAX, URI_MAX = 80, 10, 300  # VS Code регистрирует 4–6 адресов
 RESUME_KEY = "gtd-oauth-next"  # sessionStorage: куда SPA вернёт после входа (static/index.html, oauthResume)
 
-# Куда можно вернуть код: только точные адреса. Claude (claude.ai и claude.com) и loopback для программ на этом
-# компьютере (Claude Code, Claude Desktop, MCP Inspector; RFC 8252 §7.3) — http://localhost|127.0.0.1|[::1]
+# Куда можно вернуть код (SERBITO-375: «да, другие клиенты»). Регистрация открыта любому клиенту, а ворота —
+# экран согласия: на нём название клиента и хост, куда уйдёт код. При регистрации принимаем:
+# - https на любой хост с обычным именем (не наш сайт, не loopback, без логина в адресе);
+# - loopback для программ на этом компьютере (Claude Code, Claude Desktop, VS Code, MCP Inspector; RFC 8252 §7.3) —
+#   http://localhost|127.0.0.1|[::1], порт при входе любой;
+# - схемы программ только из списка APP_SCHEMES (Cursor, VS Code). Claude Desktop своей схемы не использует:
+#   коннекторы claude.ai идут через CLAUDE_CALLBACKS, локальные клиенты — через loopback.
+# Нигде нет #фрагмента, «*», «\», пробелов и не-ASCII; javascript:, data: и прочие схемы — мимо.
 CLAUDE_CALLBACKS = ("https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback")
 LOOPBACK = ("localhost", "127.0.0.1", "::1")
+APP_SCHEMES = {"cursor": "Cursor", "vscode": "VS Code", "vscode-insiders": "VS Code Insiders"}
+LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+WEB_HOST_RE = re.compile(rf"(?=.{{1,253}}$)(?:{LABEL}\.)+{LABEL}")   # минимум одна точка: example.com
+APP_HOST_RE = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}")             # anysphere.cursor-mcp, vscode.github-authentication
 EXTRA_SCOPES = {"offline_access"}  # просят некоторые клиенты; refresh-токен выдаём и так
 NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 # Страницы входа и согласия: не кешировать, не индексировать. Referrer — только своим: при no-referrer браузер
@@ -72,6 +83,7 @@ create table if not exists oauth_grants(
   id bigserial primary key, user_id bigint not null,
   client_id text not null references oauth_clients(client_id) on delete cascade,
   resource text not null, scope text not null, created bigint not null, last_used bigint);
+alter table oauth_grants add column if not exists redirect_uri text;
 create index if not exists oauth_grants_user on oauth_grants(user_id);
 create table if not exists oauth_codes(
   code_hash text primary key, client_id text not null references oauth_clients(client_id) on delete cascade,
@@ -204,23 +216,48 @@ def pkce_ok(verifier: str, challenge_: str) -> bool:
     return hmac.compare_digest(calc, challenge_)
 
 
-def redirect_allowed(uri) -> bool:
-    """Адрес возврата при регистрации: Claude или loopback по http, без логина в адресе и без #фрагмента."""
-    if not isinstance(uri, str) or len(uri) > URI_MAX or any(c.isspace() for c in uri):
-        return False
-    if uri in CLAUDE_CALLBACKS:
-        return True
+def redirect_kind(uri) -> str | None:
+    """Вид адреса возврата: "web" (https), "loopback" (http на этот компьютер), "app" (схема программы из списка);
+    None — адрес не годится."""
+    if not isinstance(uri, str) or len(uri) > URI_MAX or not uri.isascii() or any(c in uri for c in "#*\\") \
+            or any(c.isspace() or not c.isprintable() for c in uri):
+        return None
     try:
         u = urlsplit(uri)
-        u.port  # noqa: B018 — кривой порт бросает ValueError
+        port = u.port  # кривой порт бросает ValueError
     except ValueError:
-        return False
-    return u.scheme == "http" and u.hostname in LOOPBACK and "@" not in u.netloc and not u.fragment
+        return None
+    host = u.hostname or ""
+    if not uri.startswith(u.scheme + "://") or "@" in u.netloc or not host:
+        return None
+    if u.scheme == "http" and host in LOOPBACK:
+        return "loopback"
+    if u.scheme == "https" and WEB_HOST_RE.fullmatch(host) and host not in LOOPBACK and host != OWN_HOST:
+        return "web"
+    if u.scheme in APP_SCHEMES and port is None and APP_HOST_RE.fullmatch(host):
+        return "app"
+    return None
+
+
+def loopback_key(uri: str) -> tuple:
+    u = urlsplit(uri)
+    return u.scheme, u.hostname, u.path, u.query
+
+
+def redirect_registered(uri: str, registered: list) -> bool:
+    """Точное совпадение с адресом из регистрации. Исключение одно — порт loopback (RFC 8252 §7.3): программа
+    берёт свободный порт при каждом входе (Claude Code, VS Code). Хост, путь и запрос всё равно совпадают."""
+    if uri in registered:
+        return True
+    return redirect_kind(uri) == "loopback" and any(
+        redirect_kind(r) == "loopback" and loopback_key(r) == loopback_key(uri) for r in registered)
 
 
 def redirect_host(uri: str) -> str:
+    """Куда уйдёт код — для экрана согласия и «Подключённых приложений»: хост, у программы — схема://хост."""
     u = urlsplit(uri)
-    return u.hostname or "?"
+    host = u.hostname or "?"
+    return f"{u.scheme}://{host}" if u.scheme in APP_SCHEMES else host
 
 
 def with_params(uri: str, **params) -> str:
@@ -250,9 +287,10 @@ async def register(request: Request):
     uris = body.get("redirect_uris")
     if not isinstance(uris, list) or not 1 <= len(uris) <= REDIRECTS_MAX:
         return oauth_error("invalid_redirect_uri", f"redirect_uris: 1 to {REDIRECTS_MAX} URIs")
-    bad = [u for u in uris if not redirect_allowed(u)]
+    bad = [u for u in uris if not redirect_kind(u)]
     if bad:
-        return oauth_error("invalid_redirect_uri", "only Claude's callback or a loopback http://localhost URI")
+        return oauth_error("invalid_redirect_uri", "use https://, loopback http://localhost|127.0.0.1|[::1] or "
+                           + ", ".join(s + "://" for s in APP_SCHEMES) + "; no fragment, wildcard or user info")
     grants = body.get("grant_types", ["authorization_code", "refresh_token"])
     if not isinstance(grants, list) or "authorization_code" not in grants \
             or set(grants) - {"authorization_code", "refresh_token"}:
@@ -285,6 +323,11 @@ TEXTS = {
         "consent_text": "{client} сможет читать, добавлять и менять задачи аккаунта <b>{who}</b>.",
         "consent_where": "После ответа вы вернётесь на <b>{host}</b>.",
         "consent_local": "После ответа вы вернётесь в программу на этом компьютере (<b>{host}</b>).",
+        "consent_app": "После ответа откроется программа {app} на этом компьютере (<b>{host}</b>).",
+        "warn_web": "Название «{client}» прислало само приложение, GTD его не проверяет. Разрешайте, только если "
+                    "вы сами начали подключение и доверяете <b>{host}</b>.",
+        "warn_local": "Название «{client}» прислало само приложение, GTD его не проверяет. Ответ получит любая "
+                      "программа на этом компьютере. Разрешайте, только если вы сами только что начали подключение.",
         "consent_note": "Отключить можно в любой момент: «👤 Аккаунт → 🤖 AI-ассистенты».",
         "allow": "Разрешить", "deny": "Отказать",
         "signin_h": "Войдите, чтобы подключить {client}",
@@ -299,6 +342,11 @@ TEXTS = {
         "consent_text": "{client} will be able to read, add and change tasks in the account <b>{who}</b>.",
         "consent_where": "After you answer, you return to <b>{host}</b>.",
         "consent_local": "After you answer, you return to an app on this computer (<b>{host}</b>).",
+        "consent_app": "After you answer, the {app} app opens on this computer (<b>{host}</b>).",
+        "warn_web": "The app itself sent the name “{client}”. GTD does not check it. Allow only if you started "
+                    "this connection yourself and you trust <b>{host}</b>.",
+        "warn_local": "The app itself sent the name “{client}”. GTD does not check it. Any program on this computer "
+                      "can get the answer. Allow only if you started this connection yourself just now.",
         "consent_note": "You can disconnect at any time: “👤 Account → 🤖 AI assistants”.",
         "allow": "Allow", "deny": "Deny",
         "signin_h": "Sign in to connect {client}",
@@ -327,7 +375,7 @@ def authz_request(params: dict) -> dict:
     """Проверка запроса авторизации — одна для экрана согласия (GET) и для ответа на него (POST)."""
     client = client_get(params.get("client_id", ""))
     uri = params.get("redirect_uri", "")
-    if not client or uri not in client["redirect_uris"]:  # точное совпадение, без шаблонов
+    if not client or not redirect_registered(uri, client["redirect_uris"]):  # точно, без шаблонов
         raise BadRequest()
     state = params.get("state")
 
@@ -360,7 +408,7 @@ def page(lang: str, title: str, body: str, status: int = 200) -> HTMLResponse:
 {pages.ICONS}
 {pages.BASE_CSS}
 {pages.PUBLIC_CSS}
-<style>.oauth .btn.alt{{background:none;color:inherit;border:1px solid currentColor}}.oauth .note{{opacity:.8}}</style>
+<style>.oauth .btn.alt{{background:none;color:inherit;border:1px solid currentColor}}.oauth .note{{opacity:.8}}.oauth .warn{{border-left:3px solid #d97706;padding-left:.6em}}</style>
 </head>
 <body>
 <div class="pub oauth"><header class="top"><a class="brand" href="{home}">{pages.mark(28)} GTD</a></header><main>
@@ -388,12 +436,18 @@ def signin_page(lang: str, client: str) -> HTMLResponse:
 
 
 def consent_page(lang: str, req: dict, who: str) -> HTMLResponse:
-    t, client = TEXTS[lang], req["client"]["name"]
-    c, host = html.escape(client), html.escape(redirect_host(req["redirect_uri"]))
-    where = t["consent_local" if redirect_host(req["redirect_uri"]) in LOOPBACK else "consent_where"]
+    """Согласие: кто просит (название — со слов клиента) и куда уйдёт код (хост — из адреса возврата, его не
+    подделать). Всё, кроме адресов Claude, — с предупреждением: название мог выбрать кто угодно."""
+    t, client, uri = TEXTS[lang], req["client"]["name"], req["redirect_uri"]
+    c, host, kind = html.escape(client), html.escape(redirect_host(uri)), redirect_kind(uri)
+    where = {"loopback": t["consent_local"], "app": t["consent_app"]}.get(kind, t["consent_where"])
+    info = f'<p>{where.format(host=host, app=APP_SCHEMES.get(urlsplit(uri).scheme, ""))}</p>'
+    if uri not in CLAUDE_CALLBACKS:
+        warn = t["warn_local" if kind == "loopback" else "warn_web"].format(client=c, host=host)
+        info += f'\n<p class="warn" id="oauth-warn">⚠️ {warn}</p>'
     hidden = "\n".join(f'<input type="hidden" name="{k}" value="{html.escape(v)}">' for k, v in req["fields"].items())
     return page(lang, t["consent_h"].format(client=client), f"""<p class="lead">{t["consent_text"].format(client=c, who=html.escape(who or "?"))}</p>
-<p>{where.format(host=host)}</p>
+{info}
 <form method="post" action="/authorize" id="consent">
 {hidden}
 <p><button class="btn" type="submit" name="decision" value="allow">{t["allow"]}</button>&emsp;<button class="btn alt" type="submit" name="decision" value="deny">{t["deny"]}</button></p>
@@ -494,9 +548,10 @@ def exchange_code(form: dict, client: dict) -> JSONResponse:
     with A._pool.connection() as conn, conn.transaction():
         # Одно подключение на пару (аккаунт, клиент): новое согласие заменяет старое вместе с его токенами
         conn.execute("delete from oauth_grants where user_id=%s and client_id=%s", (c["user_id"], c["client_id"]))
-        gid = conn.execute("insert into oauth_grants(user_id, client_id, resource, scope, created, last_used) "
-                           "values(%s,%s,%s,%s,%s,%s) returning id",
-                           (c["user_id"], c["client_id"], c["resource"], c["scope"], ts, ts)).fetchone()["id"]
+        gid = conn.execute("insert into oauth_grants(user_id, client_id, resource, scope, created, last_used, "
+                           "redirect_uri) values(%s,%s,%s,%s,%s,%s,%s) returning id",
+                           (c["user_id"], c["client_id"], c["resource"], c["scope"], ts, ts, c["redirect_uri"])
+                           ).fetchone()["id"]
         conn.execute("update oauth_codes set grant_id=%s where code_hash=%s", (gid, h))
         conn.execute("update oauth_clients set last_used=%s where client_id=%s", (ts, c["client_id"]))
         out = issue(conn, gid, ts)
@@ -592,8 +647,9 @@ def list_apps(uid: int = Depends(A.current_user)):
     """Подключения аккаунта. Без живого refresh-токена подключение мертво — такие заодно удаляем."""
     A.run("delete from oauth_grants g where g.user_id=%s and not exists (select 1 from oauth_tokens t "
           "where t.grant_id=g.id and t.kind='refresh' and t.used is null and t.expires>%s)", (uid, now()))
-    apps = A.rows("select g.id, c.name, c.redirect_uris[1] uri, g.created, g.last_used from oauth_grants g "
-                  "join oauth_clients c on c.client_id=g.client_id where g.user_id=%s order by g.id", (uid,))
+    apps = A.rows("select g.id, c.name, coalesce(g.redirect_uri, c.redirect_uris[1]) uri, g.created, g.last_used "
+                  "from oauth_grants g join oauth_clients c on c.client_id=g.client_id where g.user_id=%s order by g.id",
+                  (uid,))
     return [{"id": a["id"], "name": a["name"], "host": redirect_host(a["uri"]), "created": a["created"],
              "last_used": a["last_used"]} for a in apps]
 

@@ -19,8 +19,8 @@ FastAPI + PostgreSQL, one container. English and Russian.
   action) · Someday · Reference · Done · Weekly Review.
 - **Telegram bot:** send a message — it lands in the Inbox; reminders come with ✅ Done / 💤 +1h / ⏭ Next buttons.
 - **Sign-in** by email code, Google or Telegram; methods link into one account, accounts can be merged.
-- **AI assistants:** connect Claude as a custom connector (sign in, no token) or any MCP client with a personal
-  token — see [Connect Claude](#connect-claude-mcp).
+- **AI assistants:** connect Claude, ChatGPT, Cursor or VS Code with sign-in (OAuth, no token), or any MCP client
+  with a personal token — see [Connect Claude](#connect-claude-mcp).
 - **Keyboard-first** web app, installable to the phone home screen.
 - **Privacy:** analytics never include task content, emails or user ids.
 
@@ -45,10 +45,34 @@ You need only the address. No token.
 4. Claude returns to the chat with the connector on. A connector added on claude.ai also works in Claude Desktop
    and on the phone.
 
-To disconnect, open **👤 Account → 🤖 AI assistants → Connected apps** and press **Disconnect**. Access stops at
-once. Removing the connector in Claude may leave access open in GTD; disconnect it in GTD too.
+### ChatGPT, Cursor, VS Code and other clients — sign in (OAuth)
 
-### Claude Code and other clients — a personal token
+Any MCP client with OAuth sign-in works the same way: give it the address, sign in to GTD, and press **Allow**.
+
+- **ChatGPT:** turn on **Developer mode** in the settings, then add an app (connector) with the URL
+  `https://gtd.serbito.rs/mcp` and OAuth authentication.
+- **Cursor:** add the server to `~/.cursor/mcp.json`, then press **Connect** next to it in **Cursor Settings → MCP**:
+  ```json
+  { "mcpServers": { "gtd": { "url": "https://gtd.serbito.rs/mcp" } } }
+  ```
+- **VS Code:** run **MCP: Add Server…**, choose **HTTP**, and enter the URL. Or add it to `.vscode/mcp.json`:
+  ```json
+  { "servers": { "gtd": { "type": "http", "url": "https://gtd.serbito.rs/mcp" } } }
+  ```
+- **Claude Code:** `claude mcp add --transport http gtd https://gtd.serbito.rs/mcp`, then run `/mcp` and choose
+  **Authenticate**.
+
+**Check the consent screen.** The app sends its own name, and GTD does not check it. The screen also shows where the
+access goes: a site (`chatgpt.com`), an app on this computer (`localhost`), or a desktop app (`cursor://…`). If you
+did not start the connection yourself, or you do not know that address, press **Deny**.
+
+GTD accepts these return addresses: any `https://` site, `http://localhost`, `127.0.0.1` or `[::1]` on any port,
+and the app links `cursor://`, `vscode://` and `vscode-insiders://`.
+
+To disconnect, open **👤 Account → 🤖 AI assistants → Connected apps** and press **Disconnect**. Access stops at
+once. Removing the connector in the client may leave access open in GTD; disconnect it in GTD too.
+
+### Any client — a personal token
 
 1. In the app, open **👤 Account → 🤖 AI assistants (MCP)**. Enter a token name and press **Create token**.
    Copy the token at once: the app shows it only once.
@@ -57,8 +81,6 @@ once. Removing the connector in Claude may leave access open in GTD; disconnect 
      ```bash
      claude mcp add --transport http gtd https://gtd.serbito.rs/mcp --header "Authorization: Bearer gtd_…"
      ```
-     Without `--header`, Claude Code signs in with OAuth instead: run `/mcp` in Claude Code and choose
-     **Authenticate**.
    - **Other clients** with remote MCP servers: transport “Streamable HTTP”, the address above, and the header
      `Authorization: Bearer gtd_…`.
    - **Clients that start only local servers:** use the `mcp-remote` bridge — command `npx`, arguments

@@ -22,6 +22,10 @@ from test_mcp import call, rpc
 
 CLAUDE = "https://claude.ai/api/mcp/auth_callback"
 LOCAL = "http://localhost:33418/callback"
+CHATGPT = "https://chatgpt.com/connector/oauth/abc123"
+CURSOR = "cursor://anysphere.cursor-mcp/oauth/callback"
+VSCODE = ["https://insiders.vscode.dev/redirect", "https://vscode.dev/redirect", "http://127.0.0.1/",
+          "http://127.0.0.1:33418/"]  # что VS Code шлёт в /register
 BASE = "http://localhost:8000"  # BASE_URL тестов (conftest): issuer и resource строятся от него
 RESOURCE = BASE + "/mcp"
 
@@ -134,14 +138,43 @@ def test_mcp_401_points_to_resource_metadata(client):
 
 # ── регистрация клиента ──
 
-@pytest.mark.parametrize("uris", [
-    [], ["https://evil.example/api/mcp/auth_callback"], ["https://claude.ai/api/mcp/other"],
-    ["http://claude.ai/api/mcp/auth_callback"], ["http://example.com/callback"], ["https://localhost/cb"],
-    ["http://user@localhost:3000/cb"], ["http://localhost:3000/cb#x"], ["javascript:alert(1)"],
-    ["http://localhost:99999/cb"], [CLAUDE, "https://evil.example/cb"], [CLAUDE] * 6, "http://localhost/cb", [5]])
-def test_register_rejects_bad_redirect_uris(client, uris):
+@pytest.mark.parametrize("uri", [
+    "http://claude.ai/api/mcp/auth_callback", "http://example.com/callback",  # http — только loopback
+    "https://localhost/cb", "https://127.0.0.1/cb", "https://intranet/cb",    # https — только обычное имя хоста
+    "https://localhost:8000/cb",                                              # наш сайт (BASE_URL тестов)
+    "http://user@localhost:3000/cb", "https://user:pw@example.com/cb",         # логин в адресе
+    "http://localhost:3000/cb#x", "https://example.com/cb#", "https://example.com/cb#frag",  # фрагмент
+    "https://*.example.com/cb", "https://example.com/*", "https://example.com/cb?x=*",      # шаблоны
+    "javascript:alert(1)", "data:text/html,<b>x</b>", "file:///etc/passwd", "ftp://example.com/cb",
+    "https:example.com/cb", "https:/example.com/cb", "https://", "//example.com/cb", "example.com/cb",
+    "https://exa mple.com/cb", "https://example.com/c b", "https://example.com\\@evil.com/cb",
+    "https://пример.рф/cb", "https://example.com/cb\n", "https://-bad-.example.com/cb", "https://example..com/cb",
+    "http://localhost:99999/cb", "https://example.com:99999/cb",
+    "evil://callback", "claude://callback", "cursor-evil://anysphere.cursor-mcp/cb",          # схема не из списка
+    "cursor:anysphere.cursor-mcp/oauth/callback", "cursor:///oauth/callback",                  # у схемы нет хоста
+    "cursor://anysphere.cursor-mcp:1234/cb", "cursor://user@anysphere.cursor-mcp/cb", "vscode://x/cb#y",
+    "https://example.com/" + "x" * 300, 5, None])
+def test_register_rejects_bad_redirect_uri(client, uri):
+    r = client.post("/register", json={"redirect_uris": [uri]})
+    assert r.status_code == 400 and r.json()["error"] == "invalid_redirect_uri", uri
+
+
+@pytest.mark.parametrize("uris", [[], [CLAUDE, "https://evil.example/cb#x"], [CHATGPT] * 11, "http://localhost/cb"])
+def test_register_rejects_bad_redirect_list(client, uris):
     r = client.post("/register", json={"redirect_uris": uris})
     assert r.status_code == 400 and r.json()["error"] == "invalid_redirect_uri"
+
+
+@pytest.mark.parametrize("uris", [
+    [CHATGPT], ["https://chatgpt.com/connector_platform_oauth_redirect"], VSCODE, [CURSOR],
+    [CURSOR, "http://localhost:8787/callback"], ["vscode://vscode.github-authentication/did-authenticate"],
+    ["vscode-insiders://ms-vscode.mcp/callback"], ["https://claude.ai/api/organizations/custom-connectors/oauth/callback"],
+    ["https://evil.example/cb"], ["https://app.example.com:8443/oauth/cb?tenant=1"], ["http://[::1]/cb"]])
+def test_register_accepts_other_clients(client, uris):
+    """SERBITO-375: другие клиенты тоже — ChatGPT, VS Code, Cursor и любой https-хост. Ворота — согласие."""
+    r = client.post("/register", json={"redirect_uris": uris, "client_name": "Other"})
+    assert r.status_code == 201, r.text
+    assert r.json()["redirect_uris"] == uris
 
 
 def test_register(client):
@@ -191,9 +224,32 @@ def test_consent_page(web, client):
     assert r.status_code == 200 and "Подключить Claude к GTD?" in r.text
     assert "<b>claude.ai</b>" in r.text and "a***@example.com" in r.text  # адрес возврата и аккаунт — на виду
     assert r.headers["x-frame-options"] == "DENY" and r.headers["referrer-policy"] == "same-origin"
+    assert 'id="oauth-warn"' not in r.text  # адрес Claude: код уходит Claude, кто бы ни назвался
     A.run("update users set lang='en'")
     r = web.get("/authorize?" + urlencode(authz(cid, challenge, LOCAL)))
     assert "Connect Claude to GTD?" in r.text and "an app on this computer (<b>localhost</b>)" in r.text
+    assert 'id="oauth-warn"' in r.text and "Any program on this computer" in r.text  # loopback: предупреждение
+
+
+@pytest.mark.parametrize("lang, uri, host, text", [
+    ("en", "https://evil.example/cb", "evil.example", "After you answer, you return to <b>evil.example</b>."),
+    ("ru", "https://evil.example/cb", "evil.example", "После ответа вы вернётесь на <b>evil.example</b>."),
+    ("en", CHATGPT, "chatgpt.com", "you return to <b>chatgpt.com</b>"),
+    ("en", CURSOR, "cursor://anysphere.cursor-mcp", "the Cursor app opens on this computer"),
+    ("ru", "vscode://ms-vscode.mcp/cb", "vscode://ms-vscode.mcp", "откроется программа VS Code на этом компьютере"),
+])
+def test_consent_shows_client_and_redirect_host(web, client, lang, uri, host, text):
+    """Название клиента — с его слов, поэтому рядом хост, куда уйдёт код, и предупреждение. Здесь клиент назвался
+    «Claude», а код просит на чужой адрес."""
+    A.run("update users set lang=%s", (lang,))
+    cid = client_id(client, [uri])
+    r = web.get("/authorize?" + urlencode(authz(cid, pkce()[1], uri)))
+    assert r.status_code == 200, r.text
+    assert ("Connect Claude to GTD?" if lang == "en" else "Подключить Claude к GTD?") in r.text
+    assert text in r.text
+    warn = re.search(r'<p class="warn" id="oauth-warn">(.*?)</p>', r.text).group(1)
+    assert f"<b>{host}</b>" in warn and "Claude" in warn
+    assert ("does not check it" if lang == "en" else "GTD его не проверяет") in warn
 
 
 def test_client_name_is_escaped(web, client):
@@ -204,7 +260,11 @@ def test_client_name_is_escaped(web, client):
 
 
 @pytest.mark.parametrize("change", [{"client_id": "gtdc_unknown"}, {"redirect_uri": "https://evil.example/cb"},
-                                    {"redirect_uri": CLAUDE + "/"}, {"redirect_uri": ""}])
+                                    {"redirect_uri": CLAUDE + "/"}, {"redirect_uri": ""},
+                                    {"redirect_uri": "https://claude.ai/api/mcp/auth_callback?x=1"},
+                                    {"redirect_uri": "https://claude.ai:8443/api/mcp/auth_callback"},
+                                    {"redirect_uri": "HTTPS://claude.ai/api/mcp/auth_callback"},
+                                    {"redirect_uri": "http://localhost:33418/callback"}])
 def test_unknown_client_or_redirect_never_redirects(web, client, change):
     cid = client_id(client)
     r = web.get("/authorize?" + urlencode({**authz(cid, pkce()[1]), **change}), follow_redirects=False)
@@ -291,6 +351,58 @@ def test_loopback_client_flow(web, client):
     code, verifier = get_code(web, cid, LOCAL)
     r = exchange(client, cid, code, verifier, LOCAL)
     assert r.status_code == 200 and rpc(client, r.json()["access_token"], "tools/list").status_code == 200
+
+
+def flow(web, client, cid, redirect) -> str:
+    """Согласие → код на redirect → токен → вызов /mcp. Возвращает Location с кодом."""
+    verifier, challenge = pkce()
+    r = answer(web, authz(cid, challenge, redirect))
+    loc = r.headers["location"]
+    q = back(r)
+    assert q["state"] == "st-1" and q["iss"] == BASE
+    t = exchange(client, cid, q["code"], verifier, redirect)
+    assert t.status_code == 200, t.text
+    assert call(client, t.json()["access_token"], "capture", text="from " + redirect)["number"] >= 1
+    return loc
+
+
+@pytest.mark.parametrize("redirect", [CHATGPT, "https://app.example.com:8443/oauth/cb?tenant=1"])
+def test_full_flow_other_https_client(web, client, redirect):
+    """Не-Claude клиент с https: код уходит ровно на зарегистрированный адрес, свои параметры адреса целы."""
+    cid = client_id(client, [redirect])
+    loc = flow(web, client, cid, redirect)
+    assert loc.startswith(redirect + ("&" if "?" in redirect else "?") + "code=")
+    apps = web.get("/api/oauth/apps").json()
+    assert [a["host"] for a in apps] == [urlsplit(redirect).hostname]
+
+
+def test_full_flow_cursor_custom_scheme(web, client):
+    cid = client_id(client, [CURSOR])
+    assert flow(web, client, cid, CURSOR).startswith(CURSOR + "?code=")
+    assert web.get("/api/oauth/apps").json()[0]["host"] == "cursor://anysphere.cursor-mcp"
+
+
+def test_loopback_any_port(web, client):
+    """RFC 8252 §7.3: VS Code регистрирует http://127.0.0.1/ и 127.0.0.1:33418, а входит с любого свободного
+    порта. Порт свободен, остальное — точно; токен — только на тот же адрес, что и код."""
+    cid = client_id(client, VSCODE)
+    for redirect in ("http://127.0.0.1:59656/", "http://127.0.0.1/", "http://127.0.0.1:33418/"):
+        assert flow(web, client, cid, redirect).startswith(redirect + "?code=")
+    verifier, challenge = pkce()
+    code = back(answer(web, authz(cid, challenge, "http://127.0.0.1:40000/")))["code"]
+    assert exchange(client, cid, code, verifier, "http://127.0.0.1:40001/").json()["error"] == "invalid_grant"
+    assert web.get("/api/oauth/apps").json()[0]["host"] == "127.0.0.1"
+    for bad in ("http://localhost:59656/", "http://127.0.0.1:59656/cb", "http://127.0.0.1:59656/?x=1",
+                "https://127.0.0.1:59656/", "http://[::1]:59656/"):
+        r = web.get("/authorize?" + urlencode(authz(cid, pkce()[1], bad)), follow_redirects=False)
+        assert r.status_code == 400 and "location" not in r.headers, bad
+
+
+def test_port_is_exact_for_non_loopback(web, client):
+    cid = client_id(client, ["https://app.example.com/cb"])
+    r = web.get("/authorize?" + urlencode(authz(cid, pkce()[1], "https://app.example.com:444/cb")),
+                follow_redirects=False)
+    assert r.status_code == 400 and "location" not in r.headers
 
 
 def test_client_id_in_basic_auth(web, client):

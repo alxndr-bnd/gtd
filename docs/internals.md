@@ -39,7 +39,8 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
   - **personal API token** `gtd_…` from “👤 Account” (`/api/tokens`, cookie session only). The table `api_tokens`
     keeps the SHA-256 of the token, its name, `created` and `last_used` (written at most once a minute). Revoke
     deletes the row.
-  - **OAuth access token** `gtdo_…` (claude.ai custom connectors, Claude Code without a header). See below.
+  - **OAuth access token** `gtdo_…` (claude.ai custom connectors, ChatGPT, Cursor, VS Code, Claude Code without a
+    header). See below.
 
   The session cookie does not open `/mcp`; no token opens `/api/*`. Without a valid token `/mcp` answers 401 with
   `WWW-Authenticate: Bearer resource_metadata="BASE_URL/.well-known/oauth-protected-resource/mcp", scope="tasks"`.
@@ -47,15 +48,26 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
   is its own authorization server; issuer = `BASE_URL`, resource = `BASE_URL/mcp`, one scope `tasks`.
   - Metadata: `/.well-known/oauth-protected-resource` (also `…/mcp`, RFC 9728) and
     `/.well-known/oauth-authorization-server` (RFC 8414). Only these have CORS `*`. Models from the `mcp` SDK.
-  - `POST /register` (RFC 7591): public clients only (`token_endpoint_auth_method` is always `none`). Redirect URIs:
-    `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` or loopback
-    `http://localhost|127.0.0.1|[::1]:port/path`. 10 registrations per IP an hour. Clients without connections and
-    unused for 90 days are deleted on the next registration.
-  - `GET /authorize`: unknown client or a redirect URI that is not an exact match → error page, never a redirect.
+  - `POST /register` (RFC 7591): public clients only (`token_endpoint_auth_method` is always `none`). Any client can
+    register; the consent screen is the gate. Redirect URIs (`redirect_kind`), 1–10 per client, ≤ 300 chars, ASCII,
+    no `#`, `*`, `\`, whitespace or user info:
+    - `web` — `https://` with a normal DNS name (at least one dot), not loopback and not gtd's own host;
+    - `loopback` — `http://localhost|127.0.0.1|[::1]`, any port (Claude Code, Claude Desktop, VS Code);
+    - `app` — a custom scheme from `APP_SCHEMES` only: `cursor://`, `vscode://`, `vscode-insiders://`; a host is
+      required, no port. Claude Desktop has no own scheme: it uses the claude.ai callback or loopback.
+
+    `javascript:`, `data:`, `file:` and other schemes are rejected. 10 registrations per IP an hour. Clients without
+    connections and unused for 90 days are deleted on the next registration.
+  - `GET /authorize`: unknown client or an unregistered redirect URI → error page, never a redirect. The match is
+    exact (case, path, query, port). One exception (RFC 8252 §7.3): a loopback URI matches a registered loopback URI
+    with any port; scheme, host, path and query still match. `/token` then needs the exact URI used at `/authorize`.
     Other errors go back to the client with `error`, `state` and `iss` (RFC 9207). PKCE S256 only; `resource`, if
     given, must be `/mcp`. Not signed in → a page that saves its own URL in `sessionStorage` (`gtd-oauth-next`) and
     sends the user to sign in; after any sign-in method the SPA (`oauthResume`) returns to `/authorize` (same-site
-    path only, 30 minutes). Signed in → consent page: client name, account, return host; Allow / Deny.
+    path only, 30 minutes). Signed in → consent page: client name, account, return host (`redirect_host`: host, or
+    `scheme://host` for an app); Allow / Deny. The client name is self-declared, so every redirect except the two
+    Claude callbacks gets a warning (`#oauth-warn`): GTD does not check the name; for loopback, any local program can
+    get the code.
   - `POST /authorize` — the consent form: same-origin only (403 otherwise), re-validates every parameter.
     Consent pages use `Referrer-Policy: same-origin` (with `no-referrer` the browser sends `Origin: null` and the
     same-origin check fails); the redirect with the code uses `no-referrer`.
@@ -70,7 +82,8 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
     the design first said: the personal-token list and its limit stay untouched. Grants and codes move with an
     account merge.
   - “👤 Account → Connected apps”: `GET /api/oauth/apps`, `DELETE /api/oauth/apps/{id}` (cookie session). The list
-    drops connections without a live refresh token.
+    drops connections without a live refresh token. `host` comes from the redirect URI the grant used
+    (`oauth_grants.redirect_uri`; older grants fall back to the client's first registered URI).
 - **Transport** — the official `mcp` SDK (2.x, `MCPServer`), Streamable HTTP, stateless, JSON responses: Cloud
   Run keeps nothing between requests. A fresh SDK session manager serves each request, so `/mcp` needs no app
   lifespan. Both protocol eras work: the `initialize` handshake (2025-xx) and the stateless 2026-07-28 one.
