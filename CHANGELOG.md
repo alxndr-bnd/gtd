@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-03
+
 ### Fixed
 - Version 0.29.0 did not start on the server. This version ships all of its changes: the Claude connector, project reorder, the reorder hint and the green macOS icon.
   - RU: Версия 0.29.0 не запустилась на сервере. Эта версия выпускает все её изменения: коннектор для Claude, порядок проектов, подсказку про перестановку и зелёную иконку на macOS.
@@ -336,7 +338,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/alxndr-bnd/gtd/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/alxndr-bnd/gtd/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/alxndr-bnd/gtd/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/alxndr-bnd/gtd/compare/v0.26.0...v0.27.0
