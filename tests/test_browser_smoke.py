@@ -366,6 +366,37 @@ def test_sign_out_everywhere_from_account(watch):
     other.check("второй браузер")
 
 
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_mcp_tokens_in_account(watch, lang):
+    """SERBITO-375: в «Аккаунте» — адрес /mcp, создание токена (показан один раз, с командой для Claude Code)
+    и отзыв с подтверждением."""
+    w = watch(lang)
+    uid = A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,%s) returning id",
+                (int(time.time()), lang))
+    w.goto("/dev-login")
+    w.page.click("nav .navfoot button.user")
+    w.page.click('nav .navfoot .umenu a[data-view="account"]')
+    w.wait('main #mcp [data-act="newtok"]', f"[{lang}] аккаунт: MCP")
+    assert w.page.locator("main #mcp code").first.inner_text().endswith("/mcp")
+    w.page.click('main #mcp [data-act="newtok"]')  # без названия — ошибка у поля, токена нет
+    w.wait("main #tokmsg:not(:empty)", f"[{lang}] токен без названия")
+    w.page.fill("#tokname", "Claude")
+    w.page.press("#tokname", "Enter")
+    w.wait("main #mcp .newtok", f"[{lang}] новый токен")
+    shown = w.page.locator("main #mcp .newtok code").all_inner_texts()
+    tok = A.row("select token_hash from api_tokens where user_id=%s", (uid,))
+    assert shown[0].startswith("gtd_") and A.token_hash(shown[0]) == tok["token_hash"]
+    assert shown[1].startswith("claude mcp add --transport http gtd ") and shown[0] in shown[1]
+    assert w.page.locator("main #mcp .tok").count() == 1
+    w.page.click('main #mcp [data-act="tokhide"]')
+    w.wait("main #mcp:not(:has(.newtok))", f"[{lang}] токен скрыт")
+    w.page.once("dialog", lambda d: d.accept())
+    w.page.click('main #mcp [data-act="revoketok"]')
+    w.wait("main #mcp:not(:has(.tok))", f"[{lang}] токен отозван")
+    assert A.row("select count(*) n from api_tokens")["n"] == 0
+    w.check(f"[{lang}] MCP-токены")
+
+
 def smoke_user(w, lang="ru"):
     """Пользователь с задачами во всех списках, вошедший через /dev-login; возвращает id задач."""
     uid = A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,%s) returning id",

@@ -98,6 +98,10 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
 .msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} #npmsg{margin:-10px 0 12px} .msg .rv{color:var(--tx);font-size:14px}
 .rv .cap{margin:8px 0 0}
+/* MCP-токены в «Аккаунте» (SERBITO-375): длинные токен и команда переносятся, а не растягивают страницу */
+.tokrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0} .tokrow code,.newtok code{word-break:break-all;font-size:12.5px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:2px 6px}
+.newtok{border:1px solid var(--ac);border-radius:8px;padding:10px 12px;margin:8px 0}
+.tok{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--bd)} .tok small{color:var(--mut)}
 .capw{position:relative;flex:1;display:flex} .capw input,.capw textarea{width:100%}
 .ac{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 6px 20px #0003;z-index:10;overflow:hidden}
 /* Сверху — небольшой отступ, как под чек-листом: исчез чек-лист — поле не съезжает вниз (SERBITO-354, G8).
@@ -226,6 +230,17 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "tg_denied": "Число не совпало — вход отменён. Нажми кнопку ещё раз",
   "sessions": "Сеансы", "sessions_text": "Открыто в браузерах и на устройствах: {n}.",
   "logout_all": "Выйти на всех устройствах", "logout_all_q": "Выйти из аккаунта на всех устройствах, включая это?",
+  "mcp": "🤖 AI-ассистенты (MCP)",
+  "mcp_text": "Подключи Claude или другой MCP-клиент: он сможет записывать задачи в Inbox, показывать списки, закрывать задачи и переносить их в проекты и контексты. Нужны адрес сервера и токен.",
+  "mcp_url": "Адрес сервера:", "mcp_help": "Как подключить",
+  "token_name_ph": "Название токена, например «Claude на ноутбуке»", "token_create": "Создать токен", "token_name_needed": "Дай токену название",
+  "token_once": "Скопируй токен сейчас — больше он не покажется. Храни его как пароль.",
+  "token_cmd": "Claude Code — одна команда в терминале:", "token_hide": "Готово, скрыть",
+  "copy": "Копировать", "copied": "✓ Скопировано",
+  "tokens_none": "Токенов пока нет.", "token_meta": "создан {created} · последний запрос: {used}",
+  "token_never": "ещё не было", "token_revoke": "Отозвать",
+  "token_revoke_q": "Отозвать токен «{name}»? Ассистент с ним сразу потеряет доступ.",
+  "mcp_note": "Токен открывает все задачи этого аккаунта. «Выйти на всех устройствах» токены не отзывает.",
   "account": "👤 Аккаунт", "account_short": "Аккаунт", "account_hint": "Любой привязанный способ открывает этот же аккаунт.",
   "linked": "✅ Привязан", "not_configured": "Не настроен на сервере",
   "email": "Почта", "email_linked": "✅ {email} — вход по одноразовому коду", "email_none": "Не привязана",
@@ -320,6 +335,17 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "tg_denied": "The number didn't match — sign-in cancelled. Press the button again",
   "sessions": "Sessions", "sessions_text": "Signed in on browsers and devices: {n}.",
   "logout_all": "Sign out on all devices", "logout_all_q": "Sign out of this account on all devices, including this one?",
+  "mcp": "🤖 AI assistants (MCP)",
+  "mcp_text": "Connect Claude or another MCP client: it can capture tasks to your Inbox, show your lists, complete tasks and move them to projects and contexts. You need the server address and a token.",
+  "mcp_url": "Server address:", "mcp_help": "How to connect",
+  "token_name_ph": "Token name, e.g. “Claude on my laptop”", "token_create": "Create token", "token_name_needed": "Give the token a name",
+  "token_once": "Copy the token now — it won't be shown again. Keep it like a password.",
+  "token_cmd": "Claude Code — one command in the terminal:", "token_hide": "Done, hide it",
+  "copy": "Copy", "copied": "✓ Copied",
+  "tokens_none": "No tokens yet.", "token_meta": "created {created} · last request: {used}",
+  "token_never": "none yet", "token_revoke": "Revoke",
+  "token_revoke_q": "Revoke the token “{name}”? The assistant that uses it loses access at once.",
+  "mcp_note": "A token opens all tasks of this account. “Sign out on all devices” doesn't revoke tokens.",
   "account": "👤 Account", "account_short": "Account", "account_hint": "Any linked method opens this same account.",
   "linked": "✅ Linked", "not_configured": "Not set up on the server",
   "email": "Email", "email_linked": "✅ {email} — sign in with a one-time code", "email_none": "Not linked",
@@ -473,7 +499,8 @@ async function load(){
     if(S.pid && !S.projects.some(p => p.id===S.pid)){  // чужой, удалённый или завершённый проект — список проектов
       S.pid = null; if(!location.pathname.startsWith('/i/')) history.replaceState(null, '', viewPath());
     }
-    if(S.view==='account') S.me = await api('/me');
+    if(S.view!=='account') S.newToken = null;  // показанный токен не переживает уход из «Аккаунта»
+    if(S.view==='account'){ S.me = await api('/me'); S.tokens = await api('/tokens'); }
     else if(S.view==='stats') S.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) S.items=[];
     else if(S.view==='projects'){  // выполненные сервер отдаёт, только если проект их показывает (SERBITO-327)
@@ -680,9 +707,49 @@ function accountHtml(){
     <div style="margin-top:14px">${t('lang_label')}</div>
     <div class="seg">${langs.map(([k, name])=>`<button class="${(m.lang||'')===k?'on':''}" data-act="lang" data-l="${k}" ${k?`lang="${k}"`:''}>${name}</button>`).join('')}</div>
     <div class="hint" style="margin:6px 0 0">${t('lang_hint')}</div></div>
+  ${mcpHtml()}
   <div class="rv"><h3>${t('sessions')}</h3>${t('sessions_text', {n:m.sessions||1})}
     <div class="row" style="justify-content:flex-start;margin-top:8px"><button data-act="logoutall">${t('logout_all')}</button></div></div>
   <div class="msg" id="authmsg"></div>`;
+}
+
+// MCP (SERBITO-375): адрес сервера и личные токены. Новый токен виден, только пока открыт «Аккаунт» (S.newToken
+// живёт в памяти страницы и нигде не сохраняется) — сервер хранит лишь его хеш
+const MCP_DOCS = 'https://github.com/alxndr-bnd/gtd#connect-claude-mcp';
+const mcpUrl = () => location.origin + '/mcp';
+const mcpCmd = tok => `claude mcp add --transport http gtd ${mcpUrl()} --header "Authorization: Bearer ${tok}"`;
+function mcpHtml(){
+  const nt = S.newToken;
+  const copyRow = (v, what) => `<div class="tokrow"><code>${esc(v)}</code><button class="sm" data-act="copytok" data-v="${what}">${t('copy')}</button></div>`;
+  return `<div class="rv" id="mcp"><h3>${t('mcp')}</h3>${t('mcp_text')}
+    <div class="tokrow">${t('mcp_url')} <code>${esc(mcpUrl())}</code> <a href="${MCP_DOCS}" target="_blank" rel="noopener">${t('mcp_help')}</a></div>
+    ${nt ? `<div class="newtok"><b>${t('token_once')}</b>${copyRow(nt.token, 'token')}
+      <div>${t('token_cmd')}</div>${copyRow(mcpCmd(nt.token), 'cmd')}
+      <button class="sm" data-act="tokhide">${t('token_hide')}</button></div>` : ''}
+    ${(S.tokens||[]).map(k => `<div class="tok"><span><b>${esc(k.name)}</b><br><small>${t('token_meta',
+      {created:fmtTs(k.created), used:k.last_used ? fmtTs(k.last_used) : t('token_never')})}</small></span>
+      <button class="sm del" data-act="revoketok" data-id="${k.id}">${t('token_revoke')}</button></div>`).join('')
+      || `<div class="tokrow">${t('tokens_none')}</div>`}
+    <div class="cap"><input id="tokname" maxlength="60" autocomplete="off" placeholder="${t('token_name_ph')}"><button data-act="newtok">${t('token_create')}</button></div>
+    <div class="msg" id="tokmsg"></div><div class="hint" style="margin:4px 0 0">${t('mcp_note')}</div></div>`;
+}
+async function createToken(){
+  const inp = $('#tokname'), name = inp.value.trim();
+  if(!name){ $('#tokmsg').textContent = t('token_name_needed'); return inp.focus(); }
+  const r = await api('/tokens', 'POST', {name});
+  if(!r.token){ $('#tokmsg').textContent = r.detail || t('error'); return inp.focus(); }
+  S.newToken = r; S.tokens = await api('/tokens'); render();
+}
+async function copyToken(btn){
+  const nt = S.newToken; if(!nt) return;
+  try{ await navigator.clipboard.writeText(btn.dataset.v==='cmd' ? mcpCmd(nt.token) : nt.token); btn.textContent = t('copied'); }
+  catch{ btn.textContent = t('error'); }
+  setTimeout(() => btn.textContent = t('copy'), 1500);
+}
+async function revokeToken(id){
+  const k = (S.tokens||[]).find(x => x.id===id);
+  if(!k || !confirm(t('token_revoke_q', {name:k.name}))) return;
+  await api('/tokens/'+id, 'DELETE'); S.tokens = await api('/tokens'); render();
 }
 
 // Статистика использования — только агрегаты (сервер не отдаёт ни задач, ни почт, ни имён)
@@ -1350,6 +1417,10 @@ document.addEventListener('click', async e => {
     setLang(S.me.lang || autoLang()); return render();
   }
   if(act==='newproj') return newProject();
+  if(act==='newtok') return createToken();
+  if(act==='copytok') return copyToken(el);
+  if(act==='tokhide'){ S.newToken = null; return render(); }
+  if(act==='revoketok') return revokeToken(+el.dataset.id);
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
   if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
@@ -1524,6 +1595,7 @@ document.addEventListener('keydown', e => {
   if(e.key!=='Enter') return;
   if(e.target.id==='cap'){ e.preventDefault(); capture(); }  // Enter — добавить, а не перенос строки
   if(e.target.id==='np') document.querySelector('[data-act=newproj]').click();
+  if(e.target.id==='tokname') createToken();
   if(e.target.id==='em') emailSend();
   if(e.target.id==='code') emailVerify();
 });
