@@ -1,20 +1,26 @@
-# Обновления зависимостей раз в неделю; мелкие версии — одним PR на экосистему.
+# Обновления зависимостей раз в неделю, по понедельникам; minor и patch — одним PR на экосистему,
+# каждый major — отдельным PR.
 # Каждый PR Dependabot проходит CI (.github/workflows/ci.yml): тесты, сверку замка и сборку образа.
+# Patch/minor с зелёным CI сливаются сами, major получает метку major-update и ждёт человека
+# (.github/workflows/dependabot-automerge.yml, SERBITO-400).
 version: 2
 updates:
   # Замок requirements*.txt собирает `uv pip compile` (scripts/lock.sh) — это ecosystem uv, а не pip:
   # Dependabot пересобирает .txt с хешами теми же флагами, что записаны в их шапке (SERBITO-339)
   - package-ecosystem: uv
     directory: /
-    schedule: {interval: weekly}
+    schedule: {interval: weekly, day: monday}
     groups:
       python-minor: {update-types: [minor, patch]}
   # FROM в Dockerfile закреплён digest'ом: Dependabot поднимает digest python:3.14-slim
   - package-ecosystem: docker
     directory: /
-    schedule: {interval: weekly}
+    schedule: {interval: weekly, day: monday}
+    groups:
+      docker-minor: {update-types: [minor, patch]}
   - package-ecosystem: github-actions
     directory: /
-    schedule: {interval: weekly}
+    schedule: {interval: weekly, day: monday}
     groups:
-      actions: {patterns: ["*"]}
+      # major (новый vN экшена) — отдельным PR: он не держит мелкие обновления
+      actions: {update-types: [minor, patch]}
