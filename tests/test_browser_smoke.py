@@ -397,6 +397,50 @@ def test_mcp_tokens_in_account(watch, lang):
     w.check(f"[{lang}] MCP-токены")
 
 
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_oauth_consent_screen(watch, server, lang):
+    """SERBITO-375, этап 2: коннектор claude.ai. Гость открывает /authorize → вход (здесь dev-login) → SPA
+    возвращает на экран согласия → «Разрешить» → код уходит на адрес возврата; приложение видно в «Аккаунте»
+    и отключается оттуда."""
+    import base64
+    import hashlib
+    from urllib.parse import parse_qs, urlencode
+    import httpx2
+    w = watch(lang)
+    A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,%s)", (int(time.time()), lang))
+    # Адрес возврата — loopback, как у программ на компьютере. Это тот же сервер: /about отвечает 200 (переход
+    # по редиректу Playwright не перехватывает, подменить ответ нельзя)
+    callback = server + "/about"
+    cid = httpx2.post(server + "/register", json={"redirect_uris": [callback], "client_name": "Claude"}).json()["client_id"]
+    verifier = "v" * 50
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    w.goto("/authorize?" + urlencode({"response_type": "code", "client_id": cid, "redirect_uri": callback,
+                                      "state": "s1", "code_challenge": challenge, "code_challenge_method": "S256"}))
+    w.wait("#oauth-signin", f"[{lang}] OAuth: просьба войти")
+    w.page.click("#oauth-signin")
+    w.wait('#signin a[href="/dev-login"]', f"[{lang}] OAuth: лендинг со входом")
+    w.page.click('#signin a[href="/dev-login"]')
+    w.wait("form#consent", f"[{lang}] OAuth: экран согласия после входа")
+    text = w.page.inner_text("main")
+    assert ("Connect Claude to GTD?" if lang == "en" else "Подключить Claude к GTD?") in text
+    assert "127.0.0.1" in text
+    with w.page.expect_navigation(url=lambda u: u.startswith(callback)):
+        w.page.click('form#consent button[value="allow"]')
+    q = parse_qs(w.page.url.split("?", 1)[1])
+    assert q["state"] == ["s1"] and q["iss"] == [A.BASE_URL]
+    r = httpx2.post(server + "/token", data={"grant_type": "authorization_code", "client_id": cid, "code": q["code"][0],
+                                            "code_verifier": verifier, "redirect_uri": callback})
+    assert r.status_code == 200, r.text
+    w.goto("/account" if lang == "ru" else "/en/account")
+    w.wait("main #mcp .app", f"[{lang}] аккаунт: подключённое приложение")
+    assert "Claude" in w.page.inner_text("main #mcp .app")
+    w.page.once("dialog", lambda d: d.accept())
+    w.page.click('main #mcp [data-act="disconnectapp"]')
+    w.wait("main #mcp:not(:has(.app))", f"[{lang}] приложение отключено")
+    assert A.row("select count(*) n from oauth_grants")["n"] == 0
+    w.check(f"[{lang}] OAuth")
+
+
 def smoke_user(w, lang="ru"):
     """Пользователь с задачами во всех списках, вошедший через /dev-login; возвращает id задач."""
     uid = A.run("insert into users(tg_id,name,created,lang) values(0,'Smoke',%s,%s) returning id",

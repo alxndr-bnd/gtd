@@ -1648,6 +1648,8 @@ def attach(uid: int, field: str, value) -> int | None:
             run("delete from user_sessions where user_id=%s", (other["id"],))
             run("delete from login_tokens where user_id=%s", (other["id"],))
             run("delete from api_tokens where user_id=%s", (other["id"],))
+            run("delete from oauth_grants where user_id=%s", (other["id"],))  # токены OAuth — каскадом
+            run("delete from oauth_codes where user_id=%s", (other["id"],))
             run("delete from users where id=%s", (other["id"],))
     run(f"update users set {field}=%s where id=%s", (value, uid))
     return None
@@ -1655,8 +1657,8 @@ def attach(uid: int, field: str, value) -> int | None:
 
 def merge_accounts(keep: int, drop: int):
     """Всё из drop переезжает в keep, drop удаляется — одной транзакцией. Одноимённые проекты
-    склеиваются; сессии и API-токены drop продолжают работать уже в keep; способы входа, которых у keep нет,
-    он получает от drop."""
+    склеиваются; сессии, API-токены и подключения OAuth drop продолжают работать уже в keep; способы входа,
+    которых у keep нет, он получает от drop."""
     with _pool.connection() as c, c.transaction():
         k = c.execute("select * from users where id=%s for update", (keep,)).fetchone()
         d = c.execute("select * from users where id=%s for update", (drop,)).fetchone()
@@ -1679,7 +1681,7 @@ def merge_accounts(keep: int, drop: int):
                   (drop, keep))
         c.execute("update users set item_seq = item_seq + (select count(*) from items where user_id=%s) "
                   "where id=%s", (drop, keep))
-        for table in ("items", "user_sessions", "login_tokens", "api_tokens"):
+        for table in ("items", "user_sessions", "login_tokens", "api_tokens", "oauth_grants", "oauth_codes"):
             c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
         c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
         moved = {f: d[f] for f in IDENTITIES if d[f] and not k[f]}
@@ -2762,8 +2764,10 @@ for _prefix in ("", "/en"):
     app.add_api_route(_prefix + "/p/{pid:int}", section_page, methods=["GET"], include_in_schema=False)
 
 
-# ── MCP для AI-ассистентов (SERBITO-375): /mcp с Bearer-токеном. Модуль берёт отсюда базу, захват и правку задач,
-# поэтому импортируется последним, когда всё выше уже определено
+# ── MCP для AI-ассистентов (SERBITO-375): /mcp с Bearer-токеном, OAuth 2.1 для коннекторов (oauth.py). Модули берут
+# отсюда базу, вход, захват и правку задач, поэтому импортируются последними, когда всё выше уже определено
 import mcp_server  # noqa: E402
+import oauth  # noqa: E402
 
 app.router.add_route("/mcp", mcp_server.endpoint, include_in_schema=False)
+app.include_router(oauth.router)

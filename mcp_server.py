@@ -1,13 +1,16 @@
 """MCP для AI-ассистентов (SERBITO-375): Claude и другие MCP-клиенты читают и меняют задачи владельца токена.
 
 Транспорт — Streamable HTTP на /mcp, без сессий (stateless): Cloud Run засыпает и держит до двух инстансов, так что
-в памяти одного инстанса ничего жить не может. Ответы — JSON, без SSE-потока. Вход — личный API-токен из «👤 Аккаунта»
-в `Authorization: Bearer gtd_…`; OAuth 2.1 для коннекторов claude.ai — этап 2 (docs/plans/2026-10-03-mcp-oauth.md).
+в памяти одного инстанса ничего жить не может. Ответы — JSON, без SSE-потока. Вход — `Authorization: Bearer …`:
+личный API-токен из «👤 Аккаунта» (gtd_…) или токен доступа OAuth 2.1 (gtdo_…, коннекторы claude.ai, oauth.py).
+Без токена — 401 с адресом метаданных ресурса: по нему клиент сам найдёт вход через OAuth.
 
 Каждый инструмент работает только с данными владельца токена: uid берётся из токена, а не из аргументов, и каждый
 запрос фильтрует по user_id. Ни токен, ни содержимое задач в журнал не пишутся.
 Описания инструментов и тексты ошибок — по-английски: их читает модель, а не человек."""
 import logging
+import re
+import time
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -22,6 +25,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 import app as A
+import oauth
 
 # SDK пишет INFO на каждый запрос (запуск и остановка менеджера) и текст ошибок инструментов — в них бывают
 # названия проектов. В журнал — только предупреждения и падения
@@ -33,6 +37,11 @@ logging.getLogger("mcp").setLevel(logging.WARNING)
 MCP_RATE = (120, 60)        # запросов на токен в минуту
 MCP_BAD_TOKENS = (30, 600)  # неверных токенов с одного IP за 10 минут
 LIST_LIMIT = 200
+WEEK = 7 * 86400
+# «Кого ждём» (update_task, waiting_for) — первая строка заметок: отдельного поля у задачи нет, а заметки видны
+# и в приложении, и в боте. Метка — на языке аккаунта; заменяем и снимаем строку с любой из двух
+WAITING_MARK = {"ru": "Ждём: ", "en": "Waiting for: "}
+WAITING_RE = re.compile(r"^(?:Ждём|Waiting for): .*(?:\n|$)")
 
 server = MCPServer(
     "gtd",
@@ -61,9 +70,8 @@ def owner(ctx: Context) -> int:
 
 
 def unauthorized(error: str = "") -> JSONResponse:
-    challenge = 'Bearer realm="gtd"' + (f', error="{error}"' if error else "")
     return JSONResponse({"detail": "invalid token" if error else "auth required"}, 401,
-                        headers={"WWW-Authenticate": challenge})
+                        headers={"WWW-Authenticate": oauth.challenge(error)})
 
 
 def too_many(window: int) -> JSONResponse:
@@ -79,7 +87,7 @@ def authenticate(request: Request) -> tuple[int | None, JSONResponse | None]:
     bad_key = "mcpbad:" + A.ip_key(A.client_ip(request))
     if A.limit_count(bad_key, MCP_BAD_TOKENS[1]) >= MCP_BAD_TOKENS[0]:
         return None, too_many(MCP_BAD_TOKENS[1])
-    tok = A.api_token_user(raw)
+    tok = A.api_token_user(raw) or oauth.access_token_user(raw)
     if not tok:
         A.limit_hit(bad_key, MCP_BAD_TOKENS[1])
         return None, unauthorized("invalid_token")
@@ -270,3 +278,105 @@ def move_task(
     if list is None and it["status"] == "inbox" and (body.get("project_id") or body.get("context")):
         body["status"] = "next"
     return task_out(patch(uid, it, body))
+
+
+def parse_due(value: str) -> int:
+    """Срок задачи: ISO (2026-10-24, 2026-10-24T15:30, с поясом или без) или как в поле захвата
+    («tomorrow 10am», «в пятницу»). Дата без времени — 9:00, как при захвате."""
+    v = value.strip()
+    try:
+        dt = datetime.fromisoformat(v)
+    except ValueError:
+        dt = None
+    if dt is not None:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            dt = dt.replace(hour=9)
+        return int((dt if dt.tzinfo else dt.replace(tzinfo=A.TZ)).timestamp())
+    rest, ts = A.parse_when(v, datetime.now(A.TZ))
+    if ts is None or rest:
+        raise ToolError(f"Cannot read the date {value!r}. Use ISO 8601 (2026-10-24 or 2026-10-24T15:30) "
+                        "or words like \"tomorrow 10am\"")
+    return ts
+
+
+def waiting_notes(uid: int, notes: str, who: str) -> str:
+    """Заметки с новой строкой «Ждём: …» (who пустой — без неё)."""
+    rest = WAITING_RE.sub("", notes or "", count=1)
+    if not who:
+        return rest
+    lang = (A.row("select lang from users where id=%s", (uid,)) or {}).get("lang") \
+        or ("ru" if re.search("[а-яё]", who, re.I) else "en")
+    return WAITING_MARK[lang] + who + ("\n" + rest if rest else "")
+
+
+@server.tool(annotations=WRITE)
+def update_task(
+    ctx: Context,
+    number: Annotated[int, Field(description="Task number, #N")],
+    title: Annotated[str | None, Field(max_length=500, description="New title. Like in the app, #Project, @context "
+                                                                 "and a date in the title are applied too")] = None,
+    notes: Annotated[str | None, Field(max_length=10000, description="New notes (replace the old ones); "
+                                                                    "\"\" — clear")] = None,
+    due: Annotated[str | None, Field(description="Due date and reminder: ISO 8601 (2026-10-24, 2026-10-24T15:30) or "
+                                                 "words (\"tomorrow 10am\", \"next friday\"); a date without time "
+                                                 "means 09:00; \"\" — remove the date. The task then shows in "
+                                                 "Scheduled")] = None,
+    waiting_for: Annotated[str | None, Field(max_length=200, description="Who or what the task waits for. Moves the "
+                                                                         "task to Waiting and puts \"Waiting for: …\" "
+                                                                         "as the first line of its notes; \"\" — "
+                                                                         "remove that line")] = None,
+) -> dict[str, Any]:
+    """Change a task: title, notes, due date (reminder) or who it is waiting for. Only the given fields change.
+    Use move_task for the list, project or context, and complete_task to finish it."""
+    uid = owner(ctx)
+    it = task_by_number(uid, number)
+    body: dict[str, Any] = {}
+    if title is not None:
+        if not title.strip():
+            raise ToolError("Empty title")
+        body["title"] = title.strip()
+    if notes is not None:
+        body["notes"] = notes
+    if waiting_for is not None:
+        who = " ".join(waiting_for.split())
+        body["notes"] = waiting_notes(uid, body.get("notes", it["notes"]), who)
+        if who:
+            body["status"] = "waiting"
+    remind = None if due is None else parse_due(due) if due.strip() else 0
+    if not body and due is None:
+        raise ToolError("Nothing to change: give title, notes, due or waiting_for")
+    if body:
+        it = patch(uid, it, body)
+    if due is not None:  # отдельно и после: явный срок важнее даты, найденной в новом заголовке
+        it = patch(uid, it, {"remind_at": remind or None})
+    return task_out(it)
+
+
+@server.tool(annotations=READ)
+def weekly_review(ctx: Context) -> dict[str, Any]:
+    """GTD Weekly Review in one call: Inbox count, projects without a next action, overdue tasks, everything in
+    Waiting (waiting_over_a_week marks the old ones), reminders for the next 7 days and the Someday count.
+    Read-only: suggest changes to the user, then make them with the other tools."""
+    uid = owner(ctx)
+    now = int(time.time())
+    counts = {r["status"]: r["n"] for r in A.rows(
+        "select status, count(*) n from items where user_id=%s group by status", (uid,))}
+    stalled = A.rows(
+        "select p.title, (select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id "
+        " and i.status in ('inbox','waiting')) open from projects p where p.user_id=%s and p.status='active' "
+        "and not exists (select 1 from items i where i.project_id=p.id and i.user_id=p.user_id and i.status='next') "
+        "order by p.title", (uid,))
+    open_sql = f"{A.ITEM_SQL} where i.user_id=%s and i.status not in ('done','trash') and i.remind_at is not null "
+    overdue = A.rows(open_sql + "and i.remind_at<%s order by i.remind_at, i.id limit %s", (uid, now, LIST_LIMIT))
+    soon = A.rows(open_sql + "and i.remind_at>=%s and i.remind_at<%s order by i.remind_at, i.id limit %s",
+                  (uid, now, now + WEEK, LIST_LIMIT))
+    waiting = A.rows(f"{A.ITEM_SQL} where i.user_id=%s and i.status='waiting' order by i.created, i.id limit %s",
+                     (uid, LIST_LIMIT))
+    return {
+        "inbox_count": counts.get("inbox", 0),
+        "projects_without_next_action": [{"name": p["title"], "open_tasks": p["open"]} for p in stalled],
+        "overdue": [task_out(it) for it in overdue],
+        "waiting": [{**task_out(it), "waiting_over_a_week": (it["created"] or now) < now - WEEK} for it in waiting],
+        "upcoming_7_days": [task_out(it) for it in soon],
+        "someday_count": counts.get("someday", 0),
+    }
