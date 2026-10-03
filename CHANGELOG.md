@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+- Every deploy now checks that the site sends its security headers. If one is missing, the deploy stops.
+  - RU: Каждый деплой теперь проверяет, что сайт отдаёт заголовки безопасности. Если какого-то нет, деплой останавливается.
+
 ## [0.28.0] - 2026-10-03
 
 ### Added
