@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+- Connect ChatGPT, Cursor, VS Code and other AI assistants to GTD with sign-in, no token. The consent screen shows where access goes.
+  - RU: ChatGPT, Cursor, VS Code и другие AI-ассистенты подключаются к GTD через вход, без токена. Экран согласия показывает, куда уходит доступ.
+
 ## [0.30.0] - 2026-10-03
 
 ### Fixed
