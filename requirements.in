@@ -6,3 +6,5 @@ httpx>=0.28.1
 psycopg[binary]>=3.3.6
 psycopg-pool>=3.3.3
 sentry-sdk[fastapi]>=2.71.0
+# MCP-сервер на /mcp для AI-ассистентов (SERBITO-375). API 2.x: FastMCP там называется MCPServer
+mcp>=2.3.0,<3
