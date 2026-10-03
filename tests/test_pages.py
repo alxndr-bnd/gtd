@@ -307,7 +307,8 @@ def test_version_comes_from_deploy_env(monkeypatch):
         monkeypatch.delenv("APP_VERSION", raising=False)
         importlib.reload(P)
     deploy = open(os.path.join(os.path.dirname(P.__file__), ".github", "workflows", "deploy.yml")).read()
-    assert 'echo "APP_VERSION: \\"${GITHUB_REF_NAME#v}\\"" >> "$ENV_FILE"' in deploy
+    # Версия — из тега, который деплоится (пересборка по расписанию — тоже его тег, SERBITO-401)
+    assert 'echo "APP_VERSION: \\"${RELEASE_TAG#v}\\""' in deploy
 
 
 def test_changes_page_says_which_version_runs(client, monkeypatch):

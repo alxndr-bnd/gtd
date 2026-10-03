@@ -134,6 +134,9 @@ scripts/lock.sh --upgrade                  # all packages
    the app menu and `/changes` show it (`dev` when unset, e.g. locally).
 4. The deploy fails for a tag without its `## [X.Y.Z]` section in CHANGELOG.md, so a tag pushed by hand
    cannot ship without notes.
+5. Weekly OS refresh (SERBITO-401): every Wednesday 03:00 UTC (or *Run workflow*) the deploy rebuilds the newest
+   `vX.Y.Z` tag with fresh Debian packages and redeploys it: same version, image `<sha>-r<YYYYMMDD>`. Trivy gates it
+   like a release; if the main page is not 200 after the switch, traffic goes back to the previous revision.
 
 `/changes` and `/en/changes` render CHANGELOG.md, parsed once at startup by `changelog.py`;
 `tests/test_changelog.py` checks the format, both languages and that every tag has an entry.
