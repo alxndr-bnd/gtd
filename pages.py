@@ -836,9 +836,9 @@ def manifest(lang: str) -> dict:
     return {"id": "/", "name": SITE_NAME, "short_name": SITE_NAME, "description": MANIFEST_DESC[lang], "lang": lang,
             "dir": "ltr", "start_url": "/", "scope": "/", "display": "standalone",
             "background_color": "#f6f7f9", "theme_color": BRAND,  # фон — --bg светлой темы, как у страниц
-            "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
-                      {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
-                      {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}
+            # Все иконки непрозрачные, бирюзовые во весь холст (SERBITO-392): прозрачные углы macOS показывал чёрными
+            "icons": [{"src": f"/icon-{kind}{size}.png", "sizes": f"{size}x{size}", "type": "image/png", "purpose": purpose}
+                      for kind, purpose in (("", "any"), ("maskable-", "maskable")) for size in (192, 512)]}
 
 
 # Страница 404 для браузера (неизвестный адрес вне /api/): заголовок, пояснение, «на главную», «как это работает»

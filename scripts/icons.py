@@ -1,4 +1,6 @@
-"""Иконки из знака pages.mark(): favicon.svg/.ico, apple-touch-icon и иконки 192/512 (обычная и maskable).
+"""Иконки из знака pages.mark(): favicon.svg/.ico, apple-touch-icon и иконки 192/512 (обычные и maskable).
+Иконки для установки — непрозрачные, бирюзовый фон во весь холст (SERBITO-392): у прозрачных скруглённых углов
+цвет — чёрный (0,0,0,0), и macOS показывал установленное приложение чёрным. Углы скругляет сама система.
 Pillow и resvg в зависимостях не нужны — во временном venv:
     python3 -m venv /tmp/icons && /tmp/icons/bin/pip install pillow resvg-py && /tmp/icons/bin/python scripts/icons.py"""
 import io
@@ -31,7 +33,8 @@ def save(img: Image.Image, name: str, **kw):
 with open(os.path.join(STATIC, "favicon.svg"), "w", encoding="utf-8") as f:
     f.write(pages.mark() + "\n")
 save(png(pages.mark(), 48), "favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
-save(png(pages.mark(), 192), "icon-192.png", optimize=True)
-save(png(pages.mark(), 512), "icon-512.png", optimize=True)
+# Обычные (any) — знак 90%, как apple-touch-icon; maskable — 80%, в безопасной зоне. Все RGB, без альфа-канала
+for size in (192, 512):
+    save(png(FULL.format(o=3.2, k=0.9), size).convert("RGB"), f"icon-{size}.png", optimize=True)
+    save(png(FULL.format(o=6.4, k=0.8), size).convert("RGB"), f"icon-maskable-{size}.png", optimize=True)
 save(png(FULL.format(o=3.2, k=0.9), 180).convert("RGB"), "apple-touch-icon.png", optimize=True)
-save(png(FULL.format(o=6.4, k=0.8), 512).convert("RGB"), "icon-maskable-512.png", optimize=True)

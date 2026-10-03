@@ -71,10 +71,15 @@ button.sm:hover{color:var(--tx)}
 .dnd > .it.dragging{position:relative;z-index:5;box-shadow:0 10px 28px #0003;border-color:var(--ac);cursor:grabbing;transition:none}
 body.dnd-on,body.dnd-on *{-webkit-user-select:none;user-select:none;cursor:grabbing}
 @media(pointer:coarse){.dnd > .it{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
-/* Ручка ⠿ (SERBITO-354): на сенсорном экране тянуть за неё можно сразу, без удержания; мышью тянется вся карточка */
+/* Ручка ⠿ (SERBITO-354): на сенсорном экране видна всегда, тянуть за неё можно сразу, без удержания.
+   Мышью тянется вся карточка, а ручка видна при наведении и на выбранной карточке — знак, что её можно
+   перетащить (SERBITO-390); место под неё занято всегда, карточка не прыгает */
 .it .grip{display:none}
 @media(pointer:coarse){.dnd > .it .grip{display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;
   margin:-10px -12px -10px -4px;align-self:stretch;color:var(--mut);font-size:18px;touch-action:none;cursor:grab}}
+@media(hover:hover) and (pointer:fine){.dnd > .it .grip{display:flex;align-items:center;align-self:stretch;margin:-10px -8px -10px -4px;
+  padding:0 6px;color:var(--mut);font-size:16px;cursor:grab;opacity:0;transition:opacity .12s}
+  .dnd > .it:hover .grip,.dnd > .it.sel .grip,.dnd > .it:focus-within .grip{opacity:1}}
 .dndtip{display:flex;align-items:center;gap:8px;margin:0 0 10px} .dndtip span{flex:1}  /* выполненная — приглушённая: без фона карточки, заголовок зачёркнут */
 .pjh select.dmode{font-size:12.5px;font-weight:400;color:var(--mut);padding:3px 6px;border:1px solid var(--bd);border-radius:8px;
   background:var(--card);vertical-align:middle;max-width:100%}
@@ -140,6 +145,8 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
   /* Зоны тапа ≥44px (SERBITO-354, G7): галочка — во всю высоту от левого края карточки, «#N» — квадрат 44 */
   .it .ck{min-width:44px;min-height:44px;margin:-10px -6px -10px -12px;align-items:center;justify-content:center}
   .it .num{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin:-10px -6px -10px 0}
+  /* Проект (SERBITO-391): название во всю ширину рядом с ручкой ⠿, кнопки — строкой ниже, а не столбиком букв */
+  .it.pj{flex-wrap:wrap} .it.pj .b{flex:1 1 calc(100% - 60px)} .it.pj .grip{order:1} .it.pj > button{order:2}
   .toast{bottom:12px;flex-wrap:wrap;row-gap:8px}
   .toast .cxs{order:5;flex-basis:100%}  /* @контексты — отдельной строкой: текст «… → Next» не обрезается */
 }
@@ -268,11 +275,13 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>Alt+↑↓ переставить<br>← меню · → задачи · Esc сброс",
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
   "all": "все", "back_projects": "← Projects", "rename": "Переименовать", "delete": "Удалить",
-  "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие.",
+  "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие. Порядок меняется перетаскиванием или Alt+↑↓.",
   "new_project": "Новый проект", "create": "Создать",
   "to_project": "→ Project", "pick_project": "В какой проект?", "new_project_opt": "+ Новый проект…",
   "new_project_name": "Название нового проекта", "project_name_needed": "Напиши название проекта",
   "dnd_tip": "Чтобы переставить задачу, удерживай её или тяни за ⠿", "dnd_tip_close": "Понятно",
+  "dnd_tip_mouse": "Задачи можно переставлять: потяни карточку мышью или за ⠿. С клавиатуры — выбери задачу стрелками и нажми Alt+↑↓",
+  "dnd_grip": "Потяни, чтобы переставить. С клавиатуры — Alt+↑↓",
   "new_project_ph": "Например, Ремонт кухни", "project_created": "Проект #{p} создан", "project_exists": "Проект #{p} уже есть", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
   "complete": "Завершить",
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
@@ -378,11 +387,13 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>Alt+↑↓ reorder<br>← menu · → tasks · Esc clear",
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
-  "projects_hint": "Anything that takes more than one step. Every active project needs a next action.",
+  "projects_hint": "Anything that takes more than one step. Every active project needs a next action. Drag a project or press Alt+↑↓ to change the order.",
   "new_project": "New project", "create": "Create",
   "to_project": "→ Project", "pick_project": "Which project?", "new_project_opt": "+ New project…",
   "new_project_name": "New project name", "project_name_needed": "Type a project name",
   "dnd_tip": "To reorder, hold a task or drag it by ⠿", "dnd_tip_close": "Got it",
+  "dnd_tip_mouse": "You can reorder tasks: drag a card with the mouse or by ⠿. With the keyboard, select a task with the arrows and press Alt+↑↓",
+  "dnd_grip": "Drag to reorder. Keyboard: Alt+↑↓",
   "new_project_ph": "For example, Kitchen remodel", "project_created": "Project #{p} created", "project_exists": "Project #{p} already exists", "open_n": "{n} open", "no_next": "⚠ no next action",
   "complete": "Complete",
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
@@ -865,7 +876,7 @@ function itemHtml(it){
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
       <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
-    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}<span class="grip" aria-hidden="true">⠿</span></div>`;
+    </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}${GRIP()}</div>`;
 }
 
 // Стрелка, входящая в лоток: «положить во входящие»
@@ -962,34 +973,51 @@ document.addEventListener('toggle', e => {
 // ── Ручной порядок (SERBITO-328). Карточки в .dnd переставляются: мышью — потянуть по вертикали (по горизонтали —
 // это выделение текста), пальцем — удержать ~0,35 с и вести (сразу повёл — это прокрутка), с клавиатуры — Alt+↑↓
 // на выбранной карточке. Сервер хранит порядок списка (scope=list) и проекта (project) отдельно; перетаскивание
-// не открывает карточку, обычный клик — открывает (SERBITO-299).
+// не открывает карточку, обычный клик — открывает (SERBITO-299). Так же переставляются и сами проекты
+// (scope=projects, SERBITO-391): у их карточек data-pid вместо data-id.
 const DND_VIEWS = ['inbox', 'next', 'waiting', 'someday'];
+const GRIP = () => `<span class="grip" aria-hidden="true" title="${t('dnd_grip')}">⠿</span>`;
 const dndHtml = (list, scope = 'list') => list.length ? `<div class="dnd" data-scope="${scope}">${list.map(itemHtml).join('')}</div>` : '';
 const DND = {}, DRAG_PX = 6, HOLD_MS = 350, EDGE_PX = 70;
 let moveQ = Promise.resolve(), moving = 0;
 // Порядок уходит на сервер по одному (иначе быстрые Alt+↓ посчитались бы от устаревших соседей); экран уже
 // переставлен — перечитываем данные, когда очередь опустела
+const dndId = el => +(el.dataset.id || el.dataset.pid);
 function dndSave(el){
   dndTipDone();
-  const id = +el.dataset.id, nb = x => x?.dataset.id ? +x.dataset.id : null;
-  const body = {prev:nb(el.previousElementSibling), next:nb(el.nextElementSibling), scope:el.parentElement.dataset.scope};
+  const id = dndId(el), nb = x => x ? dndId(x) : null, scope = el.parentElement.dataset.scope;
+  const body = {prev:nb(el.previousElementSibling), next:nb(el.nextElementSibling)};
+  const url = scope==='projects' ? `/projects/${id}/move` : `/items/${id}/move`;
+  if(scope!=='projects') body.scope = scope;
   moving++;
-  moveQ = moveQ.then(() => api(`/items/${id}/move`, 'POST', body)).catch(() => {})
+  moveQ = moveQ.then(() => api(url, 'POST', body)).catch(() => {})
     .finally(() => { if(--moving===0) load(); });
 }
-// Разовая подсказка на сенсорном экране (SERBITO-354): над первым списком, где есть что переставлять, пока человек
-// не перетащил задачу или не закрыл подсказку. Мышью — не нужна: тянется сама карточка, курсор это показывает
+// Разовая подсказка (SERBITO-354, SERBITO-390): над первым списком задач, где есть что переставлять, пока человек
+// не перетащил задачу или не закрыл подсказку. Запоминает сервер (users.dnd_tip_seen): закрыл на ноутбуке —
+// не увидит и на телефоне. Текст — под устройство: палец (удержать, ⠿) или мышь и клавиатура (Alt+↑↓)
 const dndTip = {
-  seen(){ try{ return localStorage.getItem('gtd-dnd-tip') === '1'; }catch{ return true; } },
+  seen(){
+    if(!S.me || S.me.dnd_tip_seen) return true;
+    let local = false; try{ local = localStorage.getItem('gtd-dnd-tip') === '1'; }catch{}
+    if(local) dndTipDone();  // закрыта до SERBITO-390, только в этом браузере — переносим на сервер
+    return local;
+  },
   draw(){
-    if(this.seen() || !matchMedia('(pointer: coarse)').matches) return;
-    const box = [...document.querySelectorAll('main .dnd')].find(b => b.children.length > 1);
-    box?.insertAdjacentHTML('beforebegin', `<div class="hint dndtip"><span>${t('dnd_tip')}</span>
+    if(this.seen()) return;
+    const box = [...document.querySelectorAll('main .dnd:not([data-scope=projects])')].find(b => b.children.length > 1);
+    const touch = matchMedia('(pointer: coarse)').matches;
+    box?.insertAdjacentHTML('beforebegin', `<div class="hint dndtip"><span>${t(touch ? 'dnd_tip' : 'dnd_tip_mouse')}</span>
       <button class="sm" data-act="dndtip">${t('dnd_tip_close')}</button></div>`);
   },
 };
-function dndTipDone(){ try{ localStorage.setItem('gtd-dnd-tip', '1'); }catch{} $('main .dndtip')?.remove(); }
-const dndOrder = box => [...box.children].map(c => c.dataset.id).join();
+function dndTipDone(){
+  $('main .dndtip')?.remove();
+  if(!S.me || S.me.dnd_tip_seen) return;
+  S.me.dnd_tip_seen = true;
+  api('/me', 'PATCH', {dnd_tip_seen:true}).catch(() => {});
+}
+const dndOrder = box => [...box.children].map(dndId).join();
 function dndReset(){
   clearTimeout(DND.timer);
   if(DND.on){
@@ -1025,7 +1053,7 @@ function dndScroll(){  // у края окна список прокручива
   requestAnimationFrame(dndScroll);
 }
 document.addEventListener('pointerdown', e => {
-  const el = e.target.closest('main .dnd > .it[data-id]');
+  const el = e.target.closest('main .dnd > .it[data-id], main .dnd > .it[data-pid]');
   if(!el || e.button !== 0 || DND.el || e.target.closest('a,button,input,select,textarea,label') || $('#dlg').open) return;
   Object.assign(DND, {el, box:el.parentElement, x:e.clientX, y:e.clientY, pid:e.pointerId, touch:e.pointerType==='touch'});
   if(DND.touch && e.target.closest('.grip')) dndStart();  // за ручку — сразу, без удержания (SERBITO-354)
@@ -1081,11 +1109,11 @@ function projectsHtml(){
   <label class="fl" for="np">${t('new_project')}</label>
   <div class="cap"><input id="np" autocomplete="off" placeholder="${t('new_project_ph')}"><button class="pri" data-act="newproj">${t('create')}</button></div>
   <div class="msg" id="npmsg" role="alert"></div>
-  ${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}" tabindex="-1"><div class="b"><div class="t">${esc(p.title)}</div>
+  ${S.projects.length ? `<div class="dnd" data-scope="projects">${S.projects.map(p=>`<div class="it pj" data-pid="${p.id}" tabindex="-1"><div class="b"><div class="t">${esc(p.title)}</div>
     <div class="meta"><span>${t('open_n', {n:p.open_count})}</span>${p.next_count?'':`<span class="warn">${t('no_next')}</span>`}</div></div>
     <button class="sm" data-act="renameproj" data-pid="${p.id}" title="${t('rename')}">✏️</button>
     <button class="sm" data-act="delproj" data-pid="${p.id}" title="${t('delete')}">🗑</button>
-    <button class="sm" data-act="closeproj" data-pid="${p.id}">${t('complete')}</button></div>`).join('') || emptyHtml('projects')}`;
+    <button class="sm" data-act="closeproj" data-pid="${p.id}">${t('complete')}</button>${GRIP()}</div>`).join('')}</div>` : emptyHtml('projects')}`;
 }
 
 // p — название проекта для примера: пробелы → «_», как их разбирает захват

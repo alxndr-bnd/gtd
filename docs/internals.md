@@ -129,6 +129,12 @@ Every section has its own address — `/` (Inbox), `/next`, `/projects`, `/p/<id
 same under `/en/` — so Back (button or phone gesture) returns to the previous section instead of leaving the site.
 A task card opened from a list is its own history entry `/i/<N>`: Back closes it. Server: `app.APP_VIEWS`.
 
+Manual order: tasks have their own order in each list (`items.position`) and in each project (`items.ppos`);
+projects have one order per user (`projects.position`, SERBITO-391), used by the project list and every project
+picker. Drag a card with the mouse, hold it or drag it by ⠿ on a phone, or press Alt+↑↓ on the selected card. The ⠿
+grip shows on touch screens and on hover or selection with a mouse. A one-time hint above the first list with 2+
+tasks explains this; its dismissal is stored per user (`users.dnd_tip_seen`, SERBITO-390).
+
 Public pages are `pages.py`; the server renders the text (for search engines): landing for guests on `/` and
 `/en/`, “How it works” on `/about` and `/en/about`, privacy policy on `/privacy`, “What's new” on `/changes`
 (rendered from `CHANGELOG.md` via `changelog.py`, parsed once at startup), `robots.txt`, `sitemap.xml`.

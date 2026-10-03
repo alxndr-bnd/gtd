@@ -19,10 +19,9 @@ def test_manifest(client, accept_language, lang):
     assert m["name"] == m["short_name"] == "GTD" and m["description"] == P.MANIFEST_DESC[lang] and m["lang"] == lang
     assert (m["start_url"], m["scope"], m["display"]) == ("/", "/", "standalone")
     assert m["background_color"] == "#f6f7f9" and m["theme_color"] == P.BRAND == "#0F766E"
-    icons = {i["src"]: i for i in m["icons"]}
-    assert set(icons) == {"/icon-192.png", "/icon-512.png", "/icon-maskable-512.png"}
-    assert icons["/icon-192.png"]["sizes"] == "192x192" and icons["/icon-512.png"]["sizes"] == "512x512"
-    assert icons["/icon-maskable-512.png"]["purpose"] == "maskable" and "purpose" not in icons["/icon-512.png"]
+    icons = {i["src"]: (i["sizes"], i["purpose"]) for i in m["icons"]}
+    assert icons == {"/icon-192.png": ("192x192", "any"), "/icon-512.png": ("512x512", "any"),
+                     "/icon-maskable-192.png": ("192x192", "maskable"), "/icon-maskable-512.png": ("512x512", "maskable")}
     for src in icons:  # иконки из манифеста реально отдаются
         assert client.get(src).headers["content-type"] == "image/png", src
 
@@ -129,3 +128,58 @@ def test_ru_prefix_redirects_to_russian_root(client, path, to):
     the prefix (permanent redirect), not to a 404."""
     r = client.get(path, headers={"accept": BROWSER}, follow_redirects=False)
     assert r.status_code == 308 and r.headers["location"] == to
+
+
+# ── SERBITO-392: на macOS установленное приложение было чёрным ──
+# Обычные иконки 192/512 были RGBA со скруглёнными прозрачными углами, а цвет прозрачных пикселей — чёрный (0,0,0,0).
+# Теперь у всех иконок установки непрозрачный бирюзовый фон во весь холст; проверяем сами пиксели.
+
+def png_pixels(data: bytes):
+    """Минимальный декодер PNG (8 бит, RGB или RGBA, без interlace) — Pillow в зависимостях не нужен."""
+    import struct
+    import zlib
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    i, idat = 8, b""
+    while i < len(data):
+        n, kind = struct.unpack(">I4s", data[i:i + 8])
+        body = data[i + 8:i + 8 + n]
+        if kind == b"IHDR":
+            w, h, depth, color, _, _, interlace = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat += body
+        i += 12 + n
+    assert depth == 8 and interlace == 0 and color in (2, 6), (depth, color, interlace)
+    ch = 3 if color == 2 else 4
+    raw, stride, prev, rows, p = zlib.decompress(idat), w * ch, bytearray(w * ch), [], 0
+    for _ in range(h):
+        f, line = raw[p], bytearray(raw[p + 1:p + 1 + stride])
+        p += 1 + stride
+        for x in range(stride):
+            a, b, c = (line[x - ch] if x >= ch else 0), prev[x], (prev[x - ch] if x >= ch else 0)
+            if f == 4:
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                pred = a if pa <= pb and pa <= pc else b if pb <= pc else c
+            else:
+                pred = (0, a, b, (a + b) // 2)[f]
+            line[x] = (line[x] + pred) & 255
+        rows.append([tuple(line[x:x + ch]) for x in range(0, stride, ch)])
+        prev = line
+    return w, h, rows
+
+
+BRAND_RGB = tuple(int(P.BRAND[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def test_install_icons_are_opaque_and_green(client):
+    """Каждая иконка из манифеста и apple-touch-icon: размер как заявлен, ни одного прозрачного пикселя, по всему
+    краю — бирюзовый фон бренда (углы тоже: их скругляет система, а не картинка)."""
+    srcs = [(i["src"], int(i["sizes"].split("x")[0])) for i in P.manifest("ru")["icons"]]
+    for src, side in srcs + [("/apple-touch-icon.png", 180)]:
+        w, h, rows = png_pixels(client.get(src).content)
+        assert (w, h) == (side, side), src
+        assert all(len(px) == 3 or px[3] == 255 for row in rows for px in row), f"{src}: есть прозрачные пиксели"
+        edge = rows[0] + rows[-1] + [row[0] for row in rows] + [row[-1] for row in rows]
+        assert {px[:3] for px in edge} == {BRAND_RGB}, f"{src}: край не бирюзовый"
+        center = rows[h // 2][w // 2][:3]
+        assert center in (BRAND_RGB, (255, 255, 255)), f"{src}: в центре {center}"  # фон или белый знак
+    assert {"any", "maskable"} == {i["purpose"] for i in P.manifest("en")["icons"]}

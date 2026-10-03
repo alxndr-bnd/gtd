@@ -213,7 +213,7 @@ def test_icons_served_from_root(client):
     svg = client.get("/favicon.svg")
     assert svg.headers["content-type"].startswith("image/svg+xml") and svg.text.strip() == P.mark()  # файл = знак из кода
     for path, side in (("/apple-touch-icon.png", 180), ("/icon-192.png", 192), ("/icon-512.png", 512),
-                       ("/icon-maskable-512.png", 512)):
+                       ("/icon-maskable-192.png", 192), ("/icon-maskable-512.png", 512)):
         r = client.get(path)
         assert r.status_code == 200 and r.headers["content-type"] == "image/png", path
         assert (int.from_bytes(r.content[16:20]), int.from_bytes(r.content[20:24])) == (side, side), path

@@ -236,3 +236,90 @@ def test_bot_next_button_puts_task_at_the_bottom(tg):
                                        "order by position", (uid,))] == ["первая", "разобрать потом"]
     bot_message("/next")
     assert tg[-1][1]["text"].index("первая") < tg[-1][1]["text"].index("разобрать потом")  # /next — в том же порядке
+
+
+# ── SERBITO-391: ручной порядок проектов ──
+
+def project_titles(client):
+    return [p["title"] for p in client.get("/api/projects").json()]
+
+
+def move_project(client, pid, prev=None, nxt=None):
+    return client.post(f"/api/projects/{pid}/move", json={"prev": prev, "next": nxt})
+
+
+def new_project(client, title):
+    return client.post("/api/projects", json={"title": title}).json()["id"]
+
+
+def test_projects_backfill_keeps_alphabetical_order(client, login):
+    """До SERBITO-391 проекты шли по алфавиту — после миграции порядок тот же; новый проект — в конец."""
+    login(client)
+    for t in ("Бета", "Альфа", "Гамма"):
+        new_project(client, t)
+    A.run("alter table projects drop column position")  # база до SERBITO-391
+    A.run(A.SCHEMA)
+    assert project_titles(client) == ["Альфа", "Бета", "Гамма"]
+    new_project(client, "Ааа")
+    assert project_titles(client) == ["Альфа", "Бета", "Гамма", "Ааа"]
+
+
+def test_project_reorder_persists_and_changes_one_row(client, login):
+    uid = login(client)
+    a, b, c, d = (new_project(client, t) for t in "abcd")
+    before = {r["id"]: r["position"] for r in A.rows("select id, position from projects where user_id=%s", (uid,))}
+    r = move_project(client, d, prev=a, nxt=b)
+    assert r.status_code == 200, r.text
+    after = {r["id"]: r["position"] for r in A.rows("select id, position from projects where user_id=%s", (uid,))}
+    assert [k for k in before if before[k] != after[k]] == [d]  # одна строка
+    assert project_titles(client) == list("adbc")
+    assert move_project(client, c, nxt=a).status_code == 200  # в самый верх
+    assert move_project(client, a, prev=b).status_code == 200  # в самый низ
+    assert project_titles(client) == list("cdba")
+    assert move_project(client, b).json()["id"] == b  # без соседей — ничего не меняется
+    assert project_titles(client) == list("cdba")
+
+
+def test_project_reorder_when_gap_is_exhausted(client, login):
+    login(client)
+    a, b, c = (new_project(client, t) for t in "abc")
+    A.run("update projects set position=%s where id=%s", (1.0, a))
+    A.run("update projects set position=%s where id=%s", (math.nextafter(1.0, 2), b))
+    A.run("update projects set position=%s where id=%s", (5.0, c))
+    assert move_project(client, c, prev=a, nxt=b).status_code == 200
+    assert project_titles(client) == list("acb")
+
+
+def test_project_reorder_checks_ownership(new_client, login):
+    me, other = new_client(), new_client()
+    login(me)
+    login(other, "bob@example.com")
+    a, b = new_project(me, "a"), new_project(me, "b")
+    theirs = new_project(other, "чужой")
+    assert move_project(other, a, nxt=theirs).status_code == 404  # чужой проект не двигать
+    assert move_project(me, a, nxt=theirs).status_code == 404  # и не ставить рядом с чужим
+    for bad in (a, "b", True, 1.5):
+        assert move_project(me, a, nxt=bad).status_code == 400, bad
+    assert new_client().post(f"/api/projects/{a}/move", json={}).status_code == 401
+    assert project_titles(me) == ["a", "b"] and project_titles(other) == ["чужой"]
+
+
+def test_project_order_is_per_user_and_survives_merge(new_client, login, mail):
+    """Объединение аккаунтов: проекты второго встают в конец списка первого, в своём порядке; одноимённые склеиваются.
+    Закрытая подсказка о перестановке не возвращается."""
+    c, carol = new_client(), new_client()
+    login(c, "alice@example.com")
+    a1, a2 = new_project(c, "a1"), new_project(c, "общий")
+    move_project(c, a2, nxt=a1)
+    login(carol, "carol@example.com")
+    c1, c2 = new_project(carol, "c1"), new_project(carol, "c2")
+    new_project(carol, "Общий")
+    move_project(carol, c2, nxt=c1)
+    carol.patch("/api/me", json={"dnd_tip_seen": True})  # подсказку о перестановке закрыли во втором (SERBITO-390)
+    assert project_titles(c) == ["общий", "a1"] and project_titles(carol) == ["c2", "c1", "Общий"]
+    c.post("/api/auth/email/start", json={"email": "carol@example.com"})
+    code = __import__("conftest").last_code(mail)
+    token = c.post("/api/auth/email/verify", json={"email": "carol@example.com", "code": code, "link": True}).json()["merge"]
+    assert c.post("/api/auth/merge", json={"token": token}).json() == {"ok": True}
+    assert project_titles(c) == ["общий", "a1", "c2", "c1"]
+    assert c.get("/api/me").json()["dnd_tip_seen"] is True
