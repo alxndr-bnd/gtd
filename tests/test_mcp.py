@@ -227,9 +227,10 @@ def test_list_projects_and_contexts(alice):
     A.capture(uid, "call dad @phone")
     garden = A.item_by_num(uid, 2)
     A.item_patch(uid, garden["id"], {"status": "someday"})
+    # Порядок — ручной порядок проектов (SERBITO-391): новые проекты встают в конец, то есть в порядке создания
     assert call(mcp, tok, "list_projects")["projects"] == [
-        {"name": "Garden", "open_tasks": 0, "next_actions": 0, "needs_next_action": True},
-        {"name": "House", "open_tasks": 1, "next_actions": 1, "needs_next_action": False}]
+        {"name": "House", "open_tasks": 1, "next_actions": 1, "needs_next_action": False},
+        {"name": "Garden", "open_tasks": 0, "next_actions": 0, "needs_next_action": True}]
     assert call(mcp, tok, "list_contexts")["contexts"] == [{"context": "@phone", "open_tasks": 2},
                                                            {"context": "@home", "open_tasks": 1}]
 

@@ -213,7 +213,7 @@ def list_projects(ctx: Context) -> dict[str, Any]:
         "(select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id "
         " and i.status in ('inbox','next','waiting')) open, "
         "(select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id and i.status='next') next "
-        "from projects p where p.user_id=%s and p.status='active' order by p.title", (uid,))
+        "from projects p where p.user_id=%s and p.status='active' order by p.position nulls last, p.id", (uid,))
     return {"projects": [{"name": p["title"], "open_tasks": p["open"], "next_actions": p["next"],
                           "needs_next_action": p["next"] == 0} for p in ps]}
 
@@ -365,7 +365,7 @@ def weekly_review(ctx: Context) -> dict[str, Any]:
         "select p.title, (select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id "
         " and i.status in ('inbox','waiting')) open from projects p where p.user_id=%s and p.status='active' "
         "and not exists (select 1 from items i where i.project_id=p.id and i.user_id=p.user_id and i.status='next') "
-        "order by p.title", (uid,))
+        "order by p.position nulls last, p.id", (uid,))
     open_sql = f"{A.ITEM_SQL} where i.user_id=%s and i.status not in ('done','trash') and i.remind_at is not null "
     overdue = A.rows(open_sql + "and i.remind_at<%s order by i.remind_at, i.id limit %s", (uid, now, LIST_LIMIT))
     soon = A.rows(open_sql + "and i.remind_at>=%s and i.remind_at<%s order by i.remind_at, i.id limit %s",
