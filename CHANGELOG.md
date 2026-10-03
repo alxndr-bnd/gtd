@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-03
+
 ### Added
 - Reorder projects by drag & drop, with Alt+↑↓, or by the ⠿ handle on a phone. The project picker uses the same order.
   - RU: Проекты можно переставлять: перетащите мышью, пальцем за ⠿ или Alt+↑↓. В выборе проекта тот же порядок.
@@ -330,7 +332,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/alxndr-bnd/gtd/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/alxndr-bnd/gtd/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/alxndr-bnd/gtd/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/alxndr-bnd/gtd/compare/v0.25.0...v0.26.0
