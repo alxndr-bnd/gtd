@@ -16,6 +16,12 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+- Connect Claude as a custom connector: on claude.ai, Claude Desktop or the phone, add the gtd URL, sign in and press Allow. No token is needed. "Account" lists connected apps, and Disconnect cuts access at once.
+  - RU: Claude подключается как свой коннектор: на claude.ai, в Claude Desktop или на телефоне добавьте адрес gtd, войдите и нажмите «Разрешить». Токен не нужен. В «Аккаунте» виден список подключённых приложений, «Отключить» сразу закрывает доступ.
+- New AI assistant tools: edit a task (title, notes, due date, who it waits for) and a Weekly Review summary.
+  - RU: Новые инструменты для AI-ассистентов: правка задачи (название, заметки, срок, кого ждём) и сводка для Weekly Review.
+
 ### Security
 - Every deploy now checks that the site sends its security headers. If one is missing, the deploy stops.
   - RU: Каждый деплой теперь проверяет, что сайт отдаёт заголовки безопасности. Если какого-то нет, деплой останавливается.
