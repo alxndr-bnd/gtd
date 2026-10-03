@@ -293,6 +293,12 @@ alter table tg_logins add column if not exists code integer;
 alter table tg_logins add column if not exists ip text;
 alter table tg_logins add column if not exists ua text;
 alter table tg_logins add column if not exists browser text;
+-- Личные API-токены для MCP (SERBITO-375): в базе только sha256, сам токен показываем один раз при создании.
+-- last_used — когда им последний раз пользовались (видно в «Аккаунте»); отзыв — удаление строки
+create table if not exists api_tokens(
+  id bigserial primary key, user_id bigint not null, token_hash text not null unique, name text not null,
+  created bigint not null, last_used bigint);
+create index if not exists api_tokens_user on api_tokens(user_id);
 """
 
 with _pool.connection() as _c:
@@ -437,6 +443,8 @@ TEXTS = {
         "project_empty": "Название не может быть пустым",
         "project_exists": "Проект «{title}» уже есть",
         "task_missing": "Задача не найдена",
+        "token_name": "Дай токену название — например, «Claude на ноутбуке»",
+        "tokens_max": "Токенов уже {n} — отзови ненужный, чтобы создать новый",
         # Письмо с кодом
         "mail_subject": "Код входа в GTD: {code}",
         "mail_body": "Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.",
@@ -521,6 +529,8 @@ TEXTS = {
         "project_empty": "The name can't be empty",
         "project_exists": "Project “{title}” already exists",
         "task_missing": "Task not found",
+        "token_name": "Give the token a name — for example, “Claude on my laptop”",
+        "tokens_max": "You already have {n} tokens — revoke one you don't use to create a new one",
         "mail_subject": "Your GTD sign-in code: {code}",
         "mail_body": "Your GTD sign-in code: {code}\n\nIt's valid for 10 minutes. If you didn't try to sign in, "
                      "just ignore this email.",
@@ -688,7 +698,7 @@ END_PPOS = "(select coalesce(max(ppos), 0) + 1024 from items where user_id=%s an
 def capture(uid: int, raw: str, source: str = "web", project_id: int | None = None) -> dict:
     """Умный захват: текст [@контекст] [#проект] [когда] -> задача. project_id — проект страницы, на которой
     записали (SERBITO-354); #проект в самом тексте важнее."""
-    track(uid, "telegram" if source == "telegram" else "web")
+    track(uid, source if source in ("telegram", "mcp") else "web")
     p = parse_task(uid, raw)
     title, ctx, proj_id, remind = p["title"], p["context"], p["project_id"] or project_id, p["remind_at"]
     status = "next" if (ctx or proj_id) else "inbox"
@@ -1628,6 +1638,7 @@ def attach(uid: int, field: str, value) -> int | None:
         if not any(other[f] for f in IDENTITIES if f != field):
             run("delete from user_sessions where user_id=%s", (other["id"],))
             run("delete from login_tokens where user_id=%s", (other["id"],))
+            run("delete from api_tokens where user_id=%s", (other["id"],))
             run("delete from users where id=%s", (other["id"],))
     run(f"update users set {field}=%s where id=%s", (value, uid))
     return None
@@ -1635,7 +1646,7 @@ def attach(uid: int, field: str, value) -> int | None:
 
 def merge_accounts(keep: int, drop: int):
     """Всё из drop переезжает в keep, drop удаляется — одной транзакцией. Одноимённые проекты
-    склеиваются; сессии drop продолжают работать уже в keep; способы входа, которых у keep нет,
+    склеиваются; сессии и API-токены drop продолжают работать уже в keep; способы входа, которых у keep нет,
     он получает от drop."""
     with _pool.connection() as c, c.transaction():
         k = c.execute("select * from users where id=%s for update", (keep,)).fetchone()
@@ -1659,7 +1670,7 @@ def merge_accounts(keep: int, drop: int):
                   (drop, keep))
         c.execute("update users set item_seq = item_seq + (select count(*) from items where user_id=%s) "
                   "where id=%s", (drop, keep))
-        for table in ("items", "user_sessions", "login_tokens"):
+        for table in ("items", "user_sessions", "login_tokens", "api_tokens"):
             c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
         c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
         moved = {f: d[f] for f in IDENTITIES if d[f] and not k[f]}
@@ -2185,6 +2196,64 @@ def logout_all(uid: int = Depends(current_user)):
     return clear_session(JSONResponse({"ok": True}))
 
 
+# ── Личные API-токены (SERBITO-375): доступ AI-ассистентов к задачам по MCP (/mcp, mcp_server.py). Токен —
+# случайная строка с префиксом gtd_; в базе только sha256, как у сессий, а сам токен показываем один раз. Создать,
+# посмотреть и отозвать токены можно только из сессии на сайте: сам токен ими не управляет
+API_TOKEN_PREFIX = "gtd_"
+API_TOKENS_MAX = 20      # токенов на аккаунт
+API_TOKEN_NAME_MAX = 60
+API_TOKEN_TOUCH = 60     # отметку last_used пишем не чаще раза в минуту, а не на каждый запрос
+
+
+def new_api_token() -> str:
+    return API_TOKEN_PREFIX + secrets.token_urlsafe(32)
+
+
+def api_token_user(raw: str) -> dict | None:
+    """Чей это Bearer-токен: {id, user_id} или None. Заодно сдвигает отметку last_used."""
+    if not raw.startswith(API_TOKEN_PREFIX):
+        return None
+    r = row("select id, user_id, last_used from api_tokens where token_hash=%s", (token_hash(raw),))
+    if not r:
+        return None
+    now = int(time.time())
+    if (r["last_used"] or 0) < now - API_TOKEN_TOUCH:
+        run("update api_tokens set last_used=%s where id=%s", (now, r["id"]))
+    return {"id": r["id"], "user_id": r["user_id"]}
+
+
+@app.get("/api/tokens")
+def list_tokens(uid: int = Depends(current_user)):
+    """Токены аккаунта для «Аккаунта»: название и даты, без самих токенов — их в базе и нет."""
+    return rows("select id, name, created, last_used from api_tokens where user_id=%s order by id", (uid,))
+
+
+@app.post("/api/tokens")
+def create_token(body: dict, request: Request, uid: int = Depends(current_user)):
+    """Новый токен. Сам токен — только в этом ответе: в базу идёт его sha256."""
+    name = body.get("name")
+    name = name.strip()[:API_TOKEN_NAME_MAX] if isinstance(name, str) else ""
+    if not name:
+        raise HTTPException(400, tr(req_lang(request, uid), "token_name"))
+    if row("select count(*) n from api_tokens where user_id=%s", (uid,))["n"] >= API_TOKENS_MAX:
+        raise HTTPException(400, tr(req_lang(request, uid), "tokens_max", n=API_TOKENS_MAX))
+    tok, now = new_api_token(), int(time.time())
+    tid = run("insert into api_tokens(user_id,token_hash,name,created) values(%s,%s,%s,%s) returning id",
+              (uid, token_hash(tok), name, now))
+    log.info("api token %s created for user %s", tid, uid)
+    return JSONResponse({"id": tid, "name": name, "created": now, "last_used": None, "token": tok},
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.delete("/api/tokens/{tid}")
+def revoke_token(tid: int, uid: int = Depends(current_user)):
+    """Отзыв: строка удаляется, и следующий запрос с этим токеном получает 401."""
+    if not run("delete from api_tokens where id=%s and user_id=%s returning id", (tid, uid)):
+        raise HTTPException(404)
+    log.info("api token %s revoked by user %s", tid, uid)
+    return {"ok": True}
+
+
 @app.get("/api/counts")
 def counts(uid: int = Depends(current_user)):
     c = {r["status"]: r["n"] for r in rows(
@@ -2262,10 +2331,16 @@ def api_capture(body: dict, uid: int = Depends(current_user)):
 
 @app.patch("/api/items/{iid}")
 def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
+    return item_patch(uid, iid, body)
+
+
+def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
+    """Правка задачи: поля из body (title, notes, status, project_id, context, remind_at). Одна для карточки на
+    сайте и для MCP (SERBITO-375). Чужая или несуществующая задача — 404."""
     cur = item_get(uid, iid)
     if not cur:
         raise HTTPException(404)
-    track(uid, "web")
+    track(uid, channel)
     # Заголовок из карточки разбираем как строку захвата (SERBITO-298): #проект, @контекст и дата из
     # заголовка перекрывают значения полей, без токена — остаётся выбранное в полях. Только если заголовок
     # изменился: иначе повторное сохранение вернуло бы, например, снятое вручную напоминание («завтра»).
@@ -2615,3 +2690,10 @@ for _prefix in ("", "/en"):
     for _view in APP_VIEWS:
         app.add_api_route(f"{_prefix}/{_view}", section_page, methods=["GET"], include_in_schema=False)
     app.add_api_route(_prefix + "/p/{pid:int}", section_page, methods=["GET"], include_in_schema=False)
+
+
+# ── MCP для AI-ассистентов (SERBITO-375): /mcp с Bearer-токеном. Модуль берёт отсюда базу, захват и правку задач,
+# поэтому импортируется последним, когда всё выше уже определено
+import mcp_server  # noqa: E402
+
+app.router.add_route("/mcp", mcp_server.endpoint, include_in_schema=False)

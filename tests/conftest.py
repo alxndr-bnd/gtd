@@ -36,7 +36,7 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 TABLES = ("users, sessions, user_sessions, login_tokens, projects, items, email_codes, tg_logins, merge_offers, "
-          "tg_email_links, activity, auth_limits")
+          "tg_email_links, activity, auth_limits, api_tokens")
 
 
 @pytest.fixture(autouse=True)
