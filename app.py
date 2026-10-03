@@ -2192,6 +2192,8 @@ def cron_oidc_error(token: str) -> str | None:
         return "OIDC not configured"
     if token.count(".") != 2:
         return "not a JWT"
+    if token.endswith(".SIGNATURE_REMOVED_BY_GOOGLE"):  # Cloud Run сам проверил и срезал подпись — нам не проверить
+        return "signature removed by Cloud Run"
     import google.auth.exceptions
     from google.oauth2 import id_token
     try:  # подпись, срок и издателя проверяет google-auth, остальное — мы

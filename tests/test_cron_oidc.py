@@ -124,3 +124,8 @@ def test_google_certs_cached(client, google):
     for _ in range(5):
         assert post(client, token()).status_code == 200
     assert google.calls == 1
+
+
+def test_signature_stripped_by_cloud_run(client, google):
+    head, payload, _ = token().split(".")
+    assert post(client, f"{head}.{payload}.SIGNATURE_REMOVED_BY_GOOGLE").status_code == 403
