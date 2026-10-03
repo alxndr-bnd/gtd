@@ -856,7 +856,8 @@ def move(iid):
 
 
 def order_user(w, lang="ru"):
-    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) "
+    # Подсказку о перестановке (SERBITO-390) уже закрыли: её проверяют свои тесты
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden,dnd_tip_seen) values(0,'Smoke',%s,%s,true,true) "
                 "returning id", (int(time.time()), lang))
     a, b, c = (A.capture(uid, f"{t} @дом")["id"] for t in ("Первая", "Вторая", "Третья"))
     w.goto("/dev-login")
@@ -1493,8 +1494,8 @@ def test_projects_screen_one_clear_input(watch):
 
 def test_touch_drag_grip_and_tip(watch):
     """Item 6 (G6): на сенсорном экране у карточки видна ручка ⠿ — тянуть за неё можно сразу, без удержания; над
-    списком — разовая подсказка, как переставлять. Перетащил один раз (или закрыл) — подсказки больше нет.
-    Мышью ручки нет: тянется вся карточка."""
+    списком — разовая подсказка, как переставлять. Перетащил один раз (или закрыл) — подсказки больше нет; это помнит
+    сервер (SERBITO-390)."""
     w = watch(viewport=PHONE, touch=True)
     uid = A.run("insert into users(tg_id,name,created,checklist_hidden) values(0,'Smoke',%s,true) returning id",
                 (int(time.time()),))
@@ -1511,7 +1512,7 @@ def test_touch_drag_grip_and_tip(watch):
     assert w.page.is_visible("main .dndtip") and "⠿" in w.page.inner_text("main .dndtip")
     step = (w.page.locator(f'main .it[data-id="{second}"]').bounding_box()["y"]
             - w.page.locator(f'main .it[data-id="{first}"]').bounding_box()["y"])
-    with saves(w, "перестановка за ручку", "POST", move(first)):
+    with saves(w, "подсказка запомнена", "PATCH", "/api/me"), saves(w, "перестановка за ручку", "POST", move(first)):
         w.page.eval_on_selector(grip, """(el, dy) => {
       const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
       const ev = (kind, t, yy) => t.dispatchEvent(new PointerEvent(kind, {bubbles: true, cancelable: true, pointerId: 9,
@@ -1525,6 +1526,7 @@ def test_touch_drag_grip_and_tip(watch):
     assert w.page.evaluate("window.__dragging"), "ручка не начала перетаскивание сразу"
     assert screen_order(w) == [second, first, third]
     assert db_order(uid, "next") == [second, first, third], "порядок не сохранился"
+    assert A.row("select dnd_tip_seen from users where id=%s", (uid,))["dnd_tip_seen"] is True
     w.page.reload()
     w.wait("main .dnd > .it", "после перезагрузки")
     assert not w.page.locator("main .dndtip").count()  # подсказка разовая
@@ -1543,10 +1545,193 @@ def test_touch_drag_grip_and_tip(watch):
     w.check("итог")
 
 
-def test_no_grip_or_tip_with_mouse(watch):
+OPACITY = "el => getComputedStyle(el).opacity"
+
+
+def tip_user(lang="ru"):
+    """Пользователь с тремя задачами в Next; подсказку о перестановке ещё не видел."""
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) returning id",
+                (int(time.time()), lang))
+    return uid, [A.capture(uid, f"{t} @дом")["id"] for t in ("Первая", "Вторая", "Третья")]
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_mouse_grip_and_tip(watch, lang):
+    """SERBITO-390: мышью видно, что задачи переставляются. Ручка ⠿ появляется при наведении и на выбранной
+    стрелками карточке; над списком — разовая подсказка про мышь и Alt+↑↓. «Понятно» запоминает сервер: после
+    перезагрузки и на другом устройстве подсказки нет."""
+    uid, (first, second, _) = tip_user(lang)
+    w = watch(lang)
+    w.goto("/dev-login")
+    w.goto("/en/next" if lang == "en" else "/next")
+    w.wait("main .dnd > .it", f"[{lang}] Next")
+    w.wait("main .dndtip", f"[{lang}] подсказка")
+    tip = w.page.inner_text("main .dndtip span")
+    assert "Alt+↑↓" in tip and "⠿" in tip, tip
+    grip = lambda iid: f'main .it[data-id="{iid}"] .grip'  # noqa: E731
+    w.page.mouse.move(1, 1)
+    assert w.page.eval_on_selector(grip(first), OPACITY) == "0"  # без наведения ручки не видно, место занято
+    assert w.page.get_attribute(grip(first), "title")  # подсказка по наведению на ручку — с Alt+↑↓
+    w.page.hover(f'main .it[data-id="{second}"] .t')
+    w.page.wait_for_function(f"getComputedStyle(document.querySelector('{grip(second)}')).opacity === '1'",
+                             timeout=WAIT_MS)
+    w.page.mouse.move(1, 1)
+    w.page.locator("#cap").press("ArrowDown")  # с клавиатуры: выбрана первая карточка — ручка видна на ней
+    w.page.wait_for_function(f"getComputedStyle(document.querySelector('{grip(first)}')).opacity === '1'",
+                             timeout=WAIT_MS)
+    with saves(w, f"[{lang}] «Понятно»", "PATCH", "/api/me"):
+        w.page.click('main .dndtip [data-act="dndtip"]')
+    assert not w.page.locator("main .dndtip").count()
+    assert A.row("select dnd_tip_seen from users where id=%s", (uid,))["dnd_tip_seen"] is True
+    w.page.reload()
+    w.wait("main .dnd > .it", f"[{lang}] после перезагрузки")
+    assert not w.page.locator("main .dndtip").count()
+    other = watch(lang)  # другое устройство — тот же аккаунт
+    other.goto("/dev-login")
+    other.goto("/next")
+    other.wait("main .dnd > .it", f"[{lang}] другое устройство")
+    assert not other.page.locator("main .dndtip").count()
+    w.check(f"[{lang}] итог")
+    other.check(f"[{lang}] итог, другое устройство")
+
+
+def test_tip_only_over_list_with_two_tasks(watch):
+    """Подсказка — над первым списком, где есть что переставлять (2+ задачи); одна задача — подсказки нет."""
+    uid = A.run("insert into users(tg_id,name,created,checklist_hidden) values(0,'Smoke',%s,true) returning id",
+                (int(time.time()),))
+    A.capture(uid, "одна @дом")
     w = watch()
-    order_user(w)
-    assert not w.page.is_visible("main .dnd > .it .grip") and not w.page.locator("main .dndtip").count()
+    w.goto("/dev-login")
+    w.goto("/next")
+    w.wait("main .dnd > .it", "Next с одной задачей")
+    assert not w.page.locator("main .dndtip").count()
+    A.capture(uid, "вторая @дом")
+    w.page.reload()
+    w.wait("main .dndtip + .dnd > .it", "подсказка над списком из двух")
+    w.check("итог")
+
+
+# ── Ручной порядок проектов (SERBITO-391) ──
+PJ = 'main .dnd[data-scope="projects"] > .it.pj'
+
+
+def project_screen_order(w):
+    return [int(x) for x in w.page.eval_on_selector_all(PJ, "els => els.map(e => e.dataset.pid)")]
+
+
+def db_project_order(uid):
+    return [r["id"] for r in A.rows("select id from projects where user_id=%s and status='active' "
+                                    "order by position", (uid,))]
+
+
+def project_user(w, touch=False):
+    """Три проекта: Альфа, Бета, Гамма (новые — в конец), задача во Inbox; открыт экран проектов."""
+    uid = A.run("insert into users(tg_id,name,created,checklist_hidden,dnd_tip_seen) values(0,'Smoke',%s,true,true) "
+                "returning id", (int(time.time()),))
+    pids = [A.project_by_title(uid, t) for t in ("Альфа", "Бета", "Гамма")]
+    A.capture(uid, "Разобрать")
+    w.goto("/dev-login")
+    w.goto("/projects")
+    w.wait(PJ, "экран проектов")
+    return uid, pids
+
+
+def project_move(pid):
+    return f"/api/projects/{pid}/move"
+
+
+@contextmanager
+def rerendered(w, what):
+    """Ждём перерисовку экрана после блока: очередь перестановок кончается load(), и его поздний render заменяет
+    карточки. Следующий жест по старой карточке иначе оборвётся (dndStart видит, что её уже нет в DOM)."""
+    old = w.page.query_selector(PJ)
+    yield
+    try:
+        w.page.wait_for_function("el => !el.isConnected", arg=old, timeout=SAVE_MS)
+    except PWTimeout:
+        pytest.fail(f"{what}: экран не перерисован за {SAVE_MS} мс", pytrace=False)
+
+
+def test_reorder_projects_with_mouse_and_keyboard(watch):
+    """Мышью — потянуть проект вниз; Alt+↑↓ — на выбранном. Порядок хранит сервер: он переживает перезагрузку и
+    тот же в выборе проекта для задачи из Inbox. Перетаскивание не открывает проект, обычный клик — открывает."""
+    w = watch()
+    uid, (a, b, c) = project_user(w)
+    assert project_screen_order(w) == [a, b, c]
+    src = w.page.locator(f'{PJ}[data-pid="{a}"]').bounding_box()
+    dst = w.page.locator(f'{PJ}[data-pid="{c}"]').bounding_box()
+    x = src["x"] + 40
+    w.page.mouse.move(x, src["y"] + 14)
+    w.page.mouse.down()
+    w.page.mouse.move(x, dst["y"] + dst["height"] - 4, steps=12)
+    assert w.page.locator("main .it.dragging").count() == 1
+    with rerendered(w, "проект мышью"), saves(w, "проект мышью", "POST", project_move(a)):
+        w.page.mouse.up()
+    assert project_screen_order(w) == [b, c, a]
+    assert db_project_order(uid) == [b, c, a], "порядок проектов не сохранился"
+    w.page.wait_for_timeout(300)
+    assert urlsplit(w.page.url).path == "/projects", "перетаскивание открыло проект"
+
+    w.page.evaluate("document.activeElement?.blur()")
+    w.page.keyboard.press("ArrowDown")  # первая карточка — Бета
+    with rerendered(w, "Alt+↓"), saves(w, "Alt+↓ на проекте", "POST", project_move(b), n=2):
+        w.page.keyboard.press("Alt+ArrowDown")
+        w.page.keyboard.press("Alt+ArrowDown")
+        assert project_screen_order(w) == [c, a, b]
+    assert db_project_order(uid) == [c, a, b]
+    w.page.reload()
+    w.wait(PJ, "после перезагрузки")
+    assert project_screen_order(w) == [c, a, b]
+
+    # Inbox → проект: кнопки выбора в том же порядке
+    w.page.click('nav > a[data-view="inbox"]')
+    w.wait('main .it [data-act="toproj"]', "Inbox")
+    w.page.click('main .it [data-act="toproj"]')
+    w.wait("#dlg[open] #tp [data-pick]", "выбор проекта")
+    picks = w.page.eval_on_selector_all("#tp [data-pick]:not([data-pick=new])", "els => els.map(e => +e.dataset.pick)")
+    assert picks == [c, a, b], picks
+    w.page.keyboard.press("Escape")
+    w.page.click('nav > a[data-view="projects"]')
+    w.wait(PJ, "снова проекты")
+    w.page.click(f'{PJ}[data-pid="{a}"] .t')  # обычный клик — открывает проект
+    path_is(w, f"/p/{a}", "проект по клику")
+    w.check("итог")
+
+
+def test_reorder_projects_by_touch(watch):
+    """Телефон: ручка ⠿ видна у проекта и тянет сразу; удержание карточки — тоже перетаскивание."""
+    w = watch(viewport=PHONE, touch=True)
+    uid, (a, b, c) = project_user(w, touch=True)
+    grip = f'{PJ}[data-pid="{a}"] .grip'
+    assert w.page.is_visible(grip)
+    box = w.page.locator(grip).bounding_box()
+    assert box["width"] >= 44 and box["height"] >= 44, box
+    step = (w.page.locator(f'{PJ}[data-pid="{b}"]').bounding_box()["y"]
+            - w.page.locator(f'{PJ}[data-pid="{a}"]').bounding_box()["y"])
+    with rerendered(w, "проект за ручку"), saves(w, "проект за ручку", "POST", project_move(a)):
+        w.page.eval_on_selector(grip, """(el, dy) => {
+      const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const ev = (kind, t, yy) => t.dispatchEvent(new PointerEvent(kind, {bubbles: true, cancelable: true, pointerId: 9,
+        pointerType: 'touch', isPrimary: true, button: kind === 'pointermove' ? -1 : 0, clientX: x, clientY: yy}));
+      ev('pointerdown', el, y);
+      ev('pointermove', document.elementFromPoint(x, y + 20) || el, y + 20);
+      ev('pointermove', document.elementFromPoint(x, y + dy) || el, y + dy);
+      ev('pointerup', document.elementFromPoint(x, y + dy) || el, y + dy);
+    }""", step * 1.6)
+    assert project_screen_order(w) == [b, a, c]
+    assert db_project_order(uid) == [b, a, c], "порядок проектов не сохранился"
+
+    card = f'{PJ}[data-pid="{c}"]'
+    up = w.page.locator(f'{PJ}[data-pid="{b}"]').bounding_box()["y"] - w.page.locator(card).bounding_box()["y"]
+    touch(w, card, "pointerdown")
+    w.page.wait_for_timeout(450)  # удержание
+    assert w.page.locator("main .it.dragging").count() == 1
+    touch(w, card, "pointermove", up * 1.1)
+    with saves(w, "проект пальцем", "POST", project_move(c)):
+        touch(w, card, "pointerup", up * 1.1)
+    assert project_screen_order(w) == [c, b, a]
+    assert db_project_order(uid) == [c, b, a]
+    assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0]
     w.check("итог")
 
 

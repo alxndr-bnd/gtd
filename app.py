@@ -253,6 +253,9 @@ create unique index if not exists items_user_num on items(user_id, num);
 alter table users add column if not exists undo_seconds integer not null default 30;
 -- Чек-лист первого запуска на сайте больше не показывать: закрыл крестиком или выполнил все пункты
 alter table users add column if not exists checklist_hidden boolean not null default false;
+-- Разовая подсказка «задачи можно переставлять» (SERBITO-390): закрыл или переставил задачу — больше не показываем,
+-- ни в этом браузере, ни на других устройствах
+alter table users add column if not exists dnd_tip_seen boolean not null default false;
 -- Аналитика использования: только факт активности (кто/день/канал/сколько действий) — без содержимого
 create table if not exists activity(
   user_id bigint not null, day date not null, channel text not null, actions integer not null default 0,
@@ -281,6 +284,14 @@ update items i set ppos = x.p from (
   from items t where ppos is null) x
 where i.id = x.id;
 create index if not exists items_user_status_pos on items(user_id, status, position);
+-- Ручной порядок проектов (SERBITO-391): position, как у задач, — дробное с зазором 1024, меньше — выше.
+-- Бэкфилл сохраняет прежний порядок — по алфавиту; новые проекты встают в конец (max + 1024)
+alter table projects add column if not exists position double precision;
+update projects p set position = x.p from (
+  select id, coalesce((select max(position) from projects m where m.user_id = t.user_id), 0)
+             + 1024 * row_number() over (partition by user_id order by title, id) p
+  from projects t where position is null) x
+where p.id = x.id;
 -- Лимиты входа по коду (SERBITO-346): n событий (писем, неверных кодов, проверок) по ключу за окно с момента
 -- since. В базе, а не в памяти инстанса: общие для всех инстансов Cloud Run и переживают перезапуск
 create table if not exists auth_limits(key text primary key, n integer not null, since bigint not null);
@@ -702,6 +713,7 @@ def parse_task(uid: int, raw: str) -> dict:
 # порядка, когда списки шли по времени создания. Параметры: user_id, значение
 END_POS = "(select coalesce(max(position), 0) + 1024 from items where user_id=%s and status=%s)"
 END_PPOS = "(select coalesce(max(ppos), 0) + 1024 from items where user_id=%s and project_id=%s)"
+END_PROJ = "(select coalesce(max(position), 0) + 1024 from projects where user_id=%s)"  # SERBITO-391
 
 
 def capture(uid: int, raw: str, source: str = "web", project_id: int | None = None) -> dict:
@@ -728,7 +740,9 @@ def project_by_title(uid: int, title: str) -> int:
     for r in rows("select id, title from projects where user_id=%s", (uid,)):
         if r["title"].casefold() == key:
             return r["id"]
-    return run("insert into projects(user_id,title,created) values(%s,%s,%s) returning id", (uid, title, int(time.time())))
+    # Новый проект — в конец списка проектов (SERBITO-391)
+    return run(f"insert into projects(user_id,title,created,position) values(%s,%s,%s,{END_PROJ}) returning id",
+               (uid, title, int(time.time()), uid))
 
 
 # Проект — только свой: user_id в join, чтобы чужой project_id не раскрыл чужое название
@@ -1664,13 +1678,14 @@ def merge_accounts(keep: int, drop: int):
             raise AuthError(400, "merge_missing")
         mine = {p["title"].casefold(): p["id"]
                 for p in c.execute("select id, title from projects where user_id=%s", (keep,)).fetchall()}
-        for p in c.execute("select id, title from projects where user_id=%s", (drop,)).fetchall():
+        for p in c.execute("select id, title from projects where user_id=%s order by position nulls last, id",
+                           (drop,)).fetchall():
             same = mine.get(p["title"].casefold())
             if same:
                 c.execute("update items set project_id=%s where project_id=%s", (same, p["id"]))
                 c.execute("delete from projects where id=%s", (p["id"],))
-            else:
-                c.execute("update projects set user_id=%s where id=%s", (keep, p["id"]))
+            else:  # в конец списка keep, в своём порядке (SERBITO-391)
+                c.execute(f"update projects set user_id=%s, position={END_PROJ} where id=%s", (keep, keep, p["id"]))
         # Задачи drop получают следующие номера keep — иначе #N двух аккаунтов столкнулись бы.
         # Сперва уводим в минус: уникальность (user_id, num) проверяется построчно, прямо в процессе
         c.execute("update items set num = -num where user_id=%s", (drop,))
@@ -1682,6 +1697,8 @@ def merge_accounts(keep: int, drop: int):
         for table in ("items", "user_sessions", "login_tokens", "api_tokens"):
             c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
         c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
+        if d["dnd_tip_seen"]:  # подсказку о перестановке уже закрыли в одном из аккаунтов (SERBITO-390)
+            c.execute("update users set dnd_tip_seen=true where id=%s", (keep,))
         moved = {f: d[f] for f in IDENTITIES if d[f] and not k[f]}
         # Язык: свой выбор keep важнее; язык Telegram — вместе с Telegram
         moved.update({f: d[f] for f in ("lang", "tg_lang") if d[f] and not k[f] and (f == "lang" or "tg_id" in moved)})
@@ -2033,10 +2050,11 @@ UNDO_CHOICES = (5, 10, 30)
 
 @app.get("/api/me")
 def me(uid: int = Depends(current_user)):
-    u = row("select name, email, tg_id, google_sub, undo_seconds, lang from users where id=%s", (uid,))
+    u = row("select name, email, tg_id, google_sub, undo_seconds, lang, dnd_tip_seen from users where id=%s", (uid,))
     n = row("select count(*) n from user_sessions where user_id=%s and seen>%s", (uid, int(time.time()) - SESSION_TTL))["n"]
     return {"name": u["name"], "email": u["email"], "tg": bool(u["tg_id"]), "google": bool(u["google_sub"]),
-            "undo_seconds": u["undo_seconds"], "lang": u["lang"], "admin": uid in ADMIN_USER_IDS, "sessions": n}
+            "undo_seconds": u["undo_seconds"], "lang": u["lang"], "admin": uid in ADMIN_USER_IDS, "sessions": n,
+            "dnd_tip_seen": u["dnd_tip_seen"]}
 
 
 @app.get("/api/admin/stats")
@@ -2077,7 +2095,8 @@ def admin_stats(uid: int = Depends(current_user)):
 @app.patch("/api/me")
 def patch_me(body: dict, uid: int = Depends(current_user)):
     """Настройки пользователя: время на «Отменить» — 5, 10 или 30 секунд; скрыть чек-лист первого запуска;
-    язык интерфейса — ru, en или null (авто: сайт — по браузеру, бот — по Telegram)."""
+    подсказка о перестановке задач показана (SERBITO-390); язык интерфейса — ru, en или null (авто: сайт — по
+    браузеру, бот — по Telegram)."""
     if "undo_seconds" in body:
         if body["undo_seconds"] not in UNDO_CHOICES:
             raise HTTPException(400, "undo_seconds: 5, 10 или 30")
@@ -2086,6 +2105,10 @@ def patch_me(body: dict, uid: int = Depends(current_user)):
         if not isinstance(body["checklist_hidden"], bool):
             raise HTTPException(400, "checklist_hidden: true или false")
         run("update users set checklist_hidden=%s where id=%s", (body["checklist_hidden"], uid))
+    if "dnd_tip_seen" in body:
+        if not isinstance(body["dnd_tip_seen"], bool):
+            raise HTTPException(400, "dnd_tip_seen: true или false")
+        run("update users set dnd_tip_seen=%s where id=%s", (body["dnd_tip_seen"], uid))
     if "lang" in body:
         if body["lang"] is not None and body["lang"] not in LANGS:
             raise HTTPException(400, "lang: ru, en или null")
@@ -2524,7 +2547,40 @@ def list_projects(uid: int = Depends(current_user)):
         "(select count(*) from items i where i.project_id=p.id and i.status in ('inbox','next','waiting')) open_count, "
         "(select count(*) from items i where i.project_id=p.id and i.status='next') next_count, "
         "(select count(*) from items i where i.project_id=p.id) total_count "
-        "from projects p where p.user_id=%s and p.status='active' order by p.title", (uid,))
+        "from projects p where p.user_id=%s and p.status='active' order by p.position nulls last, p.id", (uid,))
+
+
+@app.post("/api/projects/{pid}/move")
+def move_project(pid: int, body: dict, uid: int = Depends(current_user)):
+    """Ручной порядок проектов (SERBITO-391): проект поставили между prev (над ним) и next (под ним) — соседями в
+    списке проектов. Как у задач (move_item): обычно меняется одна строка."""
+    p = project_get(uid, pid)  # чужой — 404
+
+    def neighbours():
+        got = {}
+        for side in ("prev", "next"):
+            v = body.get(side)
+            if v is None:
+                continue
+            if not isinstance(v, int) or isinstance(v, bool) or v == pid:
+                raise HTTPException(400, "bad " + side)
+            got[side] = project_get(uid, v)
+        return got.get("prev"), got.get("next")
+
+    prev, nxt = neighbours()
+    if not prev and not nxt:
+        return p
+    pos = _between(prev, nxt, "position")
+    if pos is None:  # зазор исчерпан — перенумеровать в текущем порядке и попробовать ещё раз
+        run("update projects p set position = x.rn * 1024 from (select id, row_number() over "
+            "(order by position nulls last, id) rn from projects where user_id=%s) x where p.id = x.id", (uid,))
+        prev, nxt = neighbours()
+        pos = _between(prev, nxt, "position")
+        if pos is None:
+            raise HTTPException(409, "stale order")
+    track(uid, "web")
+    run("update projects set position=%s where id=%s and user_id=%s", (pos, pid, uid))
+    return project_get(uid, pid)
 
 
 @app.post("/api/projects")

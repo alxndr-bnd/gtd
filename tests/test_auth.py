@@ -11,7 +11,7 @@ from conftest import bot_callback, bot_message, email_start, email_verify, last_
 
 def test_email_signup_normalizes_address(client, mail, login):
     login(client, "  Alice@Example.COM ")
-    assert client.get("/api/me").json() == {"name": "alice", "email": "alice@example.com", "tg": False, "google": False, "undo_seconds": 30, "lang": None, "admin": False, "sessions": 1}
+    assert client.get("/api/me").json() == {"name": "alice", "email": "alice@example.com", "tg": False, "google": False, "undo_seconds": 30, "lang": None, "admin": False, "sessions": 1, "dnd_tip_seen": False}
     assert mail[-1][0] == "alice@example.com" and "Код входа" in mail[-1][1]
 
 
@@ -95,7 +95,7 @@ def google(monkeypatch):
 def test_google_signup_and_bad_token(client, google):
     assert client.post("/api/auth/google", json={"credential": "bad"}).status_code == 400
     assert client.post("/api/auth/google", json={"credential": "good-alice"}).status_code == 200
-    assert client.get("/api/me").json() == {"name": "Alice", "email": "alice@example.com", "tg": False, "google": True, "undo_seconds": 30, "lang": None, "admin": False, "sessions": 1}
+    assert client.get("/api/me").json() == {"name": "Alice", "email": "alice@example.com", "tg": False, "google": True, "undo_seconds": 30, "lang": None, "admin": False, "sessions": 1, "dnd_tip_seen": False}
 
 
 def test_google_joins_email_account(new_client, login, google):

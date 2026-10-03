@@ -340,6 +340,21 @@ def test_checklist_dismiss_persists(new_client, login):
     assert checklist(laptop)["hidden"] is True
 
 
+def test_dnd_tip_seen_is_per_user_and_server_side(new_client, login):
+    """Подсказка о перестановке (SERBITO-390): закрыл на одном устройстве — не вернётся на другом; флаг свой у каждого."""
+    laptop, phone, bob = new_client(), new_client(), new_client()
+    login(laptop)
+    login(phone)
+    login(bob, "bob@example.com")
+    assert phone.get("/api/me").json()["dnd_tip_seen"] is False
+    assert laptop.patch("/api/me", json={"dnd_tip_seen": True}).json()["dnd_tip_seen"] is True
+    assert phone.get("/api/me").json()["dnd_tip_seen"] is True
+    assert bob.get("/api/me").json()["dnd_tip_seen"] is False
+    for bad in ("yes", 1, None):
+        assert laptop.patch("/api/me", json={"dnd_tip_seen": bad}).status_code == 400
+    assert laptop.get("/api/me").json()["dnd_tip_seen"] is True
+
+
 def client_patch_ok(c, body):
     return c.patch("/api/me", json=body).status_code == 200
 
