@@ -59,6 +59,33 @@ and dropped automatically; Telegram, Google and email are stubbed. `tests/test_b
 section of the app and the public pages in headless Chromium and fails on any JS error. The release script runs
 the tests before tagging.
 
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every pull request and every push to `main`:
+the full pytest with the browser smoke, a lock check and an image build.
+
+## Dependencies
+
+Versions are locked with hashes. You edit `requirements*.in`; `requirements*.txt` are generated, do not edit them.
+
+| File | What | Installed by |
+|---|---|---|
+| `requirements.in` → `requirements.txt` | app dependencies | the Docker image (`pip install --require-hashes`) |
+| `requirements-dev.in` → `requirements-dev.txt` | the same versions plus pytest and Playwright | developers and CI |
+
+Update the lock with [uv](https://docs.astral.sh/uv/) (`brew install uv`), then reinstall and commit `.in` and `.txt` together:
+
+```bash
+scripts/lock.sh                            # after an edit in requirements*.in
+scripts/lock.sh --upgrade-package fastapi  # one package to its latest version
+scripts/lock.sh --upgrade                  # all packages
+.venv/bin/pip install -r requirements-dev.txt
+```
+
+- CI fails if the lock does not match `requirements*.in`.
+- Dependabot opens weekly PRs for the lock (ecosystem `uv`), the base image digest and the actions.
+- The base image is pinned as `python:3.14-slim@sha256:…`. Dependabot bumps the digest. The deploy still runs
+  `apt-get upgrade` once a day, so Debian security fixes do not wait for a new digest. A new Python minor version
+  is a manual change: the `FROM` tag and `--python-version` in `scripts/lock.sh`.
+
 ## Releasing
 
 1. With every user-facing change, add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md):

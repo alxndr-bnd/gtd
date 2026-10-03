@@ -1,0 +1,108 @@
+name: CI
+
+# Проверка каждого PR (в том числе от Dependabot) и каждого пуша в main (SERBITO-339):
+#   test  — весь pytest, включая браузерный смоук SPA в Chromium, на временной базе в Postgres;
+#   lock  — замок requirements*.txt совпадает с requirements*.in (scripts/lock.sh);
+#   image — образ собирается из замка с --require-hashes и закреплённой базой.
+# Релиз по-прежнему гоняет тесты локально (scripts/release_minor.sh), деплой — deploy.yml по тегу.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Новый пуш в ту же ветку отменяет устаревший прогон
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Явная версия: ubuntu-latest переезжает на 26.04 (2026-10-19) — обновлять осознанно
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Тот же мажор, что в docker-compose.yml и Cloud SQL. Debian, а не alpine: локаль en_US.utf8 как у прода
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      # conftest.py создаёт и удаляет временную базу на этом сервере
+      TEST_PG_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # ни один шаг не пушит: токен не остаётся в .git/config
+          fetch-depth: 0 # tests/test_changelog.py сверяет теги v*.*.* и их даты с CHANGELOG.md
+
+      # Один Python для образа и тестов: минорная версия из FROM в Dockerfile, который поднимает Dependabot
+      - name: Python version from Dockerfile
+        id: py
+        run: |
+          version="$(sed -nE 's#^FROM python:([0-9]+\.[0-9]+)-slim@sha256:[0-9a-f]{64}$#\1#p' Dockerfile)"
+          if [ -z "$version" ]; then echo "::error file=Dockerfile::FROM python:X.Y-slim@sha256:… not found"; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ steps.py.outputs.version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies (lock, hashes required)
+        run: python -m pip install --require-hashes --no-deps -r requirements-dev.txt
+
+      - name: Chromium for the browser smoke
+        run: python -m playwright install --with-deps chromium
+
+      - name: pytest
+        run: python -m pytest
+
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.22"
+
+      # Без --upgrade uv оставляет записанные версии, поэтому разница — только от правки .in без пересборки
+      - name: Lock matches requirements*.in
+        run: |
+          scripts/lock.sh
+          if ! git diff --exit-code -- requirements.txt requirements-dev.txt; then
+            echo "::error::requirements*.txt is out of date with requirements*.in. Run scripts/lock.sh and commit the result."
+            exit 1
+          fi
+
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Только сборка: без push, без кэша GHA (его пишет деплой), без секретов
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false

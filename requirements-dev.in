@@ -1,0 +1,9 @@
+# Тесты и локальная разработка: всё из requirements.in плюс инструменты ниже.
+# -c — те же версии, что в замке образа: тесты гоняются на том, что уходит в прод (SERBITO-339).
+-r requirements.in
+-c requirements.txt
+pytest>=9.1.1
+# TestClient Starlette 1.x работает на httpx2 (со старым httpx — DeprecationWarning, в pytest.ini это ошибка)
+httpx2>=2.13.1
+# Браузерный смоук SPA (tests/test_browser_smoke.py); браузер ставится отдельно: .venv/bin/playwright install chromium
+playwright>=1.63.0

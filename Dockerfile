@@ -1,4 +1,7 @@
-FROM python:3.14-slim
+# Базовый образ закреплён тегом и digest мультиархитектурного индекса (SERBITO-339): перезалитый
+# 3.14-slim не меняет прод без коммита. Digest поднимает Dependabot (docker, .github/dependabot.yml).
+# Минорная версия Python — та же, что в замке (--python-version в requirements.txt) и в CI (ci.yml читает её отсюда).
+FROM python:3.14-slim@sha256:0741d101873c12ab927e6f8653feb8862b9bd58771177acb1b885b95141f91b4
 # Исправления безопасности Debian (например, openssl) выходят раньше, чем обновляется python:*-slim —
 # без этого Trivy в деплое останавливает релиз на уже исправленных CVE.
 # APT_REFRESH — дата UTC (её передаёт deploy.yml). RUN читает её, поэтому первая сборка за день
@@ -8,9 +11,10 @@ RUN echo "apt refresh: ${APT_REFRESH:-unset}" && \
     apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .
+# Ставим только из замка: точные версии и --require-hashes — пакет с другим хешем не установится (SERBITO-339)
 # Манифесты вендоринга pip (pip/_vendor/bom.cdx.json, vendor.txt) декларируют его внутренний
 # setuptools 70.3.0 — Trivy видит в нём HIGH CVE, хотя такой пакет не установлен. pip они не нужны.
-RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt && \
+RUN pip install --no-cache-dir --root-user-action=ignore --require-hashes --no-deps -r requirements.txt && \
     find /usr/local/lib -type f \( -name 'bom.cdx.json' -o -name 'vendor.txt' \) -path '*/pip/_vendor/*' -delete
 # CHANGELOG.md разбирается при старте: из него страница «Что нового» (/changes)
 COPY app.py pages.py changelog.py CHANGELOG.md ./

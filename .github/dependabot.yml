@@ -1,11 +1,15 @@
-# Обновления зависимостей раз в неделю; мелкие версии — одним PR на экосистему
+# Обновления зависимостей раз в неделю; мелкие версии — одним PR на экосистему.
+# Каждый PR Dependabot проходит CI (.github/workflows/ci.yml): тесты, сверку замка и сборку образа.
 version: 2
 updates:
-  - package-ecosystem: pip
+  # Замок requirements*.txt собирает `uv pip compile` (scripts/lock.sh) — это ecosystem uv, а не pip:
+  # Dependabot пересобирает .txt с хешами теми же флагами, что записаны в их шапке (SERBITO-339)
+  - package-ecosystem: uv
     directory: /
     schedule: {interval: weekly}
     groups:
       python-minor: {update-types: [minor, patch]}
+  # FROM в Dockerfile закреплён digest'ом: Dependabot поднимает digest python:3.14-slim
   - package-ecosystem: docker
     directory: /
     schedule: {interval: weekly}
