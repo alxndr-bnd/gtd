@@ -1,0 +1,69 @@
+name: Artifact Registry cleanup
+
+# SERBITO-405: once a week, delete old Docker images in all Artifact Registry repos of the project.
+# Rules are in ops/artifact-cleanup/cleanup.py: keep what Cloud Run runs now (with child manifests),
+# the 10 newest tagged images per package, the buildcache and latest tags, and all images younger
+# than 3 days. Delete the rest.
+#
+# - Schedule: Sunday 04:00 UTC. No deploy runs then (weekly rebuild: Wednesday 03:00 UTC).
+# - Manual run: a dry run by default. It only prints the plan. Uncheck "dry_run" to delete.
+# - Identity: the ar-cleanup service account through Workload Identity Federation, not the deployer.
+#   It has repoAdmin on the 6 repos and run.viewer on the project (setup: SERBITO-405 in Jira).
+on:
+  schedule:
+    - cron: "0 4 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: print the plan, delete nothing"
+        type: boolean
+        default: true
+      older_than_days:
+        description: "Delete images older than N days"
+        type: string
+        default: "3"
+
+permissions:
+  contents: read
+  id-token: write # OIDC token for WIF
+
+concurrency:
+  group: artifact-cleanup
+  cancel-in-progress: false
+
+env:
+  WIF_PROVIDER: projects/488744139718/locations/global/workloadIdentityPools/github-pool/providers/github
+  CLEANUP_SA: ar-cleanup@serbito.iam.gserviceaccount.com
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04 # explicit: ubuntu-latest moves to 26.04 on 2026-10-19
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.CLEANUP_SA }}
+
+      # The script gets its access token from gcloud
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: serbito
+
+      # Standard library only: the runner's python3 is enough. A schedule run has no inputs: it deletes.
+      - name: Clean up old images
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          OLDER_THAN_DAYS: ${{ inputs.older_than_days || '3' }}
+        run: |
+          set -euo pipefail
+          mode=--no-dry-run
+          if [ "$DRY_RUN" = "true" ]; then mode=--dry-run; fi
+          python3 ops/artifact-cleanup/cleanup.py "$mode" \
+            --older-than-days "$OLDER_THAN_DAYS" --keep 10 \
+            --repo django-app --repo gtd --repo javi --repo planning-poker \
+            --repo tickets-booking --repo cloud-run-source-deploy
