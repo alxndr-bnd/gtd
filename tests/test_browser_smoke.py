@@ -12,6 +12,8 @@
 import socket
 import threading
 import time
+from contextlib import contextmanager
+from urllib.parse import urlsplit
 
 import pytest
 import uvicorn
@@ -26,6 +28,7 @@ except ImportError:  # громко на сборе тестов, а не тих
 
 INSTALL_HINT = "Нет Chromium для Playwright: запустите `.venv/bin/playwright install chromium`"
 WAIT_MS = 5000  # потолок ожидания одного условия рендера; обычно — десятки миллисекунд
+SAVE_MS = 30000  # потолок ожидания ответа сервера на запись (saves): срабатывает, только если ответа нет вовсе
 
 # Кнопка Google грузит скрипт с accounts.google.com — в тестах вместо него заглушка с тем же API
 GSI_STUB = ("window.google={accounts:{id:{initialize(){},"
@@ -790,11 +793,31 @@ def db_order(uid, status):
                                     (uid, status))]
 
 
-def until(cond, what):
-    deadline = time.monotonic() + WAIT_MS / 1000
-    while not cond():
-        assert time.monotonic() < deadline, what
-        time.sleep(0.05)
+@contextmanager
+def saves(w, what, method, path, n=1):
+    """Действия в блоке шлют на сервер n записей `method path` (путь без хоста); на выходе ждём все n ответов.
+    Ждём событием Playwright, а не опросом базы с часами в 5 с (SERBITO-367): на занятой машине запись идёт
+    дольше, и тест падал на сроке, а не на ошибке. SAVE_MS срабатывает, только если ответа нет вовсе.
+    Ответ уходит после коммита — базу после блока проверяем сразу и строго. Ждём все n ответов, а не первое
+    подходящее состояние базы: промежуточный порядок может совпасть с итоговым."""
+    hit = lambda r: r.request.method == method and urlsplit(r.url).path == path  # noqa: E731
+    got = []
+    on = lambda r: hit(r) and got.append(r)  # noqa: E731
+    w.page.on("response", on)
+    try:
+        yield
+        while len(got) < n:  # слушатель стоит раньше ожидания и видит то же событие первым
+            try:
+                w.page.wait_for_event("response", predicate=hit, timeout=SAVE_MS)
+            except PWTimeout:
+                pytest.fail(f"{what}: {len(got)} из {n} ответов на {method} {path} за {SAVE_MS} мс", pytrace=False)
+    finally:
+        w.page.remove_listener("response", on)
+    w.check(what)  # ответ ≥400 Watch уже записал в ошибки
+
+
+def move(iid):
+    return f"/api/items/{iid}/move"
 
 
 def order_user(w, lang="ru"):
@@ -823,9 +846,10 @@ def test_drag_to_reorder_with_mouse(watch):
     w.page.mouse.down()
     w.page.mouse.move(x, dst["y"] + dst["height"] - 4, steps=12)
     assert w.page.locator("main .it.dragging").count() == 1
-    w.page.mouse.up()
+    with saves(w, "перестановка мышью", "POST", move(first)):
+        w.page.mouse.up()
     assert screen_order(w) == [second, third, first]
-    until(lambda: db_order(uid, "next") == [second, third, first], "порядок не сохранился на сервере")
+    assert db_order(uid, "next") == [second, third, first], "порядок не сохранился на сервере"
     w.page.wait_for_timeout(300)
     assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
     w.page.reload()  # адрес раздела (SERBITO-354) — после перезагрузки снова Next
@@ -866,9 +890,10 @@ def test_touch_long_press_drags_quick_swipe_scrolls(watch):
     w.page.wait_for_timeout(450)  # удержание
     assert w.page.locator("main .it.dragging").count() == 1
     touch(w, card, "pointermove", step * 1.6)
-    touch(w, card, "pointerup", step * 1.6)
+    with saves(w, "перестановка пальцем", "POST", move(first)):
+        touch(w, card, "pointerup", step * 1.6)
     assert screen_order(w) == [second, first, third]
-    until(lambda: db_order(uid, "next") == [second, first, third], "порядок не сохранился на сервере")
+    assert db_order(uid, "next") == [second, first, third], "порядок не сохранился на сервере"
     w.check("итог")
 
 
@@ -877,15 +902,16 @@ def test_keyboard_reorder(watch):
     w = watch()
     uid, (first, second, third) = order_user(w)
     w.page.locator("#cap").press("ArrowDown")  # из поля захвата — к первой карточке
-    w.page.keyboard.press("Alt+ArrowDown")
-    w.page.keyboard.press("Alt+ArrowDown")
-    assert screen_order(w) == [second, third, first]
-    assert w.page.get_attribute("main .it.sel", "data-id") == str(first)  # выбор едет вместе с карточкой
-    w.page.keyboard.press("Alt+ArrowDown")  # уже внизу — ничего
-    w.page.keyboard.press("Alt+ArrowUp")
-    assert screen_order(w) == [second, first, third]
-    until(lambda: db_order(uid, "next") == [second, first, third], "порядок не сохранился на сервере")
-    until(lambda: w.page.evaluate("moving") == 0, "очередь сохранения")
+    with saves(w, "Alt+↑↓ в Next", "POST", move(first), n=3):  # три перестановки подряд, без ожидания между ними
+        w.page.keyboard.press("Alt+ArrowDown")
+        w.page.keyboard.press("Alt+ArrowDown")
+        assert screen_order(w) == [second, third, first]
+        assert w.page.get_attribute("main .it.sel", "data-id") == str(first)  # выбор едет вместе с карточкой
+        w.page.keyboard.press("Alt+ArrowDown")  # уже внизу — ничего, запроса нет
+        w.page.keyboard.press("Alt+ArrowUp")
+        assert screen_order(w) == [second, first, third]
+    assert db_order(uid, "next") == [second, first, third], "порядок не сохранился на сервере"
+    w.page.wait_for_function("moving === 0", timeout=SAVE_MS)  # очередь пуста — дальше её перечитка списка
 
     # Проект: свой порядок, та же клавиша
     extra = A.capture(uid, "задача #Ремонт")
@@ -897,11 +923,12 @@ def test_keyboard_reorder(watch):
     w.wait('main .dnd[data-scope="project"] > .it', "проект")
     proj = screen_order(w)
     w.page.locator("#cap").press("ArrowDown")
-    w.page.keyboard.press("Alt+ArrowDown")
+    with saves(w, "Alt+↓ в проекте", "POST", move(proj[0])):
+        w.page.keyboard.press("Alt+ArrowDown")
     want = [proj[1], proj[0], *proj[2:]]
     assert screen_order(w) == want
-    until(lambda: [r["id"] for r in A.rows("select id from items where project_id=%s order by ppos", (pid,))] == want,
-          "порядок проекта не сохранился")
+    assert [r["id"] for r in A.rows("select id from items where project_id=%s order by ppos", (pid,))] == want, \
+        "порядок проекта не сохранился"
     assert db_order(uid, "next") == [second, first, third]  # порядок Next не тронут
     w.check("итог")
 
@@ -1227,16 +1254,6 @@ def test_signin_widgets_load_when_visible(prod_browser, server, monkeypatch):
 
 
 # ── SERBITO-354: gtd UX ──
-def wait_db(w, cond, what):
-    """Как until, но ждём через Playwright: пока тест спит в time.sleep, перехват запросов (ctx.route) не крутится
-    и запрос страницы к серверу стоит."""
-    deadline = time.monotonic() + WAIT_MS / 1000
-    while not cond():
-        assert time.monotonic() < deadline, what
-        w.page.wait_for_timeout(50)
-    w.check(what)
-
-
 def path_is(w, path, what):
     """Ждём адрес: история и перерисовка после popstate — асинхронные."""
     try:
@@ -1333,12 +1350,13 @@ def test_capture_on_project_page(watch, lang):
     w.page.fill("#cap", "Купить плитку")
     w.page.press("#cap", "Enter")
     w.wait('main .dnd .it .t:text-is("Купить плитку")', "задача в списке проекта")
-    it = A.row("select project_id, status from items where title='Купить плитку'")
+    it = A.row("select id, project_id, status from items where title='Купить плитку'")
     assert (it["project_id"], it["status"]) == (pid, "next")
     w.wait("#toast:not([hidden])", "тост")
     assert "#Проект Альфа" in w.page.inner_text("#toast .tx")
-    w.page.click('#toast [data-act="undo"]')  # «Отменить» — задачи нет
-    wait_db(w, lambda: not A.row("select id from items where title='Купить плитку'"), "отмена записи")
+    with saves(w, "отмена записи", "DELETE", f"/api/items/{it['id']}"):
+        w.page.click('#toast [data-act="undo"]')  # «Отменить» — задачи нет
+    assert not A.row("select id from items where title='Купить плитку'"), "отмена записи"
 
     w.page.click('nav > a[data-view="waiting"]')
     w.wait('nav > a.on[data-view="waiting"]', "Waiting")
@@ -1348,6 +1366,11 @@ def test_capture_on_project_page(watch, lang):
     assert "Inbox" in w.page.inner_text("#toast .tx")
     assert A.row("select status, project_id from items where title='Мысль'") == {"status": "inbox", "project_id": None}
     w.check("итог")
+
+
+def project_of(iid):
+    row = A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s", (iid,))
+    return row and row["title"]
 
 
 def test_inbox_item_to_project(watch):
@@ -1360,14 +1383,16 @@ def test_inbox_item_to_project(watch):
     w.page.click(f'{card} [data-act="toproj"]')
     w.wait("#dlg[open] #tp", "выбор проекта")
     assert w.page.locator("#dlg").get_attribute("aria-labelledby") == "dlg-h"
-    w.page.click('#tp [data-pick]:has-text("#Проект Альфа")')
-    wait_db(w, lambda: A.row("select project_id, status from items where id=%s", (ids["inbox"],))
-          == {"project_id": alpha, "status": "next"}, "задача не ушла в проект")
+    item = f"/api/items/{ids['inbox']}"
+    state = lambda: A.row("select project_id, status from items where id=%s", (ids["inbox"],))  # noqa: E731
+    with saves(w, "задача в проект", "PATCH", item):
+        w.page.click('#tp [data-pick]:has-text("#Проект Альфа")')
+    assert state() == {"project_id": alpha, "status": "next"}, "задача не ушла в проект"
     w.wait("#toast:not([hidden])", "тост")
     assert "#Проект Альфа" in w.page.inner_text("#toast .tx")
-    w.page.click('#toast [data-act="undo"]')  # вернуть как было: Inbox, без проекта
-    wait_db(w, lambda: A.row("select project_id, status from items where id=%s", (ids["inbox"],))
-          == {"project_id": None, "status": "inbox"}, "отмена")
+    with saves(w, "отмена", "PATCH", item):
+        w.page.click('#toast [data-act="undo"]')  # вернуть как было: Inbox, без проекта
+    assert state() == {"project_id": None, "status": "inbox"}, "отмена"
 
     # Новый проект прямо из Inbox; пустое название — подсказка, проект не создан
     w.wait(f'{card} [data-act="toproj"]', "кнопка после отмены")
@@ -1377,9 +1402,9 @@ def test_inbox_item_to_project(watch):
     w.page.click('#tp [data-pick="new"]')
     assert w.page.inner_text("#tpmsg") and A.row("select count(*) n from projects")["n"] == n
     w.page.fill("#tp-new", "Отпуск")
-    w.page.press("#tp-new", "Enter")
-    wait_db(w, lambda: (A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s",
-                         (ids["inbox"],)) or {}).get("title") == "Отпуск", "новый проект из Inbox")
+    with saves(w, "новый проект из Inbox", "PATCH", item):  # сначала POST /api/projects, потом задача в него
+        w.page.press("#tp-new", "Enter")
+    assert project_of(ids["inbox"]) == "Отпуск", "новый проект из Inbox"
     w.page.wait_for_selector("#dlg:not([open])", state="attached", timeout=WAIT_MS)
 
     # Карточка задачи: «+ Новый проект» в списке проектов
@@ -1390,9 +1415,9 @@ def test_inbox_item_to_project(watch):
     w.page.select_option("#ef-project", "new")
     assert w.page.is_visible("#ef-newproj") and w.page.evaluate("document.activeElement.id") == "ef-newproj"
     w.page.fill("#ef-newproj", "Ремонт")
-    w.page.click("#ef button.pri")
-    wait_db(w, lambda: (A.row("select p.title from items i join projects p on p.id=i.project_id where i.id=%s",
-                         (ids["someday"],)) or {}).get("title") == "Ремонт", "новый проект из карточки")
+    with saves(w, "новый проект из карточки", "PATCH", f"/api/items/{ids['someday']}"):
+        w.page.click("#ef button.pri")
+    assert project_of(ids["someday"]) == "Ремонт", "новый проект из карточки"
     w.check("итог")
 
 
@@ -1446,7 +1471,8 @@ def test_touch_drag_grip_and_tip(watch):
     assert w.page.is_visible("main .dndtip") and "⠿" in w.page.inner_text("main .dndtip")
     step = (w.page.locator(f'main .it[data-id="{second}"]').bounding_box()["y"]
             - w.page.locator(f'main .it[data-id="{first}"]').bounding_box()["y"])
-    w.page.eval_on_selector(grip, """(el, dy) => {
+    with saves(w, "перестановка за ручку", "POST", move(first)):
+        w.page.eval_on_selector(grip, """(el, dy) => {
       const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
       const ev = (kind, t, yy) => t.dispatchEvent(new PointerEvent(kind, {bubbles: true, cancelable: true, pointerId: 9,
         pointerType: 'touch', isPrimary: true, button: kind === 'pointermove' ? -1 : 0, clientX: x, clientY: yy}));
@@ -1458,7 +1484,7 @@ def test_touch_drag_grip_and_tip(watch):
     }""", step * 1.6)
     assert w.page.evaluate("window.__dragging"), "ручка не начала перетаскивание сразу"
     assert screen_order(w) == [second, first, third]
-    wait_db(w, lambda: db_order(uid, "next") == [second, first, third], "порядок не сохранился")
+    assert db_order(uid, "next") == [second, first, third], "порядок не сохранился"
     w.page.reload()
     w.wait("main .dnd > .it", "после перезагрузки")
     assert not w.page.locator("main .dndtip").count()  # подсказка разовая
@@ -1496,8 +1522,9 @@ def test_phone_tap_targets(watch):
         assert box and box["width"] >= 44 and box["height"] >= 44, (sel, box)
     assert w.page.get_by_role("checkbox", name="Позвонить маме").count() == 1
     box = w.page.locator(f"{card} .ck").bounding_box()
-    w.page.mouse.click(box["x"] + 3, box["y"] + box["height"] - 3)  # угол зоны, не квадратик
-    wait_db(w, lambda: A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "done", "галочка")
+    with saves(w, "галочка", "PATCH", f"/api/items/{ids['inbox']}"):
+        w.page.mouse.click(box["x"] + 3, box["y"] + box["height"] - 3)  # угол зоны, не квадратик
+    assert A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "done", "галочка"
     assert not w.page.locator("#dlg[open]").count()
     w.check("итог")
 
@@ -1545,9 +1572,10 @@ def test_next_offers_context_chips(watch):
     w.page.click(f'main .it[data-id="{ids["inbox"]}"] [data-act="mv"][data-st="next"]')
     chip = '#toast [data-act="ctxset"][data-c="home"]'
     w.wait(chip, "чип контекста в тосте")
-    w.page.click(chip)
-    wait_db(w, lambda: A.row("select context, status from items where id=%s", (ids["inbox"],))
-            == {"context": "home", "status": "next"}, "контекст из тоста")
+    with saves(w, "контекст из тоста", "PATCH", f"/api/items/{ids['inbox']}"):
+        w.page.click(chip)
+    assert A.row("select context, status from items where id=%s", (ids["inbox"],)) \
+        == {"context": "home", "status": "next"}, "контекст из тоста"
     assert "@home" in w.page.inner_text("#toast .tx")
     w.check("итог")
 
