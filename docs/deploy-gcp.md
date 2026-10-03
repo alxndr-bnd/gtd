@@ -36,8 +36,14 @@ The tag triggers `.github/workflows/deploy.yml`:
 5. Switch 100% of traffic to that revision by name.
 
 If the candidate doesn't answer, the previous revision keeps serving. The first deploy (no service yet)
-goes straight to 100% and is then probed. There is no `workflow_dispatch`: unreleased code can't bypass
-the tag. GCP auth is keyless (Workload Identity Federation) — no keys anywhere.
+goes straight to 100% and is then probed. After the switch, the main page of the service URL must return 200;
+otherwise traffic goes back to the previous revision and the run fails. GCP auth is keyless (Workload Identity
+Federation) — no keys anywhere.
+
+Weekly OS refresh (SERBITO-401): the same workflow runs every Wednesday 03:00 UTC (Cloud SQL maintenance is
+Tuesday 02:00 UTC) and on *Run workflow*. It checks out the newest `vX.Y.Z` tag, never a branch, so unreleased
+code still can't bypass the tag. The image is `<sha>-r<YYYYMMDD>`; the version and the Sentry release stay
+those of the tag. A refresh and a release share one concurrency group and never deploy at the same time.
 
 ## Runtime
 

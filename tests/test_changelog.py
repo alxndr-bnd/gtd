@@ -204,7 +204,9 @@ def guard_step():
 def test_deploy_checks_the_changelog_right_after_checkout_before_the_build():
     _, steps, start, lines = guard_step()
     at = steps.index(start)
-    assert "actions/checkout@" in lines[steps[at - 1]]
+    # Между ними только выбор тега (SERBITO-401): проверяется тот тег, который деплоится
+    assert lines[steps[at - 1]] == "      - name: Pick the release tag"
+    assert "actions/checkout@" in lines[steps[at - 2]]
     build = next(i for i, s in enumerate(lines) if "docker build" in s or "docker/build-push-action" in s)
     assert start < build
 
@@ -214,7 +216,7 @@ def test_deploy_refuses_a_tag_without_its_changelog_section(tmp_path, tag, ok):
     script = guard_step()[0]
     (tmp_path / "CHANGELOG.md").write_text(GOOD, encoding="utf-8")
     r = subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path, capture_output=True, text=True,
-                       env={"GITHUB_REF_NAME": tag, "PATH": "/usr/bin:/bin"})
+                       env={"RELEASE_TAG": tag, "PATH": "/usr/bin:/bin"})
     assert (r.returncode == 0) == ok, r.stdout + r.stderr
     if not ok:
         assert f"::error file=CHANGELOG.md::No '## [{tag[1:]}]" in r.stdout
