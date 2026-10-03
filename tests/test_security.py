@@ -320,3 +320,10 @@ def test_deploy_config_has_no_smtp_login_or_admin_ids():
     assert not re.search(r"^\s*(SMTP_USER|ADMIN_USER_IDS)\s*:", env, re.M) and "smtp-brevo.com" not in env
     wf = (ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
     assert "secrets.SMTP_USER" in wf and "secrets.ADMIN_USER_IDS" in wf
+
+
+# ── SERBITO-385: имя колонки в SQL у attach() только из белого списка, и не через assert ──
+
+def test_attach_rejects_a_field_outside_the_whitelist():
+    with pytest.raises(ValueError):
+        A.attach(1, "id=id; drop table users; --", "x")

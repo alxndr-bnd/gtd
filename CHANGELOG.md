@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+- A safety check when you link a sign-in method to your account now always runs.
+  - RU: Проверка безопасности при привязке способа входа к аккаунту теперь работает всегда.
+
 ## [0.26.0] - 2026-10-02
 
 ### Added
