@@ -2740,7 +2740,8 @@ def sitemap_xml():
 ROOT_FILES = {
     "og.png": "image/png", "og-en.png": "image/png",  # превью ссылки 1200×630, русская и английская
     "favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "apple-touch-icon.png": "image/png",
-    "icon-192.png": "image/png", "icon-512.png": "image/png", "icon-maskable-512.png": "image/png",
+    "icon-192.png": "image/png", "icon-512.png": "image/png",
+    "icon-maskable-192.png": "image/png", "icon-maskable-512.png": "image/png",
 }
 
 
