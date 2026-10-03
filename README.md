@@ -70,6 +70,8 @@ the tests before tagging.
    in one release commit, tags, pushes, and creates the GitHub Release with that version's English entries.
 3. The tag deploys ([docs/deploy-gcp.md](docs/deploy-gcp.md)) with `APP_VERSION` from the tag: the footer,
    the app menu and `/changes` show it (`dev` when unset, e.g. locally).
+4. The deploy fails for a tag without its `## [X.Y.Z]` section in CHANGELOG.md, so a tag pushed by hand
+   cannot ship without notes.
 
 `/changes` and `/en/changes` render CHANGELOG.md, parsed once at startup by `changelog.py`;
 `tests/test_changelog.py` checks the format, both languages and that every tag has an entry.

@@ -133,13 +133,19 @@ def repo(tmp_path):
     gh = bin_ / "gh"
     gh.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "{tmp_path}/gh-args"\n')
     gh.chmod(0o755)
-    env = {**os.environ, "PYTHON": sys.executable, "PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}",
+    # Без унаследованных GIT_*: в git-хуке GIT_DIR и GIT_INDEX_FILE указывают на настоящий репозиторий,
+    # и git init --bare перевёл бы его в core.bare = true (SERBITO-389)
+    env = {**{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+           "PYTHON": sys.executable, "PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}",
            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com"}
     env.pop("PYTEST_ADDOPTS", None)
     git("init", "-q", "--bare", str(remote), cwd=tmp_path, env=env)
     git("init", "-q", "-b", "main", cwd=work, env=env)
+    for d in (work, remote):  # git пишет во временные репозитории, а не в настоящий
+        git_dir = Path(git("rev-parse", "--absolute-git-dir", cwd=d, env=env).strip()).resolve()
+        assert git_dir.is_relative_to(tmp_path.resolve()), git_dir
     git("add", ".", cwd=work, env=env)
     git("commit", "-qm", "init", cwd=work, env=env)
     git("tag", "v0.2.0", cwd=work, env=env)
@@ -177,3 +183,38 @@ def test_release_script_dates_the_entry_and_uses_it_for_github_release(repo):
     args = gh_args.read_text().splitlines()
     assert args[:6] == ["release", "create", "v0.3.0", "--verify-tag", "--title", "v0.3.0"]
     assert args[6] == "--notes" and "\n".join(args[7:]).startswith("### Added\n- Three") and "Три" not in gh_args.read_text()
+
+
+# ── SERBITO-389: деплой тега без секции в CHANGELOG.md падает до сборки ──
+
+def guard_step():
+    """Шаг проверки из deploy.yml: его run-скрипт и номер среди шагов (pyyaml в зависимостях нет)."""
+    lines = (ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8").splitlines()
+    steps = [i for i, s in enumerate(lines) if s.startswith("      - ")]
+    start = lines.index("      - name: CHANGELOG.md has this version")
+    run = lines.index("        run: |", start)
+    body = []
+    for s in lines[run + 1:]:
+        if s.strip() and not s.startswith(" " * 10):
+            break
+        body.append(s[10:])
+    return "\n".join(body), steps, start, lines
+
+
+def test_deploy_checks_the_changelog_right_after_checkout_before_the_build():
+    _, steps, start, lines = guard_step()
+    at = steps.index(start)
+    assert "actions/checkout@" in lines[steps[at - 1]]
+    build = next(i for i, s in enumerate(lines) if "docker build" in s or "docker/build-push-action" in s)
+    assert start < build
+
+
+@pytest.mark.parametrize("tag, ok", [("v0.2.0", True), ("v0.3.0", False), ("v0x2x0", False), ("v0.2", False)])
+def test_deploy_refuses_a_tag_without_its_changelog_section(tmp_path, tag, ok):
+    script = guard_step()[0]
+    (tmp_path / "CHANGELOG.md").write_text(GOOD, encoding="utf-8")
+    r = subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path, capture_output=True, text=True,
+                       env={"GITHUB_REF_NAME": tag, "PATH": "/usr/bin:/bin"})
+    assert (r.returncode == 0) == ok, r.stdout + r.stderr
+    if not ok:
+        assert f"::error file=CHANGELOG.md::No '## [{tag[1:]}]" in r.stdout
