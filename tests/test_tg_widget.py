@@ -48,6 +48,23 @@ def test_verify_rejects_tampered(tg, spoil):
     assert e.value.key == "tg_widget_fail"
 
 
+def test_verify_accepts_values_from_address(tg):
+    """SERBITO-316: в режиме data-auth-url поля приходят из адреса — все строками; подпись та же."""
+    d = {k: str(v) for k, v in signed().items()}
+    assert A.tg_widget_verify(d) == {"id": 777, "first_name": "Tom"}
+    d["id"] = "778"
+    with pytest.raises(A.AuthError):
+        A.tg_widget_verify(d)
+
+
+def test_verify_rejects_replay(tg):
+    d = signed()
+    A.tg_widget_verify(dict(d))
+    with pytest.raises(A.AuthError) as e:
+        A.tg_widget_verify(dict(d))
+    assert e.value.key == "tg_widget_stale"
+
+
 @pytest.mark.parametrize("bad", [None, [], "id=777", {}])
 def test_verify_rejects_garbage(tg, bad):
     with pytest.raises(A.AuthError):
@@ -168,3 +185,11 @@ def test_spa_uses_widget_with_fallback():
     assert "https://telegram.org/js/telegram-widget.js?22" in html
     assert "location.hostname === 'gtd.serbito.rs'" in html and "pointer: coarse" in html  # где виджет не работает
     assert "authPost('tg/widget'" in html and "data-act=\"tglogin\"" in html  # и запасной путь через бота
+
+
+def test_spa_widget_redirects_instead_of_eval_callback():
+    """SERBITO-316: data-onauth виджет компилирует через eval (GTD-2) — только data-auth-url, ответ во фрагменте."""
+    html = open(A.os.path.join(A.os.path.dirname(A.__file__), "static", "index.html"), encoding="utf-8").read()
+    assert "onauth:" not in html and "onTelegramAuth" not in html  # ни data-onauth, ни глобального колбэка
+    assert "authUrl:back" in html and "'#tgw?_s='" in html
+    assert "'unsafe-eval'" not in A.CSP_REPORT_ONLY

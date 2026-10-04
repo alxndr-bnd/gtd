@@ -235,6 +235,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "open_tg": "Открыть Telegram", "tg_hint": "В боте нажми «Start», затем кнопку с этим числом — страница обновится сама.",
   "tg_code": "Число для бота:", "tg_expired": "Время вышло — нажми кнопку ещё раз",
   "tg_denied": "Число не совпало — вход отменён. Нажми кнопку ещё раз",
+  "tg_fail": "Telegram не подтвердил вход — попробуй ещё раз",
   "sessions": "Сеансы", "sessions_text": "Открыто в браузерах и на устройствах: {n}.",
   "logout_all": "Выйти на всех устройствах", "logout_all_q": "Выйти из аккаунта на всех устройствах, включая это?",
   "mcp": "🤖 AI-ассистенты (MCP)",
@@ -347,6 +348,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "open_tg": "Open Telegram", "tg_hint": "In the bot, tap “Start”, then the button with this number — this page updates by itself.",
   "tg_code": "Number for the bot:", "tg_expired": "Time's up — press the button again",
   "tg_denied": "The number didn't match — sign-in cancelled. Press the button again",
+  "tg_fail": "Telegram didn't confirm the sign-in — try again",
   "sessions": "Sessions", "sessions_text": "Signed in on browsers and devices: {n}.",
   "logout_all": "Sign out on all devices", "logout_all_q": "Sign out of this account on all devices, including this one?",
   "mcp": "🤖 AI assistants (MCP)",
@@ -682,27 +684,68 @@ async function emailVerify(){
 // заданном в BotFather (локально и на *.run.app — нет), а на телефоне и во встроенных браузерах он хуже ссылки:
 // открывает oauth.telegram.org во всплывающем окне и просит номер телефона вместо того, чтобы открыть приложение.
 const TG_WIDGET_WAIT = 5000;  // мс: столько ждём iframe виджета, потом показываем запасную кнопку
-const tgWidgetOk = () => location.hostname === 'gtd.serbito.rs' && !matchMedia('(pointer: coarse)').matches;
+const tgWidgetOk = () => location.hostname === 'gtd.serbito.rs' && !matchMedia('(pointer: coarse)').matches && !!tgwState();
 const tgHtml = label => `<div class="tgw"></div><button data-act="tglogin" class="tgfb">${label}</button>
   <div id="tgst" class="hint" style="margin:10px 0 0"></div>`;
+
+// Ответ виджета — переходом по data-auth-url, а не колбэком data-onauth (SERBITO-316): колбэк виджет собирает
+// из строки через eval, и CSP без 'unsafe-eval' его блокирует (GTD-2). Адрес возврата — эта же страница
+// с данными во фрагменте #tgw?…: переход внутри документа, страница не перезагружается, а данные входа
+// (id, имя, подпись) не попадают ни на сервер в адресе, ни в его журналы — их, как и раньше, проверяет
+// POST /api/auth/tg/widget. _s — секрет вкладки (sessionStorage): чужая ссылка с чужой подписью без него
+// не войдёт и не привяжет чужой Telegram к этому аккаунту
+const TGW_KEY = 'gtd-tgw';
+function tgwState(){
+  try{
+    let s = sessionStorage.getItem(TGW_KEY);
+    if(!s){
+      s = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+      sessionStorage.setItem(TGW_KEY, s);
+    }
+    return s;
+  }catch{ return ''; }  // хранилище недоступно — виджета нет, остаётся вход через бота
+}
 
 function mountTelegram(){
   const box = $('.tgw'), fb = $('.tgfb'); if(!box || !S.cfg.bot || !tgWidgetOk()) return;
   fb.hidden = true;
   const fallback = () => { clearTimeout(timer); box.remove(); fb.hidden = false; };
-  window.onTelegramAuth = tgWidgetAuth;
+  const back = location.href.split('#')[0] + '#tgw?_s=' + tgwState() + (linking() ? '&_l=1' : '');
   const s = document.createElement('script');  // виджет встаёт iframe'ом на место своего <script>
   s.async = true; s.src = 'https://telegram.org/js/telegram-widget.js?22'; s.onerror = fallback;
   Object.assign(s.dataset, {telegramLogin:S.cfg.bot, size:'large', userpic:'false', lang:LANG,
-    requestAccess:'write', onauth:'onTelegramAuth(user)'});  // write — бот сможет писать напоминания без Start
+    requestAccess:'write', authUrl:back});  // write — бот сможет писать напоминания без Start
   box.appendChild(s);
   const timer = setTimeout(() => { if(!box.querySelector('iframe')) fallback(); }, TG_WIDGET_WAIT);
 }
 
-async function tgWidgetAuth(user){
-  try{ const lk = linking(); await authPost('tg/widget', {auth:user, link:lk}); ga(lk ? 'link_method' : 'login', {method:'telegram'}); load(); }
-  catch(err){ authFail(err); }
+// Забирает ответ виджета из адреса и сразу стирает его оттуда. null — в адресе его нет
+function tgwTake(){
+  if(!location.hash.startsWith('#tgw?')) return null;
+  const q = new URLSearchParams(location.hash.slice(5)), s = q.get('_s'), link = q.get('_l') === '1';
+  history.replaceState(history.state, '', location.pathname + location.search);
+  let want = '';
+  try{ want = sessionStorage.getItem(TGW_KEY) || ''; sessionStorage.removeItem(TGW_KEY); }catch{}
+  q.delete('_s'); q.delete('_l');  // свои поля; у Telegram имён с _ нет
+  return {ok: !!want && s === want, auth: Object.fromEntries(q), link};
 }
+
+// Вход или привязка по ответу виджета. Обычно страница та же (hashchange); если адрес успел смениться,
+// ответ приходит при загрузке страницы — тогда сначала входим, потом рисуем. true — ответ был
+async function tgWidgetBack(){
+  const d = tgwTake(); if(!d) return false;
+  try{
+    if(!d.ok) throw new Error(t('tg_fail'));
+    await authPost('tg/widget', {auth:d.auth, link:d.link});
+    ga(d.link ? 'link_method' : 'login', {method:'telegram'});
+    await load();
+  }catch(err){
+    if(!S.cfgLoaded) await load();
+    authFail(err);
+  }
+  return true;
+}
+addEventListener('hashchange', tgWidgetBack);
 
 async function tgStart(){
   try{
@@ -1663,7 +1706,7 @@ document.addEventListener('keydown', e => {
   if(e.target.id==='em') emailSend();
   if(e.target.id==='code') emailVerify();
 });
-load();
+tgWidgetBack().then(had => had || load());
 </script>
 </body>
 </html>

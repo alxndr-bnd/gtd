@@ -12,8 +12,11 @@ Sign-up is open: the first sign-in by any method creates an account.
 - **Telegram** — button on the site → bot → tap the number the site shows (one of three buttons; a wrong one
   cancels). The bot message says which browser and IP asked and, for linking, which account. Only the browser
   that started (cookie `tgl`) can pick up the session. On gtd.serbito.rs desktop — the Telegram Login Widget
-  (a signature is valid 10 minutes and once). `/login` in the bot sends a link to a page that shows whose account
-  it opens and signs in only with its button (POST).
+  (a signature is valid 10 minutes and once). The widget uses `data-auth-url`, not `data-onauth` (SERBITO-316):
+  it returns to the same page with the signed fields in the fragment `#tgw?…`. The SPA removes the fragment and
+  sends the fields to `POST /api/auth/tg/widget`, so they do not reach request logs. The fragment carries
+  `_s`, a per-tab secret from `sessionStorage`: a link with someone else's signed fields signs in or links nothing.
+  `/login` in the bot sends a link to a page that shows whose account it opens and signs in only with its button (POST).
 - **Sessions** — cookie `sid`; the database keeps only its SHA-256. Expire after 90 days without activity
   (sliding). Sign out deletes the session and the cookie; “Sign out on all devices” in “👤 Account” deletes all.
 - **Requests** — state-changing `/api/*` and `POST /auth` must be same-origin (`Sec-Fetch-Site`/`Origin`);
@@ -21,10 +24,10 @@ Sign-up is open: the first sign-in by any method creates an account.
   for now (reports go to Sentry when `SENTRY_DSN` is set). `/docs` and `/openapi.json` exist only with `DEV=1`.
 - **Known CSP reports** (SERBITO-412). The browser sends them straight to Sentry's security endpoint, not
   through our server, so our code cannot filter them.
-  - `script-src` eval (GTD-2): `telegram.org/js/telegram-widget.js` line 6. The Login Widget compiles our
-    `data-onauth="onTelegramAuth(user)"` with `eval`. Only the sign-in page, only with the widget. To enforce
-    the CSP without `'unsafe-eval'`, the widget must go (SERBITO-316: move to "Log In With Telegram") or use
-    `data-auth-url` (a redirect, no eval). Many reports came from local headless Chrome runs against prod.
+  - `script-src` eval (GTD-2): `telegram.org/js/telegram-widget.js` line 6. The Login Widget compiled our
+    `data-onauth` callback with `eval`. Fixed in SERBITO-316: the widget now uses `data-auth-url` and calls
+    no `eval`. New GTD-2 events after that release are a regression. Many old reports came from local
+    headless Chrome runs against prod.
   - `font-src` frontend-cdn.perplexity.ai (GTD-4): the Perplexity browser or extension injects its font into
     the page. Not ours. Filter in Sentry, gtd and serbito projects: Settings → Security Headers → CSP →
     "Use default ignored sources" on, "Additional ignored sources" + `frontend-cdn.perplexity.ai`.
