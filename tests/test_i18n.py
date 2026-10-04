@@ -166,7 +166,7 @@ def test_bot_about_and_callbacks_in_english(tg):
 def test_bot_capture_reply_buttons_and_hint_in_english(tg):
     bot_message("call mom tomorrow at 10am @phone", lang="en")
     it = A.row("select * from items")
-    assert (it["title"], it["context"], it["status"]) == ("call mom", "phone", "next")
+    assert (it["title"], it["contexts"], it["status"]) == ("call mom", ["phone"], "next")
     method, p = tg[-2]
     assert p["text"].startswith(f'✓ Next <a href="http://localhost:8000/i/{it["num"]}">#{it["num"]}</a>: call mom')
     assert re.search(r"⏰ \d{1,2} [A-Z][a-z]{2} 10:00  @phone$", p["text"])  # месяц словом, а не 26.09

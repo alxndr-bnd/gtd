@@ -36,9 +36,11 @@ def test_patch_item(client, login):
     assert back["completed_at"] is None
     assert client.patch(f"/api/items/{iid}", json={"status": "weird"}).status_code == 400
 
+    # Прежнее поле context (одна строка) по-прежнему работает (SERBITO-423)
     it = client.patch(f"/api/items/{iid}", json={"title": "новое", "notes": "n", "context": "@Дом"}).json()
-    assert (it["title"], it["notes"], it["context"]) == ("новое", "n", "дом")
-    assert client.patch(f"/api/items/{iid}", json={"context": ""}).json()["context"] is None
+    assert (it["title"], it["notes"], it["contexts"]) == ("новое", "n", ["дом"])
+    assert client.patch(f"/api/items/{iid}", json={"context": ""}).json()["contexts"] == []
+    assert client.patch(f"/api/items/{iid}", json={"context": None}).json()["contexts"] == []
 
     A.run("update items set reminded=1 where id=%s", (iid,))
     it = client.patch(f"/api/items/{iid}", json={"remind_at": int(time.time()) + 60}).json()
@@ -50,7 +52,7 @@ def test_patch_item(client, login):
 
 def card_save(client, iid, **fields):
     """Сохранение карточки: SPA шлёт все поля формы разом, как в openEdit."""
-    body = {"title": "", "notes": "", "status": "inbox", "project_id": None, "context": "", "remind_at": None, **fields}
+    body = {"title": "", "notes": "", "status": "inbox", "project_id": None, "contexts": [], "remind_at": None, **fields}
     r = client.patch(f"/api/items/{iid}", json=body)
     assert r.status_code == 200, r.text
     return r.json()
@@ -62,7 +64,7 @@ def test_card_title_parsed_like_capture(client, login):
     iid = client.post("/api/capture", json={"text": "черновик"}).json()["id"]
     it = card_save(client, iid, title="позвонить в банк завтра в 10:00 @Телефон #Новый_Проект")
     same = A.capture(uid, "позвонить в банк завтра в 10:00 @Телефон #Новый_Проект")
-    assert (it["title"], it["context"], it["project"]) == ("позвонить в банк", "телефон", "Новый Проект")
+    assert (it["title"], it["contexts"], it["project"]) == ("позвонить в банк", ["телефон"], "Новый Проект")
     assert it["remind_at"] == same["remind_at"] and it["reminded"] == 0
     assert it["project_id"] == same["project_id"]  # проект создан один раз и переиспользован захватом
     assert it["status"] == "inbox"  # список — из поля «Список», токены его не меняют
@@ -74,8 +76,8 @@ def test_card_title_token_overrides_fields(client, login):
     a = client.post("/api/projects", json={"title": "Дом"}).json()["id"]
     b = client.post("/api/projects", json={"title": "Клиент X"}).json()["id"]
     iid = client.post("/api/capture", json={"text": "задача"}).json()["id"]
-    it = card_save(client, iid, title="задача #клиент_x @Работа", project_id=a, context="дом")
-    assert (it["title"], it["project_id"], it["context"]) == ("задача", b, "работа")
+    it = card_save(client, iid, title="задача #клиент_x @Работа @комп", project_id=a, contexts=["дом"])
+    assert (it["title"], it["project_id"], it["contexts"]) == ("задача", b, ["работа", "комп"])
 
 
 def test_card_title_without_tokens_keeps_fields(client, login):
@@ -83,11 +85,13 @@ def test_card_title_without_tokens_keeps_fields(client, login):
     pid = client.post("/api/projects", json={"title": "Дом"}).json()["id"]
     iid = client.post("/api/capture", json={"text": "задача"}).json()["id"]
     when = int(time.time()) + 3600
-    it = card_save(client, iid, title="новое название", project_id=pid, context="@Дача", remind_at=when)
-    assert (it["title"], it["project_id"], it["context"], it["remind_at"]) == ("новое название", pid, "дача", when)
-    # Только #проект в заголовке: контекст и напоминание из полей остаются
-    it = card_save(client, iid, title="новое название #Дом", context="дача", remind_at=when)
-    assert (it["title"], it["project_id"], it["context"], it["remind_at"]) == ("новое название", pid, "дача", when)
+    it = card_save(client, iid, title="новое название", project_id=pid, contexts=["@Дача", "дом"], remind_at=when)
+    assert (it["title"], it["project_id"], it["contexts"], it["remind_at"]) == \
+        ("новое название", pid, ["дача", "дом"], when)
+    # Только #проект в заголовке: контексты и напоминание из полей остаются
+    it = card_save(client, iid, title="новое название #Дом", contexts=["дача", "дом"], remind_at=when)
+    assert (it["title"], it["project_id"], it["contexts"], it["remind_at"]) == \
+        ("новое название", pid, ["дача", "дом"], when)
 
 
 def test_card_unchanged_title_not_reparsed(client, login):
@@ -98,7 +102,7 @@ def test_card_unchanged_title_not_reparsed(client, login):
     assert it["title"] == "завтра" and it["remind_at"]
     assert card_save(client, it["id"], title="завтра")["remind_at"] is None
     it = client.post("/api/capture", json={"text": "@дом"}).json()
-    assert card_save(client, it["id"], title="@дом", context="работа")["context"] == "работа"
+    assert card_save(client, it["id"], title="@дом", contexts=["работа"])["contexts"] == ["работа"]
 
 
 def test_delete_item(client, login):
@@ -146,9 +150,37 @@ def test_contexts_by_frequency_without_trash(client, login):
     uid = login(client)
     for t in ("a @дом", "b @работа", "c @работа", "d @старое"):
         A.capture(uid, t)
-    A.run("update items set status='trash' where context='старое'")
+    A.run("update items set status='trash' where 'старое' = any(contexts)")
     A.capture(A.email_user("bob@example.com"), "чужое @секрет")
     assert client.get("/api/contexts").json() == ["работа", "дом"]
+
+
+def test_task_with_several_contexts(client, login):
+    """SERBITO-423: задача с двумя контекстами считается в каждом из них; PATCH contexts заменяет весь список."""
+    uid = login(client)
+    two = A.capture(uid, "оплатить счёт @телефон @комп")
+    A.capture(uid, "позвонить @телефон")
+    assert client.get("/api/contexts").json() == ["телефон", "комп"]
+    it = client.patch(f"/api/items/{two['id']}", json={"contexts": ["@Комп", "дом", "комп"]}).json()
+    assert it["contexts"] == ["комп", "дом"]
+    assert client.patch(f"/api/items/{two['id']}", json={"contexts": "@дача @лес"}).json()["contexts"] == ["дача", "лес"]
+    assert client.patch(f"/api/items/{two['id']}", json={"contexts": []}).json()["contexts"] == []
+    for bad in (5, ["a", 1], {"a": "b"}):
+        assert client.patch(f"/api/items/{two['id']}", json={"contexts": bad}).status_code == 400
+    assert client.get("/api/contexts").json() == ["телефон"]
+
+
+def test_old_single_context_migrates_once():
+    """SERBITO-423: старая колонка context при старте переезжает в contexts списком из одного; повторный старт
+    не возвращает контекст, который потом сняли."""
+    uid = A.email_user("alice@example.com")
+    iid = A.capture(uid, "старая задача")["id"]
+    A.run("update items set context='дом', contexts='{}' where id=%s", (iid,))  # так её оставила прежняя ревизия
+    A.run(A.SCHEMA)
+    assert A.row("select context, contexts from items where id=%s", (iid,)) == {"context": None, "contexts": ["дом"]}
+    A.run("update items set contexts='{}' where id=%s", (iid,))
+    A.run(A.SCHEMA)
+    assert A.row("select contexts from items where id=%s", (iid,))["contexts"] == []
 
 
 def test_users_are_isolated(new_client, login):
@@ -261,7 +293,7 @@ def test_merge_renumbers_moved_tasks(new_client, login, mail):
     for t in ("a1", "a2"):
         c.post("/api/capture", json={"text": t})
     login(carol, "carol@example.com")
-    for t in ("c1", "c2"):
+    for t in ("c1 @дом @комп", "c2"):
         carol.post("/api/capture", json={"text": t})
     c.post("/api/auth/email/start", json={"email": "carol@example.com"})
     code = __import__("conftest").last_code(mail)
@@ -270,6 +302,9 @@ def test_merge_renumbers_moved_tasks(new_client, login, mail):
     nums = {i["title"]: i["num"] for i in c.get("/api/items?status=all").json()}
     assert nums == {"a1": 1, "a2": 2, "c1": 3, "c2": 4}
     assert A.capture(alice, "next")["num"] == 5
+    # Контексты переезжают вместе с задачей (SERBITO-423)
+    assert A.item_by_num(alice, 3)["contexts"] == ["дом", "комп"]
+    assert c.get("/api/contexts").json() == ["дом", "комп"]
 
 
 def test_dev_version_only_in_dev(client, monkeypatch):

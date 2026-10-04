@@ -10,7 +10,9 @@ import re
 
 import changelog
 
-BOT_URL = "https://t.me/gtdsrbot"
+# Публичный бот gtd.serbito.rs. Имя видно на сайте — так бота находят и в Telegram (SERBITO-422)
+BOT_NAME = "gtdsrbot"
+BOT_URL = f"https://t.me/{BOT_NAME}"
 GTD_SITE = "https://gettingthingsdone.com"
 NOHANDOFF_URL = "https://www.linkedin.com/company/nohandoff/"
 # Код открыт под MIT (SERBITO-291): ссылка — в подвале, на лендинге и на /about
@@ -409,7 +411,8 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
     return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{PRIVACY_NOTE[lang]}</div>'
+            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{BOT_NOTE[lang]}'
+            f'{PRIVACY_NOTE[lang]}</div>'
             f'</div>{LANDING_STEPS[lang]}</main>{footer(lang, consent)}</div>')
 
 
@@ -435,6 +438,8 @@ ABOUT = {
 <ul class="ex">
 <li><q>позвонить маме завтра в 10:00</q> — задача в Inbox и напоминание завтра в 10:00.</li>
 <li><q>отчёт #Работа @комп</q> — сразу в Next, в проект «Работа», контекст @комп.</li>
+<li><q>оплатить счёт @телефон @комп</q> — у задачи может быть несколько контекстов:
+она видна в Next и под @телефон, и под @комп.</li>
 <li>Сроки понимаются и так: <q>через 2 часа</q>, <q>в пятницу</q>, <q>24.10 12:00</q>.</li>
 </ul>
 <h2>Telegram-бот</h2>
@@ -470,6 +475,8 @@ then decide what it is and what the next concrete step is.</p>
 <ul class="ex">
 <li><q>call mom tomorrow at 10:00</q> — a task in the Inbox and a reminder tomorrow at 10:00.</li>
 <li><q>report #Work @computer</q> — straight to Next, in the “Work” project, with the @computer context.</li>
+<li><q>pay the bill @phone @computer</q> — a task can have several contexts:
+in Next it shows under both @phone and @computer.</li>
 <li>Times and dates are understood too: <q>in 2 hours</q>, <q>tomorrow 10am</q>, <q>next monday</q>, <q>24 oct 12:00</q>.</li>
 <li>Russian works too: <q>позвонить маме завтра в 10:00</q>, <q>отчёт #Работа @комп</q>.</li>
 </ul>
@@ -546,6 +553,14 @@ T["en"].update(privacy="Privacy", privacy_title="Privacy policy — GTD online",
                privacy_desc="What data GTD online stores, what analytics receive, how to give or withdraw "
                             "cookie consent, who processes it and how to delete your account.")
 # Ссылка на политику под кнопками входа на лендинге
+# Строка о боте в блоке входа на лендинге (SERBITO-422): имя-ссылка и что он делает. Тот же текст — на экране
+# входа в приложении (bot_line в index.html), там имя бота — из /api/config
+BOT_NOTE = {
+    "ru": f'<p class="note" style="margin:14px 0 0">Telegram-бот <a href="{BOT_URL}">@{BOT_NAME}</a>: задача — '
+          f'одним сообщением, напоминания приходят в чат</p>',
+    "en": f'<p class="note" style="margin:14px 0 0">Telegram bot <a href="{BOT_URL}">@{BOT_NAME}</a>: send a task '
+          f'as a message, get reminders in the chat</p>',
+}
 PRIVACY_NOTE = {
     "ru": '<p class="note" style="margin:14px 0 0">Что мы храним — <a href="/privacy">политика конфиденциальности</a></p>',
     "en": '<p class="note" style="margin:14px 0 0">What we store — <a href="/en/privacy">privacy policy</a></p>',

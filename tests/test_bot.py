@@ -19,12 +19,22 @@ def test_anyone_gets_an_account(tg):
 def test_capture_from_telegram(tg):
     bot_message("позвонить маме завтра в 10:00 @телефон")
     it = A.row("select * from items")
-    assert (it["title"], it["status"], it["context"], it["source"]) == ("позвонить маме", "next", "телефон", "telegram")
+    assert (it["title"], it["status"], it["contexts"], it["source"]) == ("позвонить маме", "next", ["телефон"], "telegram")
     method, p = tg[-2]  # последнее — подсказка после первой задачи аккаунта
     assert p["text"].startswith(f'✓ Next <a href="http://localhost:8000/i/{it["num"]}">#{it["num"]}</a>: позвонить маме')
     assert p["parse_mode"] == "HTML" and p["link_preview_options"] == {"is_disabled": True}
     assert [b["callback_data"] for b in p["reply_markup"]["inline_keyboard"][0]] == \
            [f"done:{it['id']}", f"snz:{it['id']}", f"next:{it['id']}"]
+
+
+def test_capture_several_contexts_from_telegram(tg):
+    """SERBITO-423: бот берёт все @контексты сообщения и показывает их в ответе."""
+    bot_message("оплатить счёт @телефон @Комп")
+    it = A.row("select * from items")
+    assert (it["title"], it["status"], it["contexts"]) == ("оплатить счёт", "next", ["телефон", "комп"])
+    assert tg[-2][1]["text"].endswith("оплатить счёт\n@телефон @комп")
+    bot_message("/next")
+    assert texts(tg)[-1].endswith("оплатить счёт @телефон @комп")
 
 
 def test_non_text_message(tg):

@@ -93,12 +93,12 @@ Ask, for example: “add ‘call the bank tomorrow 10am’ to my inbox”, “wh
 
 | Tool | What it does |
 | --- | --- |
-| `capture` | Captures a task, like the app and the bot: dates, `#Project` and `@context` in the text work |
+| `capture` | Captures a task, like the app and the bot: dates, `#Project` and one or more `@contexts` in the text work |
 | `list_tasks` | Lists a list (Inbox, Next, Waiting, Scheduled, Someday, Reference, Done, all); filters by project, context, text |
 | `list_projects` | Active projects with counts; marks projects without a next action |
-| `list_contexts` | Contexts with counts of open tasks |
+| `list_contexts` | Contexts with counts of open tasks (a task with two contexts counts in both) |
 | `complete_task` | Marks task #N done |
-| `move_task` | Moves task #N to a list, a project (created if missing) and/or a context |
+| `move_task` | Moves task #N to a list, a project (created if missing) and/or sets its contexts (one or several) |
 | `update_task` | Changes the title, notes or due date of task #N, or sets who it waits for (moves it to Waiting) |
 | `weekly_review` | Read-only summary: Inbox count, projects without a next action, overdue, Waiting, next 7 days, Someday count |
 

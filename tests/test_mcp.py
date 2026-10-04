@@ -188,14 +188,16 @@ def test_tools_listed(alice):
 def test_capture(alice):
     mcp, tok = alice["mcp"], alice["tok"]
     t = call(mcp, tok, "capture", text="buy milk")
-    assert (t["number"], t["title"], t["list"], t["project"], t["context"]) == (1, "buy milk", "inbox", None, None)
+    assert (t["number"], t["title"], t["list"], t["project"], t["contexts"]) == (1, "buy milk", "inbox", None, [])
     assert t["url"].endswith("/i/1")
     t = call(mcp, tok, "capture", text="call the bank tomorrow 10am #Finance @phone")
-    assert (t["title"], t["list"], t["project"], t["context"]) == ("call the bank", "next", "Finance", "phone")
+    assert (t["title"], t["list"], t["project"], t["contexts"]) == ("call the bank", "next", "Finance", ["phone"])
     assert t["due"].endswith("10:00+02:00") or t["due"].endswith("10:00+01:00")
     assert A.row("select source from items where num=2 and user_id=%s", (alice["uid"],))["source"] == "mcp"
     assert A.row("select channel from activity where user_id=%s and actions>0", (alice["uid"],))["channel"] == "mcp"
     assert "Empty task" in call_error(mcp, tok, "capture", text="   ")
+    t = call(mcp, tok, "capture", text="pay the bill @phone @Computer")  # SERBITO-423: все контексты
+    assert (t["title"], t["list"], t["contexts"]) == ("pay the bill", "next", ["phone", "computer"])
 
 
 def test_list_tasks(alice):
@@ -210,12 +212,17 @@ def test_list_tasks(alice):
     assert titles() == ["inbox one", "dentist"]
     assert titles(list="next") == ["fix the roof", "call mom"]
     assert titles(list="next", context="@home") == ["fix the roof"] == titles(list="next", context="HOME")
+    # SERBITO-423: задача с двумя контекстами — под каждым; несколько в фильтре — любой из них
+    A.capture(uid, "pay the bill @phone @computer")
+    assert titles(list="next", context="@phone") == ["call mom", "pay the bill"]
+    assert titles(list="next", context="computer") == ["pay the bill"]
+    assert titles(list="next", context="@home @computer") == ["fix the roof", "pay the bill"]
     assert titles(list="all", project="house") == ["paint the wall", "fix the roof"]
     assert titles(list="done") == ["paint the wall"]
     assert titles(list="scheduled") == ["dentist"]
     assert titles(list="all", query="ROOF") == ["fix the roof"]
     res = call(mcp, tok, "list_tasks", list="all", limit=2)
-    assert res["total"] == 5 and len(res["tasks"]) == 2
+    assert res["total"] == 6 and len(res["tasks"]) == 2
     assert "No project named" in call_error(mcp, tok, "list_tasks", project="Nope")
 
 
@@ -225,14 +232,15 @@ def test_list_projects_and_contexts(alice):
     A.capture(uid, "someday idea #Garden")
     A.capture(uid, "call mom @phone")
     A.capture(uid, "call dad @phone")
+    A.capture(uid, "pay the bill @phone @home")  # SERBITO-423: считается в обоих контекстах
     garden = A.item_by_num(uid, 2)
     A.item_patch(uid, garden["id"], {"status": "someday"})
     # Порядок — ручной порядок проектов (SERBITO-391): новые проекты встают в конец, то есть в порядке создания
     assert call(mcp, tok, "list_projects")["projects"] == [
         {"name": "House", "open_tasks": 1, "next_actions": 1, "needs_next_action": False},
         {"name": "Garden", "open_tasks": 0, "next_actions": 0, "needs_next_action": True}]
-    assert call(mcp, tok, "list_contexts")["contexts"] == [{"context": "@phone", "open_tasks": 2},
-                                                           {"context": "@home", "open_tasks": 1}]
+    assert call(mcp, tok, "list_contexts")["contexts"] == [{"context": "@phone", "open_tasks": 3},
+                                                           {"context": "@home", "open_tasks": 2}]
 
 
 def test_complete_task(alice):
@@ -250,11 +258,19 @@ def test_move_task(alice):
     t = call(mcp, tok, "move_task", number=1, project="#Vacation_2027")
     assert (t["list"], t["project"]) == ("next", "Vacation 2027")  # из Inbox с проектом — в Next, как в приложении
     t = call(mcp, tok, "move_task", number=1, context="@Laptop", list="waiting")
-    assert (t["list"], t["context"], t["project"]) == ("waiting", "laptop", "Vacation 2027")
+    assert (t["list"], t["contexts"], t["project"]) == ("waiting", ["laptop"], "Vacation 2027")
     t = call(mcp, tok, "move_task", number=1, project="vacation 2027")  # существующий — без дубля
     assert len(A.rows("select 1 from projects where user_id=%s", (uid,))) == 1
     t = call(mcp, tok, "move_task", number=1, project="", context="")
-    assert (t["project"], t["context"], t["list"]) == (None, None, "waiting")
+    assert (t["project"], t["contexts"], t["list"]) == (None, [], "waiting")
+    # SERBITO-423: несколько контекстов — списком или в старом аргументе через пробел; оба сразу — ошибка
+    assert call(mcp, tok, "move_task", number=1, contexts=["@phone", "Laptop"])["contexts"] == ["phone", "laptop"]
+    assert call(mcp, tok, "move_task", number=1, context="@home @car")["contexts"] == ["home", "car"]
+    assert call(mcp, tok, "move_task", number=1, contexts=[])["contexts"] == []
+    assert "not both" in call_error(mcp, tok, "move_task", number=1, context="@a", contexts=["b"])
+    A.capture(uid, "inbox task")
+    t = call(mcp, tok, "move_task", number=2, contexts=["phone", "home"])
+    assert (t["list"], t["contexts"]) == ("next", ["phone", "home"])  # из Inbox с контекстами — в Next
     assert call(mcp, tok, "move_task", number=1, list="someday")["list"] == "someday"
     assert "Nothing to change" in call_error(mcp, tok, "move_task", number=1)
     assert "not found" in call_error(mcp, tok, "move_task", number=9, list="next")
@@ -325,6 +341,9 @@ def test_update_task(alice):
     assert t["title"] == "write the report" and t["due"].startswith("2026-12-03")
     assert call(mcp, tok, "update_task", number=1, due="")["due"] is None
     assert "Cannot read the date" in call_error(mcp, tok, "update_task", number=1, due="someday soon")
+    # SERBITO-423: @контексты в новом заголовке — все, и заменяют прежние
+    t = call(mcp, tok, "update_task", number=1, title="write the report @Office @laptop")
+    assert (t["title"], t["contexts"]) == ("write the report", ["office", "laptop"])
     assert "Nothing to change" in call_error(mcp, tok, "update_task", number=1)
     assert "Empty title" in call_error(mcp, tok, "update_task", number=1, title="  ")
     assert "not found" in call_error(mcp, tok, "update_task", number=5, notes="x")
