@@ -1304,9 +1304,20 @@ def test_consent_buttons_equal_weight(watch, monkeypatch, viewport):
     w.check("итог")
 
 
-# Виджет Telegram встаёт iframe'ом 234×40 на место своего <script> — заглушка делает так же
-TG_WIDGET_STUB = ("(s => { const f = document.createElement('iframe'); f.title = 'Telegram'; "
-                  "f.style.cssText = 'height:40px;width:234px;border:none'; s.after(f); })(document.currentScript);")
+# Виджет Telegram встаёт iframe'ом 234×40 на место своего <script> — заглушка делает так же. Вход — как у настоящего
+# (telegram-widget.js?22) в режиме data-auth-url: к адресу возврата дописываются поля пользователя, переход —
+# location.href. data-onauth настоящий виджет компилирует через eval (GTD-2, SERBITO-316) — заглушка на нём падает
+TG_WIDGET_STUB = """(s => {
+  const f = document.createElement('iframe'); f.title = 'Telegram';
+  f.style.cssText = 'height:40px;width:234px;border:none'; s.after(f);
+  if (s.hasAttribute('data-onauth')) throw new Error('data-onauth: the real widget runs it through eval');
+  const a = document.createElement('A'); a.href = s.getAttribute('data-auth-url');
+  window.__tgAuth = user => {
+    let u = a.href; u += (u.indexOf('?') >= 0) ? '&' : '?';
+    u += Object.keys(user).map(k => k + '=' + encodeURIComponent(user[k])).join('&');
+    location.href = u;
+  };
+})(document.currentScript);"""
 WIDGETS = ("https://accounts.google.com/", "https://telegram.org/")
 
 
@@ -1340,6 +1351,84 @@ def test_signin_widgets_load_when_visible(prod_browser, server, monkeypatch):
         # (763 vs 761.8). Сдвиг, который ловим, — высота виджета, это десятки пикселей
         assert abs(w.page.evaluate(below) - y) <= 2, (w.page.evaluate(below), y)
         w.check("итог")
+    finally:
+        w.close()
+
+
+def tg_prod(prod_browser, server, monkeypatch, lang="ru"):
+    """Прод-хост с ботом и заглушкой виджета Telegram: только там SPA ставит виджет."""
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    base = "http://gtd.serbito.rs:" + server.rsplit(":", 1)[1]
+    return Watch(prod_browser, base, lang, stubs={"https://telegram.org/js/telegram-widget.js": TG_WIDGET_STUB,
+                                                  "https://static.cloudflareinsights.com/beacon.min.js": ""})
+
+
+def tg_widget_ready(w, scope, what):
+    """Ждём виджет на месте и отдаём его адрес возврата (data-auth-url)."""
+    w.page.evaluate(f"document.querySelector('{scope} .tgw, {scope} .tgfb')?.scrollIntoView({{block: 'center'}})")
+    w.wait(f"{scope} .tgw iframe", what)
+    return w.page.evaluate(f"document.querySelector('{scope} .tgw script').dataset.authUrl")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_telegram_widget_redirect_returns_to_authorize(prod_browser, server, monkeypatch, lang):
+    """SERBITO-316: виджет Telegram отвечает переходом по data-auth-url, а не колбэком через eval. Гость открыл
+    /authorize (SERBITO-375) → вход → виджет → фрагмент #tgw?… на той же странице → POST с проверкой подписи →
+    сессия → SPA возвращает на экран согласия. Данные входа в адресе не остаются."""
+    from urllib.parse import urlencode
+    import httpx2
+    from test_tg_widget import signed
+    w = tg_prod(prod_browser, server, monkeypatch, lang)
+    try:
+        callback = server + "/about"
+        cid = httpx2.post(server + "/register", json={"redirect_uris": [callback], "client_name": "Claude"}).json()["client_id"]
+        w.goto("/authorize?" + urlencode({"response_type": "code", "client_id": cid, "redirect_uri": callback,
+                                          "state": "s1", "code_challenge": "c" * 43, "code_challenge_method": "S256"}))
+        w.wait("#oauth-signin", f"[{lang}] OAuth: просьба войти")
+        w.page.click("#oauth-signin")
+        back = tg_widget_ready(w, "#signin", f"[{lang}] виджет Telegram")
+        assert back.startswith(w.base + "/") and "#tgw?_s=" in back and "_l=" not in back, back
+        with w.page.expect_response(lambda r: r.url.endswith("/api/auth/tg/widget")) as resp:
+            w.page.evaluate("u => __tgAuth(u)", signed(id=4242, first_name="Tom"))
+        assert resp.value.ok and resp.value.request.post_data_json["auth"]["id"] == "4242"
+        w.wait("form#consent", f"[{lang}] OAuth: экран согласия после входа через виджет")
+        assert A.row("select tg_id, name from users") == {"tg_id": 4242, "name": "Tom"}
+        assert "#" not in w.page.url and "4242" not in w.page.url
+        w.check(f"[{lang}] виджет Telegram → /authorize")
+    finally:
+        w.close()
+
+
+def test_telegram_widget_redirect_links_and_refuses_foreign_link(prod_browser, server, monkeypatch):
+    """SERBITO-316: в «Аккаунте» виджет привязывает Telegram к вошедшему (адрес возврата несёт _l=1). Ссылка
+    с чужой подписанной выдачей виджета, но без секрета этой вкладки, ничего не привязывает и даже не уходит
+    на сервер — Telegram злоумышленника к чужому аккаунту так не привязать."""
+    from urllib.parse import urlencode
+    from test_tg_widget import signed
+    w = tg_prod(prod_browser, server, monkeypatch)
+    try:
+        uid = A.run("insert into users(name,created,lang) values('Smoke',%s,'ru') returning id", (int(time.time()),))
+        w.goto("/dev-login")
+        w.wait('nav > a.on[data-view="inbox"]', "вход")
+        w.goto("/account")
+        back = tg_widget_ready(w, "main", "account: виджет Telegram")
+        assert "#tgw?_s=" in back and back.endswith("&_l=1"), back
+        with w.page.expect_response(lambda r: r.url.endswith("/api/auth/tg/widget")):
+            w.page.evaluate("u => __tgAuth(u)", signed(id=4242))
+        w.wait('main .rv:has(h3:text-is("Telegram")):has-text("Привязан")', "account: Telegram привязан")
+        assert A.row("select tg_id from users where id=%s", (uid,))["tg_id"] == 4242
+        assert A.row("select count(*) n from users")["n"] == 1
+
+        A.run("update users set tg_id=null where id=%s", (uid,))
+        asked = []
+        w.page.on("request", lambda r: "/api/auth/tg/widget" in r.url and asked.append(r.url))
+        w.goto("/about")  # ссылка открывается заново, а не переходом внутри «Аккаунта»
+        w.goto("/account#tgw?" + urlencode({"_s": "guess", "_l": 1, **signed(id=5151)}))
+        w.wait('main #authmsg:has-text("Telegram не подтвердил вход")', "чужая ссылка: отказ")
+        assert asked == [] and A.row("select tg_id from users where id=%s", (uid,))["tg_id"] is None
+        assert w.page.evaluate("location.hash") == ""
+        w.check("привязка и чужая ссылка")
     finally:
         w.close()
 
