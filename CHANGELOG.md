@@ -16,6 +16,16 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+- A task can have several contexts: "pay the bill @phone @computer" shows the task under both in Next. In the task card, add and remove contexts as chips.
+  - RU: У задачи может быть несколько контекстов: «оплатить счёт @телефон @комп» — задача видна в Next под обоими. В карточке задачи контексты добавляются и убираются чипами.
+- The sign-in block names the Telegram bot @gtdsrbot with a link and one line on what it does.
+  - RU: В блоке входа виден Telegram-бот @gtdsrbot: ссылка и строка о том, что он умеет.
+
+### Changed
+- The Telegram bot is easier to find in Telegram search: its name and description now contain the words "GTD", "tasks", "todo" and "задачи".
+  - RU: Telegram-бота проще найти в поиске Telegram: в его имени и описании теперь есть слова «GTD», «задачи», «todo» и «tasks».
+
 ## [0.32.0] - 2026-10-04
 
 ### Security
