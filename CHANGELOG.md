@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-10-04
+
 ### Added
 - A task can have several contexts: "pay the bill @phone @computer" shows the task under both in Next. In the task card, add and remove contexts as chips.
   - RU: У задачи может быть несколько контекстов: «оплатить счёт @телефон @комп» — задача видна в Next под обоими. В карточке задачи контексты добавляются и убираются чипами.
@@ -360,7 +362,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/alxndr-bnd/gtd/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/alxndr-bnd/gtd/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/alxndr-bnd/gtd/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/alxndr-bnd/gtd/compare/v0.29.0...v0.30.0
