@@ -325,6 +325,25 @@ def test_telegram_fallback_deep_link(watch, monkeypatch, lang):
     w.check(f"[{lang}] итог")
 
 
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_login_screen_names_the_bot(watch, monkeypatch, lang):
+    """SERBITO-422: экран входа приложения (гость открыл раздел по адресу, не лендинг) называет бота ссылкой t.me
+    и одной строкой о том, что он делает. Имя — из /api/config; бот выключен — строки нет."""
+    monkeypatch.setattr(A, "TOKEN", "smoke-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
+    w = watch(lang)
+    w.goto("/en/next" if lang == "en" else "/next")
+    link = '.login .botline a[href="https://t.me/gtd_smoke_bot"]'
+    w.wait(link, f"[{lang}] строка о боте")
+    assert w.page.inner_text(link) == "@gtd_smoke_bot" and w.page.get_attribute(link, "target") == "_blank"
+    assert ("напоминания" if lang == "ru" else "reminders") in w.page.inner_text(".login .botline")
+    monkeypatch.setattr(A, "TOKEN", "")
+    w.page.reload()
+    w.wait(".login #authmsg", f"[{lang}] вход без бота")
+    assert not w.page.locator(".login .botline").count()
+    w.check(f"[{lang}] итог")
+
+
 def test_sign_out_erases_drafts(watch):
     """GTD-14: несохранённые черновики (поле захвата, карточка) живут в localStorage — после выхода их там нет,
     следующий человек за этим компьютером их не увидит. Прочее (язык, согласие cookie) — остаётся."""

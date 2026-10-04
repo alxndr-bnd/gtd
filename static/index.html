@@ -100,6 +100,7 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .row{display:flex;gap:8px;justify-content:space-between;margin-top:16px}
 .login{max-width:420px;margin:12vh auto;text-align:center;padding:0 16px}
 .login .cap{margin:0}
+.login .botline{margin:16px 0 0} .login .botline a{color:var(--ac)}
 .gbtn{display:flex;min-height:44px} .login .gbtn{justify-content:center}
 /* Кнопки входа (SERBITO-354, G11): все во всю ширину блока, «Войти по коду» и Telegram — один заметный вид */
 #signin .tgfb,.login .tgfb{width:100%;min-height:44px}
@@ -232,6 +233,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "cap_add": "Добавить в Inbox", "cap_btn": "Добавить", "cap_project": "Добавить задачу в #{p}",
   "task_missing": "Задача #{n} не найдена",
   "login_page": "Вход", "login_hint": "Вход или регистрация — аккаунт создастся сам",
+  "bot_line": "Telegram-бот {link}: задача — одним сообщением, напоминания приходят в чат",
   "get_code": "Войти по коду", "tg_signin": "Войти через Telegram", "or": "или", "no_methods": "Способы входа не настроены.",
   "error": "Ошибка, попробуй ещё раз",
   "merge_yes": "🔗 Объединить в один", "merge_no": "Не сейчас",
@@ -345,6 +347,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "cap_add": "Add to Inbox", "cap_btn": "Add", "cap_project": "Add a task to #{p}",
   "task_missing": "Task #{n} not found",
   "login_page": "Sign in", "login_hint": "Sign in or sign up — the account is created automatically",
+  "bot_line": "Telegram bot {link}: send a task as a message, get reminders in the chat",
   "get_code": "Sign in with a code", "tg_signin": "Sign in with Telegram", "or": "or", "no_methods": "No sign-in methods are set up.",
   "error": "Something went wrong, try again",
   "merge_yes": "🔗 Merge into one", "merge_no": "Not now",
@@ -605,7 +608,8 @@ async function loginScreen(){
   // Гостю сервер отдал лендинг (текст — в HTML для поисковиков): кнопки встают в его блок входа
   if($('#signin')){ $('#signin').innerHTML = buttons; lazyWidgets($('#signin')); }
   else { document.title = 'GTD'; $('#root').innerHTML = `<div class="login"><h1 style="display:flex;align-items:center;gap:10px"><img src="/favicon.svg" alt="" width="32" height="32">GTD</h1><p class="hint" style="margin:0 0 20px">${t('login_hint')}</p>
-    ${buttons}</div>`; mountGoogle(); mountTelegram(); }
+    ${buttons}${c.bot ? `<p class="hint botline">${t('bot_line', {link:`<a href="https://t.me/${encodeURIComponent(c.bot)}" target="_blank"
+      rel="noopener">@${esc(c.bot)}</a>`})}</p>` : ''}</div>`; mountGoogle(); mountTelegram(); }  // строка о боте (SERBITO-422) — как на лендинге
   gaPage();
 }
 

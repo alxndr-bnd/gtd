@@ -10,7 +10,9 @@ import re
 
 import changelog
 
-BOT_URL = "https://t.me/gtdsrbot"
+# Публичный бот gtd.serbito.rs. Имя видно на сайте — так бота находят и в Telegram (SERBITO-422)
+BOT_NAME = "gtdsrbot"
+BOT_URL = f"https://t.me/{BOT_NAME}"
 GTD_SITE = "https://gettingthingsdone.com"
 NOHANDOFF_URL = "https://www.linkedin.com/company/nohandoff/"
 # Код открыт под MIT (SERBITO-291): ссылка — в подвале, на лендинге и на /about
@@ -409,7 +411,8 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
     return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{PRIVACY_NOTE[lang]}</div>'
+            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{BOT_NOTE[lang]}'
+            f'{PRIVACY_NOTE[lang]}</div>'
             f'</div>{LANDING_STEPS[lang]}</main>{footer(lang, consent)}</div>')
 
 
@@ -550,6 +553,14 @@ T["en"].update(privacy="Privacy", privacy_title="Privacy policy — GTD online",
                privacy_desc="What data GTD online stores, what analytics receive, how to give or withdraw "
                             "cookie consent, who processes it and how to delete your account.")
 # Ссылка на политику под кнопками входа на лендинге
+# Строка о боте в блоке входа на лендинге (SERBITO-422): имя-ссылка и что он делает. Тот же текст — на экране
+# входа в приложении (bot_line в index.html), там имя бота — из /api/config
+BOT_NOTE = {
+    "ru": f'<p class="note" style="margin:14px 0 0">Telegram-бот <a href="{BOT_URL}">@{BOT_NAME}</a>: задача — '
+          f'одним сообщением, напоминания приходят в чат</p>',
+    "en": f'<p class="note" style="margin:14px 0 0">Telegram bot <a href="{BOT_URL}">@{BOT_NAME}</a>: send a task '
+          f'as a message, get reminders in the chat</p>',
+}
 PRIVACY_NOTE = {
     "ru": '<p class="note" style="margin:14px 0 0">Что мы храним — <a href="/privacy">политика конфиденциальности</a></p>',
     "en": '<p class="note" style="margin:14px 0 0">What we store — <a href="/en/privacy">privacy policy</a></p>',
