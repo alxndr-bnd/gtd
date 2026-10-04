@@ -37,7 +37,7 @@ g projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$RUNTIME" 
   --role roles/cloudsql.client --condition=None >/dev/null
 
 echo "==> Секреты"
-for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn gtd-cron-secret; do
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn; do
   g secrets describe "$s" >/dev/null 2>&1 || g secrets create "$s" --replication-policy=automatic >/dev/null
 done
 has_value() { g secrets versions list "$1" --format='value(state)' | grep -qi enabled; }
@@ -64,8 +64,7 @@ if ! has_value gtd-sentry-dsn; then
   [[ -n "$dsn" ]] || { echo "Без DSN деплой не пройдёт: секрет подключён в workflow" >&2; exit 1; }
   put_value gtd-sentry-dsn "$dsn"
 fi
-has_value gtd-cron-secret || put_value gtd-cron-secret "$(openssl rand -hex 32)"
-for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn gtd-cron-secret GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
   g secrets add-iam-policy-binding "$s" --member "serviceAccount:$RUNTIME" \
     --role roles/secretmanager.secretAccessor >/dev/null
 done

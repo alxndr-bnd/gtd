@@ -34,7 +34,7 @@ env:
   DEPLOYER_SA: gtd-deployer@serbito.iam.gserviceaccount.com
   RUNTIME_SA: gtd-run@serbito.iam.gserviceaccount.com
   CLOUD_SQL: serbito:europe-west1:serbitodb
-  SECRETS: DATABASE_URL=gtd-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,SMTP_PASSWORD=EMAIL_HOST_PASSWORD:latest,SENTRY_DSN=gtd-sentry-dsn:latest,CRON_SECRET=gtd-cron-secret:latest
+  SECRETS: DATABASE_URL=gtd-database-url:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,SMTP_PASSWORD=EMAIL_HOST_PASSWORD:latest,SENTRY_DSN=gtd-sentry-dsn:latest
 
 jobs:
   deploy:

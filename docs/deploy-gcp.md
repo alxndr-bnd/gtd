@@ -50,8 +50,8 @@ those of the tag. A refresh and a release share one concurrency group and never 
 - The bot runs on a **webhook** (`/tg/webhook`); the secret header is derived from the bot token.
 - Reminders are woken by **Cloud Scheduler** `gtd-reminders` once a minute:
   `POST /tasks/reminders` with a Google OIDC ID token of `scheduler-invoker@serbito.iam.gserviceaccount.com`
-  (audience `https://gtd.serbito.rs`, SERBITO-363). The legacy `X-Cron-Secret` still works while
-  `SCHEDULER_STATIC_TOKEN_ENABLED` is not `0` and `CRON_SECRET` is set.
+  (audience `https://gtd.serbito.rs`, SERBITO-363). Production does not set `CRON_SECRET` (SERBITO-419),
+  so only the ID token works there. Self-hosted installs can still use `X-Cron-Secret` (`docs/self-host.md`).
 - No background loops, so `min-instances=0` and CPU only during requests: without traffic the service sleeps.
 - Locally (http `BASE_URL`) the bot uses long polling and refuses to start if the bot already has the
   production webhook set, so it never steals updates.
@@ -66,7 +66,7 @@ Configuration:
   the env file. Added from the tag: `SENTRY_RELEASE` (`v0.3.0` → `gtd@0.3.0`) and `APP_VERSION`
   (`0.3.0`) — the version shown in the footer, the app menu and `/changes`.
 - Secrets — Secret Manager via `--set-secrets` in the workflow: `gtd-database-url`, `GOOGLE_CLIENT_ID`,
-  `EMAIL_HOST_PASSWORD` (→ `SMTP_PASSWORD`), `gtd-sentry-dsn`, `gtd-cron-secret`, and
+  `EMAIL_HOST_PASSWORD` (→ `SMTP_PASSWORD`), `gtd-sentry-dsn`, and
   `gtd-telegram-bot-token` (optional: while the secret has no enabled version, the service deploys without the bot).
 
 ## Database
@@ -112,7 +112,7 @@ on the free plan the 300 emails/day limit covers both projects.
 1. @BotFather → `/newbot` → token.
 2. `scripts/setup_gcp.sh` — Artifact Registry `gtd`, service accounts `gtd-deployer` / `gtd-run`, roles,
    secrets `gtd-database-url`, `gtd-telegram-bot-token` (asks for the token; takes the DB password from
-   `DATABASE_URL_PROD` in `.env`, otherwise asks), `gtd-sentry-dsn`, `gtd-cron-secret`, access to the shared `GOOGLE_CLIENT_ID` /
+   `DATABASE_URL_PROD` in `.env`, otherwise asks), `gtd-sentry-dsn`, access to the shared `GOOGLE_CLIENT_ID` /
    `EMAIL_HOST_PASSWORD`, the repo in the WIF condition, and the Cloud Scheduler job `gtd-reminders`.
    Idempotent.
 3. Google Cloud Console → APIs & Services → Credentials → the serbito OAuth client (the one whose ID is in
