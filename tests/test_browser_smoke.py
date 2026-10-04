@@ -476,9 +476,9 @@ def test_card_title_suggestions(watch):
     assert title.input_value() == "Позвонить маме #Проект_Альфа @home "
     w.page.click('#ef button.pri')
     w.wait(f'main .it[data-id="{ids["inbox"]}"] .meta:has-text("@home")', "сохранено")
-    it = A.row("select i.title, i.context, p.title project from items i join projects p on p.id=i.project_id "
+    it = A.row("select i.title, i.contexts, p.title project from items i join projects p on p.id=i.project_id "
                "where i.id=%s", (ids["inbox"],))
-    assert (it["title"], it["context"], it["project"]) == ("Позвонить маме", "home", "Проект Альфа")
+    assert (it["title"], it["contexts"], it["project"]) == ("Позвонить маме", ["home"], "Проект Альфа")
     w.check("итог")
 
 
@@ -1112,7 +1112,8 @@ def test_task_dialog_labels_and_focus_return(watch):
     w.page.keyboard.press("Enter")
     w.wait("#dlg[open] #ef", "карточка с клавиатуры")
     assert w.page.get_by_role("dialog", name="Задача #1").count() == 1
-    fields = w.page.eval_on_selector_all("#ef input, #ef select, #ef textarea",
+    # Скрытое поле contexts — не поле ввода: контексты вводят в «добавить» и убирают чипами (SERBITO-423)
+    fields = w.page.eval_on_selector_all("#ef input:not([type=hidden]), #ef select, #ef textarea",
                                          "els => els.map(x => [x.name, x.labels[0]?.textContent.trim() || ''])")
     assert len(fields) == 7 and all(label for _, label in fields), fields  # 7-е — имя нового проекта (SERBITO-354)
     w.page.keyboard.press("Escape")
@@ -1931,6 +1932,52 @@ def test_onboarding_bot_link(watch, monkeypatch):
     w.check("итог")
 
 
+@pytest.mark.parametrize("phone", [False, True], ids=["desktop", "phone"])
+def test_task_with_several_contexts(watch, phone):
+    """SERBITO-423: «@a @b» в поле захвата даёт задаче оба контекста; в Next она видна под каждым из них; в карточке
+    контексты — чипы: крестик убирает, набранное слово по Enter добавляет, не закрывая карточку."""
+    w = watch(viewport=PHONE, touch=True) if phone else watch()
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden,dnd_tip_seen) values(0,'Smoke',%s,'ru',"
+                "true,true) returning id", (int(time.time()),))
+    home = A.capture(uid, "Полить цветы @дом")["id"]
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    w.page.fill("#cap", "Оплатить счёт @телефон @Комп")
+    with saves(w, "захват", "POST", "/api/capture"):
+        w.page.press("#cap", "Enter")
+    it = A.row("select id, title, status, contexts from items where user_id=%s and id<>%s", (uid, home))
+    assert (it["title"], it["status"], it["contexts"]) == ("Оплатить счёт", "next", ["телефон", "комп"])
+    bill = f'main .it[data-id="{it["id"]}"]'
+
+    w.goto("/next")
+    w.wait(f'{bill} .meta:has-text("@телефон"):has-text("@комп")', "оба контекста на карточке")
+    for ctx, shown in (("телефон", True), ("комп", True), ("дом", False)):
+        w.page.click(f'main .chip[data-ctx="{ctx}"]')
+        w.wait(f'main .chip.on[data-ctx="{ctx}"]', f"фильтр @{ctx}")
+        assert w.page.locator(bill).count() == shown, f"@{ctx}: задача {'не ' if shown else ''}видна"
+    w.page.click('main .chip[data-ctx=""]')
+    w.wait('main .chip.on[data-ctx=""]', "фильтр снят")
+
+    w.page.click(f"{bill} .t")
+    w.wait("#dlg[open] #ef .cxl .cxc", "карточка с чипами")
+    chips = lambda: w.page.eval_on_selector_all("#ef .cxc button", "els => els.map(e => e.dataset.rm)")  # noqa: E731
+    assert chips() == ["телефон", "комп"]
+    w.page.click('#ef .cxc button[data-rm="комп"]')
+    assert w.page.locator("#ef .cxc").count() == 1
+    w.page.fill("#ef-context", "@Дом")
+    w.page.press("#ef-context", "Enter")  # добавляет чип, а не сохраняет карточку
+    assert w.page.locator("#dlg[open]").count() and w.page.input_value("#ef-context") == ""
+    assert chips() == ["телефон", "дом"]
+    with saves(w, "сохранение карточки", "PATCH", f"/api/items/{it['id']}"):
+        w.page.click("#ef button.pri")
+    assert A.row("select contexts from items where id=%s", (it["id"],))["contexts"] == ["телефон", "дом"]
+    w.wait(f'{bill} .meta:has-text("@дом")', "новые контексты в списке")
+    w.page.click('main .chip[data-ctx="дом"]')
+    w.wait('main .chip.on[data-ctx="дом"]', "фильтр @дом")
+    assert w.page.locator(f'{bill}, main .it[data-id="{home}"]').count() == 2, "под @дом — обе задачи"
+    w.check("итог")
+
+
 def test_next_offers_context_chips(watch):
     """G9: «→ Next» из Inbox не спрашивает контекст, но тост предлагает уже знакомые @контексты — один тап, и у задачи
     есть контекст для фильтра в Next."""
@@ -1941,8 +1988,8 @@ def test_next_offers_context_chips(watch):
     w.wait(chip, "чип контекста в тосте")
     with saves(w, "контекст из тоста", "PATCH", f"/api/items/{ids['inbox']}"):
         w.page.click(chip)
-    assert A.row("select context, status from items where id=%s", (ids["inbox"],)) \
-        == {"context": "home", "status": "next"}, "контекст из тоста"
+    assert A.row("select contexts, status from items where id=%s", (ids["inbox"],)) \
+        == {"contexts": ["home"], "status": "next"}, "контекст из тоста"
     w.wait('#toast .tx:has-text("@home")', "тост с контекстом")  # новый тост рисуется после ответа, не вместе с ним
     w.check("итог")
 

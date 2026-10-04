@@ -104,10 +104,13 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
 - **Isolation** — tools take `uid` from the token, never from arguments; tasks are addressed by the user's own
   number `#N`. Tools: `capture`, `list_tasks`, `list_projects`, `list_contexts`, `complete_task`, `move_task`,
   `update_task`, `weekly_review`.
-- **`update_task`** — title (parsed like the card: `#Project`, `@context`, a date), notes, due date (ISO 8601 or
-  capture words; date only → 09:00; an explicit `due` wins over a date in the new title), `waiting_for`. A task has
-  no “waiting for” field: `waiting_for` moves it to Waiting and writes `Waiting for: …` / `Ждём: …` (account
-  language) as the first line of the notes; `""` removes that line.
+- **Contexts** (SERBITO-423) — a task has a list of contexts (`items.contexts text[]`). `move_task` takes `contexts`
+  (a list) or the old `context` (a string, may hold several: `"@phone @computer"`); both replace the whole list.
+  The `list_tasks` context filter matches any of the task's contexts.
+- **`update_task`** — title (parsed like the card: `#Project`, `@contexts` — they replace the old ones, a date),
+  notes, due date (ISO 8601 or capture words; date only → 09:00; an explicit `due` wins over a date in the new
+  title), `waiting_for`. A task has no “waiting for” field: `waiting_for` moves it to Waiting and writes
+  `Waiting for: …` / `Ждём: …` (account language) as the first line of the notes; `""` removes that line.
 - **`weekly_review`** — read-only: Inbox count, projects without a next action, overdue (open tasks with a past
   date), Waiting (oldest first, `waiting_over_a_week` by creation date — there is no “moved to Waiting” time),
   next 7 days, Someday count.

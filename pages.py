@@ -435,6 +435,8 @@ ABOUT = {
 <ul class="ex">
 <li><q>позвонить маме завтра в 10:00</q> — задача в Inbox и напоминание завтра в 10:00.</li>
 <li><q>отчёт #Работа @комп</q> — сразу в Next, в проект «Работа», контекст @комп.</li>
+<li><q>оплатить счёт @телефон @комп</q> — у задачи может быть несколько контекстов:
+она видна в Next и под @телефон, и под @комп.</li>
 <li>Сроки понимаются и так: <q>через 2 часа</q>, <q>в пятницу</q>, <q>24.10 12:00</q>.</li>
 </ul>
 <h2>Telegram-бот</h2>
@@ -470,6 +472,8 @@ then decide what it is and what the next concrete step is.</p>
 <ul class="ex">
 <li><q>call mom tomorrow at 10:00</q> — a task in the Inbox and a reminder tomorrow at 10:00.</li>
 <li><q>report #Work @computer</q> — straight to Next, in the “Work” project, with the @computer context.</li>
+<li><q>pay the bill @phone @computer</q> — a task can have several contexts:
+in Next it shows under both @phone and @computer.</li>
 <li>Times and dates are understood too: <q>in 2 hours</q>, <q>tomorrow 10am</q>, <q>next monday</q>, <q>24 oct 12:00</q>.</li>
 <li>Russian works too: <q>позвонить маме завтра в 10:00</q>, <q>отчёт #Работа @комп</q>.</li>
 </ul>

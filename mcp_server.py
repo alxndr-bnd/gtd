@@ -48,9 +48,10 @@ server = MCPServer(
     title="GTD",
     instructions=(
         "GTD task manager (Getting Things Done). Lists: inbox (unprocessed), next (next actions), waiting, someday, "
-        "reference, done, trash. A task belongs to at most one project and one @context. Refer to tasks by their "
+        "reference, done, trash. A task belongs to at most one project and can have several @contexts. Refer to tasks "
+        "by their "
         "number (#N), which the user also sees in the app. Capture new thoughts with `capture`; it understands "
-        "dates (\"tomorrow 10am\", \"завтра в 10:00\"), #Project and @context in the text."),
+        "dates (\"tomorrow 10am\", \"завтра в 10:00\"), #Project and one or more @contexts in the text."),
     website_url=A.BASE_URL,
 )
 # Защита от DNS rebinding — для серверов на localhost, которые доверяют сети. Здесь каждый запрос несёт Bearer-токен,
@@ -126,7 +127,7 @@ def iso(ts) -> str | None:
 
 def task_out(it: dict) -> dict:
     return {"number": it["num"], "title": it["title"], "list": it["status"], "project": it.get("project"),
-            "context": it["context"], "due": iso(it["remind_at"]), "notes": it["notes"] or "",
+            "contexts": it["contexts"], "due": iso(it["remind_at"]), "notes": it["notes"] or "",
             "created": iso(it["created"]), "completed": iso(it["completed_at"]), "url": A.item_url(it["num"])}
 
 
@@ -143,8 +144,9 @@ def project_named(uid: int, name: str) -> dict | None:
                  if p["title"].casefold() == key), None)
 
 
-def context_name(value: str) -> str:
-    return value.strip().lstrip("@").lower()
+def context_names(value: str | list[str]) -> list[str]:
+    """«@phone @computer», «phone, computer» или список -> ["phone", "computer"] (SERBITO-423)."""
+    return A.norm_contexts(value)
 
 
 def patch(uid: int, it: dict, body: dict) -> dict:
@@ -167,7 +169,8 @@ def list_tasks(
                     Field(description="Which list. scheduled — open tasks with a date; all — every list "
                                       "except trash")] = "inbox",
     project: Annotated[str | None, Field(description="Only this project (name, case-insensitive)")] = None,
-    context: Annotated[str | None, Field(description="Only this context, e.g. \"@phone\" or \"phone\"")] = None,
+    context: Annotated[str | None, Field(description="Only this context, e.g. \"@phone\" or \"phone\"; several "
+                                                     "(\"@phone @computer\") — tasks with any of them")] = None,
     query: Annotated[str | None, Field(description="Only tasks whose title or notes contain this text")] = None,
     limit: Annotated[int, Field(ge=1, le=LIST_LIMIT)] = 50,
 ) -> dict[str, Any]:
@@ -193,9 +196,9 @@ def list_tasks(
             raise ToolError(f"No project named {project!r}. Call list_projects to see them")
         where.append("i.project_id=%s")
         args.append(p["id"])
-    if context:
-        where.append("i.context=%s")
-        args.append(context_name(context))
+    if context:  # задача с несколькими контекстами подходит под любой из них
+        where.append("i.contexts && %s::text[]")
+        args.append(context_names(context))
     found = A.rows(f"{A.ITEM_SQL} where {' and '.join(where)} order by {order}", args)
     if query:  # без учёта регистра — в Python: lower() в Postgres для кириллицы зависит от локали базы
         q = query.casefold()
@@ -220,11 +223,12 @@ def list_projects(ctx: Context) -> dict[str, Any]:
 
 @server.tool(annotations=READ)
 def list_contexts(ctx: Context) -> dict[str, Any]:
-    """The user's @contexts (where or with what a task can be done) with counts of open tasks, most used first."""
+    """The user's @contexts (where or with what a task can be done) with counts of open tasks, most used first.
+    A task with several contexts counts once in each of them."""
     uid = owner(ctx)
-    cs = A.rows("select context, count(*) n from items where user_id=%s and context is not null "
-                "and status not in ('done','trash') group by context order by n desc, context", (uid,))
-    return {"contexts": [{"context": "@" + c["context"], "open_tasks": c["n"]} for c in cs]}
+    cs = A.rows("select c, count(*) n from items i, unnest(i.contexts) c where i.user_id=%s "
+                "and i.status not in ('done','trash') group by c order by n desc, c", (uid,))
+    return {"contexts": [{"context": "@" + c["c"], "open_tasks": c["n"]} for c in cs]}
 
 
 @server.tool(annotations=WRITE)
@@ -232,10 +236,11 @@ def capture(
     ctx: Context,
     text: Annotated[str, Field(min_length=1, max_length=2000,
                                description="The task as the user would type it, e.g. \"call the bank tomorrow "
-                                           "10am #Finance @phone\"")],
+                                           "10am #Finance @phone @computer\"")],
 ) -> dict[str, Any]:
     """Capture a task into the Inbox, the same way as the app and the Telegram bot do. Understands a date or time
-    (sets a reminder), #Project and @context in the text; with a project or a context the task goes to Next."""
+    (sets a reminder), #Project and @contexts (several are fine) in the text; with a project or a context the task
+    goes to Next."""
     uid = owner(ctx)
     if not text.strip():
         raise ToolError("Empty task")
@@ -259,10 +264,13 @@ def move_task(
                     Field(description="Move to this list")] = None,
     project: Annotated[str | None, Field(description="Put into this project (created if missing); "
                                                      "\"\" — remove from its project")] = None,
-    context: Annotated[str | None, Field(description="Set this @context; \"\" — remove the context")] = None,
+    context: Annotated[str | None, Field(description="Set this @context (or several: \"@phone @computer\"), "
+                                                     "replacing the old ones; \"\" — remove all contexts")] = None,
+    contexts: Annotated[list[str] | None, Field(description="Set exactly these @contexts, e.g. [\"phone\", "
+                                                            "\"computer\"]; [] — remove all")] = None,
 ) -> dict[str, Any]:
-    """Move a task to another list, project or @context. An Inbox task given a project or a context goes to Next,
-    as in the app."""
+    """Move a task to another list, project or @contexts. An Inbox task given a project or a context goes to Next,
+    as in the app. To add a context, pass the task's current contexts plus the new one."""
     uid = owner(ctx)
     it = task_by_number(uid, number)
     body: dict[str, Any] = {}
@@ -271,11 +279,13 @@ def move_task(
     if project is not None:
         name = project.strip().lstrip("#").replace("_", " ").strip()
         body["project_id"] = A.project_by_title(uid, name) if name else None
-    if context is not None:
-        body["context"] = context_name(context) or None
+    if context is not None and contexts is not None:
+        raise ToolError("Give context or contexts, not both")
+    if context is not None or contexts is not None:
+        body["contexts"] = context_names(contexts if contexts is not None else context)
     if not body:
-        raise ToolError("Nothing to change: give list, project or context")
-    if list is None and it["status"] == "inbox" and (body.get("project_id") or body.get("context")):
+        raise ToolError("Nothing to change: give list, project or contexts")
+    if list is None and it["status"] == "inbox" and (body.get("project_id") or body.get("contexts")):
         body["status"] = "next"
     return task_out(patch(uid, it, body))
 
@@ -313,8 +323,9 @@ def waiting_notes(uid: int, notes: str, who: str) -> str:
 def update_task(
     ctx: Context,
     number: Annotated[int, Field(description="Task number, #N")],
-    title: Annotated[str | None, Field(max_length=500, description="New title. Like in the app, #Project, @context "
-                                                                 "and a date in the title are applied too")] = None,
+    title: Annotated[str | None, Field(max_length=500, description="New title. Like in the app, #Project, @contexts "
+                                                                 "and a date in the title are applied too; "
+                                                                 "@contexts there replace the task's contexts")] = None,
     notes: Annotated[str | None, Field(max_length=10000, description="New notes (replace the old ones); "
                                                                     "\"\" — clear")] = None,
     due: Annotated[str | None, Field(description="Due date and reminder: ISO 8601 (2026-10-24, 2026-10-24T15:30) or "
@@ -327,7 +338,7 @@ def update_task(
                                                                          "remove that line")] = None,
 ) -> dict[str, Any]:
     """Change a task: title, notes, due date (reminder) or who it is waiting for. Only the given fields change.
-    Use move_task for the list, project or context, and complete_task to finish it."""
+    Use move_task for the list, project or contexts, and complete_task to finish it."""
     uid = owner(ctx)
     it = task_by_number(uid, number)
     body: dict[str, Any] = {}

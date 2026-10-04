@@ -59,6 +59,11 @@ button.sm:hover{color:var(--tx)}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .chip{padding:3px 10px;border:1px solid var(--bd);border-radius:99px;font-size:13px;cursor:pointer;color:var(--mut)}
 .chip.on{background:var(--ac);color:var(--on-ac);border-color:var(--ac)}
+/* Контексты в карточке задачи (SERBITO-423): чипы с крестиком над полем «добавить» */
+.cxl{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px} .cxl:empty{display:none}
+.cxc{display:inline-flex;align-items:center;padding:0 0 0 10px;border:1px solid var(--bd);border-radius:99px;font-size:13px}
+.cxc button{border:0;background:none;padding:0 8px;min-width:28px;min-height:28px;color:var(--mut);line-height:1}
+.cxc button:hover{color:var(--tx)}
 .empty{text-align:center;color:var(--mut);padding:40px 0}
 .empty .ex{margin-top:6px;font-size:13px}
 /* Чек-лист первого запуска — карточка над Inbox; с ней поле захвата не по центру экрана, а сразу под ней */
@@ -296,8 +301,8 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
     "done": "Готово", "trash": "Корзина"},
   "moved": "«{title}» → {to}", "deleted": "«{title}» удалена", "undo": "Отменить",
-  "f_title": "Название", "f_notes": "Заметки", "f_list": "Список", "f_project": "Проект", "f_context": "Контекст (@)",
-  "f_context_ph": "работа, дом, телефон…", "f_remind": "Напомнить",
+  "f_title": "Название", "f_notes": "Заметки", "f_list": "Список", "f_project": "Проект", "f_context": "Контексты (@)",
+  "f_context_ph": "добавить: работа, дом, телефон…", "ctx_remove": "Убрать @{c}", "f_remind": "Напомнить",
   "draft": "Восстановлен несохранённый черновик", "draft_drop": "сбросить", "cancel": "Отмена", "save": "Сохранить",
   "copy_link": "Скопировать ссылку", "copy_link_to": "Скопировать ссылку: {url}", "task_link": "Ссылка на задачу",
   "failed": "Не получилось, попробуй ещё раз",
@@ -409,8 +414,8 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
     "done": "Done", "trash": "Trash"},
   "moved": "“{title}” → {to}", "deleted": "“{title}” deleted", "undo": "Undo",
-  "f_title": "Title", "f_notes": "Notes", "f_list": "List", "f_project": "Project", "f_context": "Context (@)",
-  "f_context_ph": "work, home, phone…", "f_remind": "Remind me",
+  "f_title": "Title", "f_notes": "Notes", "f_list": "List", "f_project": "Project", "f_context": "Contexts (@)",
+  "f_context_ph": "add: work, home, phone…", "ctx_remove": "Remove @{c}", "f_remind": "Remind me",
   "draft": "Restored an unsaved draft", "draft_drop": "discard", "cancel": "Cancel", "save": "Save",
   "copy_link": "Copy link", "copy_link_to": "Copy link: {url}", "task_link": "Link to the task",
   "failed": "That didn't work, try again",
@@ -917,7 +922,7 @@ function itemHtml(it){
   return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}" tabindex="-1">
     <label class="ck"><input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}></label>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
-      <div class="meta">${it.remind_at?dueHtml(it):''}${it.context?`<span>@${esc(it.context)}</span>`:''}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
+      <div class="meta">${it.remind_at?dueHtml(it):''}${(it.contexts||[]).map(c=>`<span>@${esc(c)}</span>`).join('')}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
     </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}${GRIP()}</div>`;
 }
@@ -956,9 +961,9 @@ function render(){
     let items = S.items;
     let chips='';
     if(S.view==='next'){
-      const ctxs=[...new Set(items.map(i=>i.context).filter(Boolean))];
+      const ctxs=[...new Set(items.flatMap(i=>i.contexts||[]))];  // задача — под каждым своим контекстом (SERBITO-423)
       if(ctxs.length) chips=`<div class="chips"><span class="chip ${!S.ctx?'on':''}" data-ctx="">${t('all')}</span>${ctxs.map(c=>`<span class="chip ${S.ctx===c?'on':''}" data-ctx="${esc(c)}">@${esc(c)}</span>`).join('')}</div>`;
-      if(S.ctx) items=items.filter(i=>i.context===S.ctx);
+      if(S.ctx) items=items.filter(i=>(i.contexts||[]).includes(S.ctx));
     }
     const pj = S.pid ? S.projects.find(p=>p.id===S.pid) : null;
     if(S.view==='inbox'){
@@ -1247,10 +1252,10 @@ async function moveItem(id, status){
   const prev = it.status;
   await api('/items/'+id, 'PATCH', {status});
   load();
-  const chips = status==='next' && prev==='inbox' && !it.context ? S.contexts.slice(0, 3) : [];
+  const chips = status==='next' && prev==='inbox' && !it.contexts?.length ? S.contexts.slice(0, 3) : [];
   toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev}), chips,
-    pick: async c => { await api('/items/'+id, 'PATCH', {context:c}); load();
-      toast(t('moved', {title:it.title, to:`${L.moved_to.next} @${c}`}), {undo: () => api('/items/'+id, 'PATCH', {context:null})}); }});
+    pick: async c => { await api('/items/'+id, 'PATCH', {contexts:[c]}); load();
+      toast(t('moved', {title:it.title, to:`${L.moved_to.next} @${c}`}), {undo: () => api('/items/'+id, 'PATCH', {contexts:[]})}); }});
 }
 S.pendingDel = new Set();  // удалённые, но ещё не отправленные на сервер (ждут конца таймера)
 function deleteItem(id){
@@ -1270,7 +1275,7 @@ const draft = {
   // Выход: черновики задач не должны достаться следующему человеку за этим компьютером (SERBITO-360, GTD-14)
   clear(){ try{ Object.keys(localStorage).filter(k => k.startsWith('gtd-draft:')).forEach(k => localStorage.removeItem(k)); }catch{} },
 };
-const ITEM_FIELDS = ['title','notes','status','project_id','newproj','context','remind'];
+const ITEM_FIELDS = ['title','notes','status','project_id','newproj','contexts','remind'];
 
 // Диалог (карточка задачи, проект): закрыли — фокус туда, откуда открыли (SERBITO-349), а не на <body>. Открывший
 // элемент мог пропасть — список перерисовался после сохранения: тогда такой же по селектору back. Возвращает
@@ -1307,7 +1312,10 @@ function openEdit(id, found){
     <label for="ef-project">${t('f_project')}</label><select id="ef-project" name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}
       <option value="new">${t('new_project_opt')}</option></select>
     <div class="newproj" hidden><label for="ef-newproj">${t('new_project_name')}</label><input id="ef-newproj" name="newproj" autocomplete="off"></div>
-    <label for="ef-context">${t('f_context')}</label><input id="ef-context" name="context" value="${esc(it.context||'')}" placeholder="${t('f_context_ph')}">
+    <label for="ef-context">${t('f_context')}</label><div class="cxl" role="list"></div>
+    <input type="hidden" name="contexts" value="${esc((it.contexts||[]).join(' '))}">
+    <input id="ef-context" autocomplete="off" list="ef-cxs" enterkeyhint="done" placeholder="${t('f_context_ph')}">
+    <datalist id="ef-cxs">${S.contexts.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
     <label for="ef-remind">${t('f_remind')}</label><input id="ef-remind" type="datetime-local" name="remind" value="${toLocalInput(it.remind_at)}">
     <div class="draftnote" hidden>${t('draft')} · <a href="#" data-act="dropdraft">${t('draft_drop')}</a></div>
     <div class="row"><button type="button" data-act="del" style="color:#d33">${t('delete')}</button><span><button type="button" data-act="cancel">${t('cancel')}</button> <button class="pri" value="ok">${t('save')}</button></span></div></form>`;
@@ -1318,6 +1326,33 @@ function openEdit(id, found){
   }
   const keep = () => draft.set(key, Object.fromEntries(ITEM_FIELDS.map(k => [k, form.elements[k].value])));
   form.addEventListener('input', keep); form.addEventListener('change', keep);
+  // Контексты (SERBITO-423): чипы с крестиком; набранное в поле становится чипом по Enter, пробелу, запятой и при
+  // уходе из поля. Список — в скрытом поле contexts (через пробел): его берут черновик и сохранение
+  const cxIn = form.elements.contexts, cxAdd = $('#ef-context'), cxBox = form.querySelector('.cxl');
+  const cxList = () => cxIn.value.split(/\s+/).filter(Boolean);
+  const cxSet = list => { cxIn.value = [...new Set(list)].join(' '); cxDraw(); keep(); };
+  const cxDraw = () => { cxBox.innerHTML = cxList().map(c => `<span class="cxc" role="listitem">@${esc(c)}<button type="button"
+    data-rm="${esc(c)}" aria-label="${t('ctx_remove', {c:esc(c)})}" title="${t('ctx_remove', {c:esc(c)})}">×</button></span>`).join(''); };
+  const cxPush = () => {
+    const add = cxAdd.value.toLowerCase().match(/[\p{L}\p{N}_-]+/gu) || [];
+    cxAdd.value = '';
+    if(add.length) cxSet([...cxList(), ...add]);
+    return add.length > 0;
+  };
+  cxDraw();
+  cxAdd.addEventListener('keydown', e => {
+    if(e.isComposing) return;
+    if(e.key==='Enter'){ if(cxPush()) e.preventDefault(); }  // пустое поле — Enter сохраняет карточку, как раньше
+    else if(e.key===' ' || e.key===','){ e.preventDefault(); cxPush(); }
+    else if(e.key==='Backspace' && !cxAdd.value && cxList().length){ e.preventDefault(); cxSet(cxList().slice(0, -1)); }
+  });
+  cxAdd.addEventListener('change', cxPush);  // уход из поля
+  // Выбор из подсказок datalist; пробел или запятая с экранной клавиатуры, у которой keydown без key
+  cxAdd.addEventListener('input', e => { if(e.inputType==='insertReplacementText' || /[\s,]/.test(cxAdd.value)) cxPush(); });
+  cxBox.addEventListener('click', e => {
+    const b = e.target.closest('[data-rm]'); if(!b) return;
+    cxSet(cxList().filter(c => c !== b.dataset.rm)); cxAdd.focus();
+  });
   // «+ Новый проект…» в списке проектов (SERBITO-354) — под ним поле названия, обязательное, пока оно выбрано
   const np = form.querySelector('.newproj'), npSync = focus => {
     const on = form.elements.project_id.value === 'new';
@@ -1329,12 +1364,12 @@ function openEdit(id, found){
   form.querySelector('[data-act=dropdraft]').onclick = e => { e.preventDefault(); draft.del(key); openEdit(id, it); };
   const back = dlgShow(`main .it[data-id="${id}"]`);
   $('#ef').onsubmit = async e => {
-    draft.del(key);
+    cxPush(); draft.del(key);
     const f = new FormData(e.target);
     let pid = f.get('project_id');
     if(pid === 'new') pid = (await api('/projects','POST',{title:f.get('newproj').trim()})).id;
     await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
-      project_id:pid?+pid:null, context:f.get('context'),
+      project_id:pid?+pid:null, contexts:cxList(),
       remind_at:f.get('remind')?Math.floor(new Date(f.get('remind')).getTime()/1000):null});
     await load(); back();
   };

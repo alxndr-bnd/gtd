@@ -319,6 +319,11 @@ create table if not exists api_tokens(
   id bigserial primary key, user_id bigint not null, token_hash text not null unique, name text not null,
   created bigint not null, last_used bigint);
 create index if not exists api_tokens_user on api_tokens(user_id);
+-- Несколько контекстов у задачи (SERBITO-423): массив contexts вместо одной колонки context. Старый контекст
+-- переезжает списком из одного и стирается — повторный старт не вернёт снятый. Колонку context не удаляем, пока
+-- при выкатке может работать прежняя ревизия: что она запишет, переедет при следующем старте
+alter table items add column if not exists contexts text[] not null default '{}';
+update items set contexts = array[context], context = null where context is not null;
 """
 
 with _pool.connection() as _c:
@@ -389,7 +394,8 @@ TEXTS = {
                 "Умный захват:\n"
                 "• «Позвонить в банк завтра в 10:00» → напоминание\n"
                 "• «через 2 часа проверить деплой»\n"
-                "• «в пятницу отчёт #Клиент_X @работа» → сразу в Next, проект и контекст\n\n"
+                "• «в пятницу отчёт #Клиент_X @работа» → сразу в Next, проект и контекст\n"
+                "• «оплатить счёт @телефон @комп» → два контекста: задача видна в обоих\n\n"
                 "/inbox — что в Inbox\n/next — что в Next\n/done 12 — закрыть задачу №12\n"
                 "/login — ссылка для входа в веб-интерфейс\n"
                 "/email you@example.com — привязать почту: входить на сайте по коду или через Google\n"
@@ -474,7 +480,8 @@ TEXTS = {
                 "Smart capture:\n"
                 "• “Call the bank tomorrow at 10am” → a reminder\n"
                 "• “in 2 hours check the deploy”\n"
-                "• “report on friday #Client_X @work” → straight to Next, with a project and a context\n\n"
+                "• “report on friday #Client_X @work” → straight to Next, with a project and a context\n"
+                "• “pay the bill @phone @computer” → two contexts: the task shows under both\n\n"
                 "/inbox — what's in your Inbox\n/next — next actions\n/done 12 — complete task #12\n"
                 "/login — a sign-in link for the website\n"
                 "/email you@example.com — link an email to sign in on the site with a code or Google\n"
@@ -689,24 +696,43 @@ def _clean(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip(" ,.-—")
 
 
+CONTEXTS_MAX = 20  # контекстов у одной задачи — больше не сохраняем
+CTX_TOKEN = re.compile(r"(?<!\S)@([\w-]+)")
+
+
+def norm_contexts(value) -> list[str]:
+    """Контексты задачи (SERBITO-423) из строки («@дом @телефон», «дом, телефон») или списка строк: без «@»,
+    в нижнем регистре, без повторов, в порядке ввода. Слово — как @токен при захвате: буквы, цифры, «_» и «-».
+    Не строка и не список строк — ValueError."""
+    if value is None:
+        return []
+    parts = [value] if isinstance(value, str) else value if isinstance(value, list) else None
+    if parts is None or not all(isinstance(p, str) for p in parts):
+        raise ValueError("contexts")
+    out: list[str] = []
+    for p in parts:
+        for c in re.findall(r"[\w-]+", p.lower()):
+            if c[:50] not in out:
+                out.append(c[:50])
+    return out[:CONTEXTS_MAX]
+
+
 def parse_task(uid: int, raw: str) -> dict:
-    """Разбор строки задачи: текст [@контекст] [#проект] [когда] -> {title, context, project_id, remind_at}.
+    """Разбор строки задачи: текст [@контекст…] [#проект] [когда] -> {title, contexts, project_id, remind_at}.
     Один разбор на поле захвата (capture) и заголовок в карточке (PATCH /api/items, SERBITO-298).
+    Все @контексты — список (SERBITO-423); их нет — None, как и у остальных полей без токена.
     #Проект_Имя — проект пользователя по названию (без учёта регистра, «_» — пробел), нет — создаётся.
     Токены вырезаются из заголовка; остались одни токены — заголовок остаётся как был введён."""
     text = raw.strip()
-    ctx = None
-    m = re.search(r"(?<!\S)@([\w-]+)", text)
-    if m:
-        ctx = m.group(1).lower()
-        text = text[: m.start()] + text[m.end():]
+    ctxs = norm_contexts(CTX_TOKEN.findall(text)) or None
+    text = CTX_TOKEN.sub("", text)
     proj_id = None
     m = re.search(r"(?<!\S)#([\w-]+)", text)
     if m:
         proj_id = project_by_title(uid, m.group(1).replace("_", " "))
         text = text[: m.start()] + text[m.end():]
     title, remind = parse_when(text, datetime.now(TZ))
-    return {"title": title or raw.strip(), "context": ctx, "project_id": proj_id, "remind_at": remind}
+    return {"title": title or raw.strip(), "contexts": ctxs, "project_id": proj_id, "remind_at": remind}
 
 
 # Позиция «в конец» (SERBITO-328): ниже самой нижней задачи списка (status) или проекта — как было до ручного
@@ -717,19 +743,19 @@ END_PROJ = "(select coalesce(max(position), 0) + 1024 from projects where user_i
 
 
 def capture(uid: int, raw: str, source: str = "web", project_id: int | None = None) -> dict:
-    """Умный захват: текст [@контекст] [#проект] [когда] -> задача. project_id — проект страницы, на которой
+    """Умный захват: текст [@контекст…] [#проект] [когда] -> задача. project_id — проект страницы, на которой
     записали (SERBITO-354); #проект в самом тексте важнее."""
     track(uid, source if source in ("telegram", "mcp") else "web")
     p = parse_task(uid, raw)
-    title, ctx, proj_id, remind = p["title"], p["context"], p["project_id"] or project_id, p["remind_at"]
-    status = "next" if (ctx or proj_id) else "inbox"
+    title, ctxs, proj_id, remind = p["title"], p["contexts"] or [], p["project_id"] or project_id, p["remind_at"]
+    status = "next" if (ctxs or proj_id) else "inbox"
     iid = run(
         # Номер — из счётчика пользователя, атомарно в одной команде (изменяющий подзапрос — только в WITH)
         # Новая задача — в конец своего списка и своего проекта
         "with seq as (update users set item_seq=item_seq+1 where id=%s returning item_seq) "
-        "insert into items(user_id,num,title,status,project_id,context,remind_at,source,created,position,ppos) "
-        f"select %s, seq.item_seq, %s,%s,%s,%s,%s,%s,%s,{END_POS},{END_PPOS} from seq returning id",
-        (uid, uid, title, status, proj_id, ctx, remind, source, int(time.time()), uid, status, uid, proj_id),
+        "insert into items(user_id,num,title,status,project_id,contexts,remind_at,source,created,position,ppos) "
+        f"select %s, seq.item_seq, %s,%s,%s,%s::text[],%s,%s,%s,{END_POS},{END_PPOS} from seq returning id",
+        (uid, uid, title, status, proj_id, ctxs, remind, source, int(time.time()), uid, status, uid, proj_id),
     )
     return item_get(uid, iid)
 
@@ -771,8 +797,8 @@ def describe(it, lang="ru") -> str:
     bits = []
     if it.get("remind_at"):
         bits.append("⏰ " + fmt_ts(it["remind_at"], lang))
-    if it.get("context"):
-        bits.append("@" + it["context"])
+    if it.get("contexts"):
+        bits.append(" ".join("@" + c for c in it["contexts"]))
     if it.get("project"):
         bits.append("#" + it["project"])
     return "  ".join(bits)
@@ -2271,10 +2297,11 @@ def dev_version():
 
 @app.get("/api/contexts")
 def list_contexts(uid: int = Depends(current_user)):
-    """Контексты пользователя для подсказок @ — самые частые первыми."""
-    return [r["context"] for r in rows(
-        "select context, count(*) n from items where user_id=%s and context is not null and status<>'trash' "
-        "group by context order by n desc, context", (uid,))]
+    """Контексты пользователя для подсказок @ — самые частые первыми. Задача с несколькими контекстами
+    считается в каждом из них (SERBITO-423)."""
+    return [r["c"] for r in rows(
+        "select c, count(*) n from items i, unnest(i.contexts) c where i.user_id=%s and i.status<>'trash' "
+        "group by c order by n desc, c", (uid,))]
 
 
 @app.post("/api/logout")
@@ -2430,12 +2457,16 @@ def patch_item(iid: int, body: dict, uid: int = Depends(current_user)):
 
 
 def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
-    """Правка задачи: поля из body (title, notes, status, project_id, context, remind_at). Одна для карточки на
-    сайте и для MCP (SERBITO-375). Чужая или несуществующая задача — 404."""
+    """Правка задачи: поля из body (title, notes, status, project_id, contexts, remind_at). Одна для карточки на
+    сайте и для MCP (SERBITO-375). contexts — список или строка «@a @b», заменяет все контексты задачи; прежнее
+    поле context (одна строка, "" или null — снять) тоже принимается (SERBITO-423). Чужая или несуществующая
+    задача — 404."""
     cur = item_get(uid, iid)
     if not cur:
         raise HTTPException(404)
     track(uid, channel)
+    if "context" in body and "contexts" not in body:
+        body = {**body, "contexts": body["context"]}
     # Заголовок из карточки разбираем как строку захвата (SERBITO-298): #проект, @контекст и дата из
     # заголовка перекрывают значения полей, без токена — остаётся выбранное в полях. Только если заголовок
     # изменился: иначе повторное сохранение вернуло бы, например, снятое вручную напоминание («завтра»).
@@ -2444,7 +2475,7 @@ def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
         p = parse_task(uid, title)
         body = {**body, **{k: v for k, v in p.items() if v is not None}}
     sets, args = [], []
-    for k in ("title", "notes", "status", "project_id", "context", "remind_at"):
+    for k in ("title", "notes", "status", "project_id", "contexts", "remind_at"):
         if k not in body:
             continue
         v = body[k]
@@ -2455,8 +2486,11 @@ def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
             args.append(int(time.time()) if v == "done" else None)
         if k == "remind_at":
             sets.append("reminded=0")
-        if k == "context" and v:
-            v = str(v).lstrip("@").lower()
+        if k == "contexts":
+            try:
+                v = norm_contexts(v)
+            except ValueError:
+                raise HTTPException(400, "bad contexts") from None
         if k == "project_id" and v and not row("select 1 from projects where id=%s and user_id=%s", (v, uid)):
             raise HTTPException(404, "project not found")
         # Перенос в другой список или проект — в конец его (SERBITO-328)
@@ -2466,8 +2500,8 @@ def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
         if k == "project_id" and v and v != cur["project_id"]:
             sets.append(f"ppos={END_PPOS}")
             args += [uid, v]
-        sets.append(f"{k}=%s")
-        args.append(v or None if k in ("context", "project_id", "remind_at") else v)
+        sets.append(f"{k}=%s::text[]" if k == "contexts" else f"{k}=%s")
+        args.append(v or None if k in ("project_id", "remind_at") else v)
     if sets:
         run(f"update items set {', '.join(sets)} where id=%s and user_id=%s", (*args, iid, uid))
     return item_get(uid, iid)
