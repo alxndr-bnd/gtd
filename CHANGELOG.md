@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+- Signing in with the Telegram button on the website no longer depends on code that strict browser security settings block.
+  - RU: Вход кнопкой Telegram на сайте больше не зависит от кода, который блокируют строгие настройки безопасности браузера.
+
 ## [0.31.0] - 2026-10-03
 
 ### Added
