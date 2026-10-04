@@ -236,7 +236,9 @@ def test_bot_profile_texts_fit_telegram_limits():
     assert set(A.BOT_PROFILE) == set(A.BOT_COMMANDS) == {"ru", "en"}
     for desc, short in A.BOT_PROFILE.values():
         assert 0 < len(desc) <= 512 and 0 < len(short) <= 120 and "gtd.serbito.rs" in short
-    assert A.BOT_PROFILE["ru"][0].startswith("Записывай задачи и мысли в один тап")
+    assert A.BOT_PROFILE["ru"][0].startswith("GTD-бот для задач")
+    # имя с поисковыми словами (SERBITO-422), лимит Telegram — 64 символа
+    assert set(A.BOT_NAMES) == {"ru", "en"} and all("GTD" in n and 0 < len(n) <= 64 for n in A.BOT_NAMES.values())
     # меню команд на обоих языках — одни и те же команды, описания в пределах лимита Telegram
     ru, en = ([c["command"] for c in A.BOT_COMMANDS[lg]] for lg in ("ru", "en"))
     assert ru == en and "about" in ru
@@ -414,7 +416,8 @@ def current_profile():
     lang = lambda p: A.profile_lang(p["language_code"])
     return {"getMe": {"username": "gtdsrbot"}, "getMyCommands": lambda p: A.BOT_COMMANDS[lang(p)],
             "getMyDescription": lambda p: {"description": A.BOT_PROFILE[lang(p)][0]},
-            "getMyShortDescription": lambda p: {"short_description": A.BOT_PROFILE[lang(p)][1]}}
+            "getMyShortDescription": lambda p: {"short_description": A.BOT_PROFILE[lang(p)][1]},
+            "getMyName": lambda p: {"name": A.BOT_NAMES[lang(p)]}}
 
 
 def profile_tg(monkeypatch, answers):
@@ -437,7 +440,8 @@ def test_bot_setup_sets_profile_when_it_differs(monkeypatch):
         assert ("setMyCommands", {"commands": A.BOT_COMMANDS[lang], "language_code": code}) in sets
         assert ("setMyDescription", {"description": desc, "language_code": code}) in sets
         assert ("setMyShortDescription", {"short_description": short, "language_code": code}) in sets
-    assert len(sets) == 3 * len(A.PROFILE_CODES)
+        assert ("setMyName", {"name": A.BOT_NAMES[lang], "language_code": code}) in sets
+    assert len(sets) == 4 * len(A.PROFILE_CODES)
     assert ("setMyCommands", {"commands": A.BOT_COMMANDS["en"], "language_code": ""}) in sets  # всем прочим — английское
 
 
@@ -505,6 +509,6 @@ def test_tg_error_log_hides_token(monkeypatch, caplog):
 
 def test_bot_setup_garbage_answers(monkeypatch):
     calls = profile_tg(monkeypatch, {"getMe": None, "getMyCommands": None, "getMyDescription": "??",
-                                     "getMyShortDescription": [1]})
+                                     "getMyShortDescription": [1], "getMyName": 7})
     asyncio.run(A.bot_setup())  # непонятный ответ — считаем, что текста нет, и ставим заново
-    assert A.BOT_USERNAME == "" and len(profile_sets(calls)) == 3 * len(A.PROFILE_CODES)
+    assert A.BOT_USERNAME == "" and len(profile_sets(calls)) == 4 * len(A.PROFILE_CODES)

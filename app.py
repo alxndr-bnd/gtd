@@ -844,14 +844,19 @@ def tg_known(frm: dict):
 # Язык текста → (описание ≤512, короткое ≤120). Telegram показывает вариант по language_code клиента, а ""
 # — всем прочим; поэтому "" — английский, а языки, которым по правилу pages.lang_of положен русский, — явно
 BOT_PROFILE = {
-    "ru": ("Записывай задачи и мысли в один тап — разберёшь потом. Работает по методу GTD Дэвида Аллена: "
-           "Inbox, следующие действия, проекты, напоминания. Всё синхронизируется с сайтом gtd.serbito.rs. "
-           "Бесплатно.",
-           "GTD в Telegram: записывай задачи в один тап, напоминания и проекты. gtd.serbito.rs"),
-    "en": ("Capture tasks and ideas in one tap — sort them out later. Built on David Allen's GTD method: "
-           "Inbox, next actions, projects, reminders. Everything syncs with the website gtd.serbito.rs. Free.",
-           "GTD in Telegram: capture tasks in one tap, reminders and projects. gtd.serbito.rs"),
+    "ru": ("GTD-бот для задач и списка дел (todo). Пиши мысль обычным сообщением — она попадёт в Inbox. "
+           "Бот понимает сроки и напоминает: «позвонить маме завтра в 10:00». #Проект и @контекст — сразу в Next, "
+           "контекстов может быть несколько. Команды: /inbox, /next, /done 12. По методу GTD (Getting Things Done) "
+           "Дэвида Аллена. Один аккаунт с сайтом gtd.serbito.rs. Бесплатно.",
+           "GTD: задачи и список дел (todo) в Telegram — Inbox, напоминания, проекты. Сайт: gtd.serbito.rs"),
+    "en": ("GTD bot for tasks and your to-do list. Send a thought as a plain message, and it lands in your Inbox. "
+           "The bot understands dates and sends reminders: “call mom tomorrow at 10am”. Add #Project and @context to "
+           "go straight to Next; a task can have several contexts. Commands: /inbox, /next, /done 12. Built on David "
+           "Allen's GTD (Getting Things Done) method. One account with the website gtd.serbito.rs. Free.",
+           "GTD tasks and to-do list in Telegram: Inbox, reminders, projects. Website: gtd.serbito.rs"),
 }
+# Имя бота с поисковыми словами (SERBITO-422): поиск в Telegram ранжирует по имени и username
+BOT_NAMES = {"ru": "GTD — задачи и Inbox", "en": "GTD — Tasks & Todo Inbox"}
 BOT_COMMANDS = {
     "ru": [{"command": "inbox", "description": "Что в Inbox"}, {"command": "next", "description": "Что в Next"},
            {"command": "done", "description": "Закрыть задачу: /done 12"},
@@ -1228,13 +1233,14 @@ def _field(r, key):
 
 
 async def bot_profile():
-    """Описание до Start, короткое описание и меню команд живут в коде, а не руками в @BotFather.
+    """Имя, описание до Start, короткое описание и меню команд живут в коде, а не руками в @BotFather.
     Холодных стартов много (Cloud Run спит без трафика), поэтому сначала читаем текущее — параллельно,
     по каждому language_code из PROFILE_CODES, — и ставим только то, что разошлось. Не прочиталось (None) —
     просто ставим: вызовы идемпотентны."""
     codes, n = PROFILE_CODES, len(PROFILE_CODES)
     cur = await asyncio.gather(*(tg(m, language_code=c) for m in ("getMyCommands", "getMyDescription",
-                                                                   "getMyShortDescription") for c in codes))
+                                                                   "getMyShortDescription", "getMyName")
+                                 for c in codes))
     sets = []
     for i, code in enumerate(codes):
         lang = profile_lang(code)
@@ -1245,6 +1251,8 @@ async def bot_profile():
             sets.append(tg("setMyDescription", description=desc, language_code=code))
         if _field(cur[2 * n + i], "short_description") != short:
             sets.append(tg("setMyShortDescription", short_description=short, language_code=code))
+        if _field(cur[3 * n + i], "name") != BOT_NAMES[lang]:
+            sets.append(tg("setMyName", name=BOT_NAMES[lang], language_code=code))
     await asyncio.gather(*sets)
 
 
