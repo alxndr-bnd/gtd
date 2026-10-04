@@ -23,7 +23,7 @@ shows the page in both languages. `changelog.py` parses this file for the site a
   - RU: В блоке входа виден Telegram-бот @gtdsrbot: ссылка и строка о том, что он умеет.
 
 ### Changed
-- The Telegram bot is easier to find in Telegram search: its name and description now contain the words "GTD", "tasks", "todo" and "задачи".
+- The Telegram bot is easier to find in Telegram search: its name and description now contain the words "GTD", "tasks" and "todo" (and their Russian forms).
   - RU: Telegram-бота проще найти в поиске Telegram: в его имени и описании теперь есть слова «GTD», «задачи», «todo» и «tasks».
 
 ## [0.32.0] - 2026-10-04
