@@ -275,6 +275,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "st_daily": "Активные по дням, 30 дней", "st_bar": "{day}: {users} чел., {actions} действий",
   "st_new7": "новых за 7 дней", "st_new30": "новых за 30 дней", "st_tasks7": "задач за 7 дней", "st_tasks30": "задач за 30 дней",
   "st_channels": "Каналы за 30 дней", "st_channels_text": "Сайт — {web} · Telegram-бот — {tg}",
+  "st_mcp": "MCP: AI-ассистенты", "st_mcp_text": "Активны за 7 дней — {users} · OAuth (claude.ai и другие коннекторы) — {oauth} · Личные токены — {tokens}",
   "st_methods": "Способы входа", "st_methods_text": "Почта — {email} · Google — {google} · Telegram — {tg}",
   "sign_out": "Выйти", "menu": "Меню", "to_inbox": "Открыть Inbox",
   "about": "📖 О GTD", "about_title": "Как это работает: метод GTD и разделы приложения", "about_url": "/about",
@@ -389,6 +390,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "st_daily": "Active users per day, 30 days", "st_bar": "{day}: {users} users, {actions} actions",
   "st_new7": "new in 7 days", "st_new30": "new in 30 days", "st_tasks7": "tasks in 7 days", "st_tasks30": "tasks in 30 days",
   "st_channels": "Channels, 30 days", "st_channels_text": "Website — {web} · Telegram bot — {tg}",
+  "st_mcp": "MCP: AI assistants", "st_mcp_text": "Active in 7 days — {users} · OAuth (claude.ai and other connectors) — {oauth} · Personal tokens — {tokens}",
   "st_methods": "Sign-in methods", "st_methods_text": "Email — {email} · Google — {google} · Telegram — {tg}",
   "sign_out": "Sign out", "menu": "Menu", "to_inbox": "To Inbox",
   "about": "📖 About GTD", "about_title": "How it works: the GTD method and the app sections", "about_url": "/en/about",
@@ -865,6 +867,7 @@ function statsHtml(){
   <div class="tiles">${tile(st.users.new_7d,t('st_new7'))}${tile(st.users.new_30d,t('st_new30'))}
     ${tile(st.tasks.created_7d,t('st_tasks7'))}${tile(st.tasks.created_30d,t('st_tasks30'))}</div>
   <div class="rv"><h3>${t('st_channels')}</h3>${t('st_channels_text', {web:st.active.web_30d, tg:st.active.telegram_30d})}
+    <h3 style="margin-top:12px">${t('st_mcp')}</h3><div class="st-mcp">${t('st_mcp_text', {users:st.mcp.users_7d, oauth:st.mcp.oauth_connections, tokens:st.mcp.api_tokens})}</div>
     <h3 style="margin-top:12px">${t('st_methods')}</h3>${t('st_methods_text', {email:st.users.with_email, google:st.users.with_google, tg:st.users.with_telegram})}</div>`;
 }
 

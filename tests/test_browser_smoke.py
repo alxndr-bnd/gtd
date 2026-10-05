@@ -232,6 +232,8 @@ def test_app_sections(watch, monkeypatch, lang):
         w.page.click('nav > a[data-view="stats"]')
         w.wait('nav > a.on[data-view="stats"]', f"[{lang}] stats")
         w.wait("main .tiles", f"[{lang}] stats")
+        w.wait("main .st-mcp", f"[{lang}] stats: MCP")  # SERBITO-465: три числа MCP, без undefined
+        assert "undefined" not in w.page.locator("main .st-mcp").inner_text(), f"[{lang}] stats: MCP"
 
     # Проект: карточка в списке проектов → его задачи
     open_section(w, "projects", True, lang)
