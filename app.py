@@ -2928,6 +2928,35 @@ def weekly_review_page(request: Request):
     return HTMLResponse(pages.weekly(BASE_URL, lang, ga_snippet(request)))
 
 
+@app.get("/alternativa-todoist")
+@app.get("/en/todoist-alternative-open-source")
+def todoist_alternative_page(request: Request):
+    """Сравнение с Todoist (SERBITO-470): RU и EN."""
+    lang = "en" if request.url.path.startswith("/en/") else "ru"
+    return HTMLResponse(pages.alt(BASE_URL, lang, ga_snippet(request)))
+
+
+@app.get("/en/free-gtd-apps")
+def free_gtd_apps_page(request: Request):
+    """Бесплатные GTD-приложения (SERBITO-470) — только английский."""
+    return HTMLResponse(pages.freeapps(BASE_URL, ga_snippet(request)))
+
+
+@app.get("/gtd-dlya-nachinayushih")
+def gtd_beginners_page(request: Request):
+    """GTD для начинающих (SERBITO-470) — только русский."""
+    return HTMLResponse(pages.beginners(BASE_URL, ga_snippet(request)))
+
+
+@app.get("/shots/{name}", include_in_schema=False)
+def screenshot(name: str):
+    """Скриншоты приложения для лендинга (SERBITO-442, scripts/screenshots.py). Только файлы из списка pages."""
+    if name not in pages.SHOT_FILES:
+        raise HTTPException(404)
+    return FileResponse(os.path.join(STATIC, "shots", name), media_type="image/webp",
+                        headers={"Cache-Control": "public, max-age=604800"})
+
+
 @app.get("/robots.txt")
 def robots_txt():
     return PlainTextResponse(pages.robots(BASE_URL))

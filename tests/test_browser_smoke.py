@@ -260,6 +260,11 @@ def test_app_sections(watch, monkeypatch, lang):
     ("/en/about", 200, "body"),
     ("/changes", 200, "section.rel"),
     ("/en/changes", 200, "section.rel"),
+    # Сравнение и опорные страницы (SERBITO-470): таблицы и списки, без JS приложения
+    ("/alternativa-todoist", 200, "table.cmp"),
+    ("/en/todoist-alternative-open-source", 200, "table.cmp"),
+    ("/en/free-gtd-apps", 200, "table.cmp"),
+    ("/gtd-dlya-nachinayushih", 200, "main ol"),
     ("/no-such-page", 404, "body"),
     ("/en/no-such-page", 404, "body"),
 ])
@@ -1274,7 +1279,8 @@ WIDER = """() => { const W = document.documentElement.clientWidth;
     .map(e => e.tagName + '.' + e.className).slice(0, 10); }"""
 
 
-@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/privacy", "/changes", "/bot", "/en/weekly-review"])
+@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/privacy", "/changes", "/bot", "/en/weekly-review",
+                                  "/alternativa-todoist", "/en/free-gtd-apps", "/gtd-dlya-nachinayushih"])
 def test_no_horizontal_scroll_at_320px(watch, monkeypatch, path):
     """WCAG 1.4.10 (SERBITO-349): при ширине 320 px (1280 px при 400 %) страница не прокручивается вбок — и лендинг
     со всеми кнопками входа: Google, почта, Telegram."""
@@ -2146,7 +2152,28 @@ def test_phone_landing_fold(watch, monkeypatch, lang):
     w.check("итог")
 
 
-@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/changes", "/en/bot", "/weekly-review"])
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_landing_screenshots_load_without_shift(watch, lang):
+    """SERBITO-442: скриншоты на лендинге (телефон 390 px) грузятся со своего сервера, не шире экрана, и страница
+    не прыгает, когда они приходят: место под картинку задают width и height."""
+    w = watch(lang, viewport=PHONE, touch=True)
+    w.page.add_init_script("window.__cls = 0; new PerformanceObserver(l => l.getEntries().forEach(e => {"
+                           " if(!e.hadRecentInput) window.__cls += e.value; })).observe({type: 'layout-shift', buffered: true});")
+    w.goto(P.PATHS[(lang, "home")])
+    imgs = w.page.locator(".shots img")
+    assert imgs.count() == 3
+    for i in range(3):
+        imgs.nth(i).scroll_into_view_if_needed()
+    w.page.wait_for_function("[...document.querySelectorAll('.shots img')].every(i => i.complete && i.naturalWidth)")
+    sizes = w.page.eval_on_selector_all(".shots img", "els => els.map(e => [e.naturalWidth, e.getBoundingClientRect().right])")
+    assert all(nw == P.SHOT_SIZE[0] and right <= PHONE[0] for nw, right in sizes), sizes
+    assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0]
+    assert w.page.evaluate("window.__cls") < 0.1
+    w.check("итог")
+
+
+@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/changes", "/en/bot", "/weekly-review",
+                                  "/en/todoist-alternative-open-source", "/en/free-gtd-apps", "/gtd-dlya-nachinayushih"])
 @pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_phone_public_pages_readable_and_tappable(watch, monkeypatch, path, scheme):
     """Телефон (SERBITO-448): ссылки шапки, подвала, строк под текстом, «Подробнее» и кнопки баннера — не меньше
