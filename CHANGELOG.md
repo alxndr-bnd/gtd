@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-10-05
+
 ### Changed
 
 - Telegram search now finds the bot by Russian words too, such as "tasks" and "to-do list" in Russian.
@@ -373,7 +375,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/alxndr-bnd/gtd/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/alxndr-bnd/gtd/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/alxndr-bnd/gtd/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/alxndr-bnd/gtd/compare/v0.31.0...v0.32.0
