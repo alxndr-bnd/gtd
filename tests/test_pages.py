@@ -14,10 +14,23 @@ import pages as P
 BASE = "http://localhost:8000"
 PUBLIC = {"/": "ru", "/about": "ru", "/en/": "en", "/en/about": "en", "/privacy": "ru", "/en/privacy": "en",
           "/changes": "ru", "/en/changes": "en", "/bot": "ru", "/en/bot": "en",
-          "/weekly-review": "ru", "/en/weekly-review": "en"}
-# Страницы под поисковый запрос (SERBITO-441, SERBITO-446): запрос — в title и h1
+          "/weekly-review": "ru", "/en/weekly-review": "en",
+          "/alternativa-todoist": "ru", "/en/todoist-alternative-open-source": "en", "/en/free-gtd-apps": "en",
+          "/gtd-dlya-nachinayushih": "ru"}
+# Страницы под поисковый запрос (SERBITO-441, SERBITO-446, SERBITO-470): запрос — в title и h1
 GUIDES = {"/bot": "Telegram бот для задач", "/en/bot": "Telegram bot for tasks",
-          "/weekly-review": "Еженедельный обзор GTD", "/en/weekly-review": "GTD weekly review"}
+          "/weekly-review": "Еженедельный обзор GTD", "/en/weekly-review": "GTD weekly review",
+          "/alternativa-todoist": "Альтернатива Todoist", "/en/todoist-alternative-open-source":
+          "Open source Todoist alternative", "/en/free-gtd-apps": "Free GTD apps",
+          "/gtd-dlya-nachinayushih": "GTD для начинающих"}
+# У этих страниц нет пары на другом языке (SERBITO-470): ни hreflang, ни альтернатив в sitemap
+SINGLE = {"/en/free-gtd-apps", "/gtd-dlya-nachinayushih"}
+# Слова в тексте — как их считает читатель: «GTD-приложение» — одно слово, «—» — не слово
+WORD = re.compile(r"[^\W_][\w'’.-]*")
+
+
+def words(html: str) -> int:
+    return len(WORD.findall(re.sub(r"<[^>]+>", " ", html)))
 TM = {"ru": "GTD® и Getting Things Done® — товарные знаки David Allen Company. Сервис независимый и не связан с автором метода",
       "en": "GTD® and Getting Things Done® are trademarks of the David Allen Company"}
 
@@ -40,17 +53,20 @@ def test_public_page_seo_tags(client, path, lang):
     assert f'<html lang="{lang}">' in h and h.count("<title>") == 1
     title = re.search(r"<title>([^<]+)</title>", h).group(1)
     assert title == meta(h, "og:title") and ("Getting Things Done" in title or "privacy" in path or path in GUIDES)
-    assert len(meta(h, "description")) <= 155 or path not in GUIDES  # длиннее Google обрезает (SERBITO-441)
+    assert len(meta(h, "description")) <= 155  # длиннее Google обрезает (SERBITO-441, SERBITO-442)
     assert meta(h, "description") and meta(h, "og:description") == meta(h, "description")
     assert f'<link rel="canonical" href="{BASE}{path}">' in h and meta(h, "og:url") == BASE + path
     assert meta(h, "og:site_name") and meta(h, "og:locale") == ("ru_RU" if lang == "ru" else "en_US")
     assert meta(h, "og:image") == BASE + ("/og.png" if lang == "ru" else "/og-en.png")
     assert meta(h, "twitter:card") == "summary_large_image"
-    # hreflang — пары ru/en и x-default на русскую версию
-    ru = path.removeprefix("/en") or "/"
-    pair = (ru, "/en" + ru if ru != "/" else "/en/")
-    for hl, p in (("ru", pair[0]), ("en", pair[1]), ("x-default", pair[0])):
-        assert f'<link rel="alternate" hreflang="{hl}" href="{BASE}{p}">' in h
+    # hreflang — пары ru/en и x-default на русскую версию; у страницы одного языка — ни одной ссылки
+    page_key = next(pg for (lg, pg), p in P.PATHS.items() if p == path)
+    if path in SINGLE:
+        assert 'hreflang="' not in h[:h.index("</head>")] and "og:locale:alternate" not in h
+    else:
+        pair = (P.PATHS[("ru", page_key)], P.PATHS[("en", page_key)])
+        for hl, p in (("ru", pair[0]), ("en", pair[1]), ("x-default", pair[0])):
+            assert f'<link rel="alternate" hreflang="{hl}" href="{BASE}{p}">' in h
     ld = json.loads(re.search(r'<script type="application/ld\+json">(.+?)</script>', h).group(1))
     nodes = {n["@type"]: n for n in ld["@graph"]}
     app, page, home = nodes["WebApplication"], nodes["WebPage"], BASE + "/"
@@ -61,7 +77,8 @@ def test_public_page_seo_tags(client, path, lang):
     assert nodes["Organization"]["@id"] == home + "#org" == app["author"]["@id"] == nodes["WebSite"]["publisher"]["@id"]
     assert page["url"] == BASE + path and page["inLanguage"] == lang and page["name"] == title
     assert page["isPartOf"]["@id"] == nodes["WebSite"]["@id"] and page["about"]["@id"] == app["@id"]
-    assert ("dateModified" in page) == (path.rstrip("/").split("/")[-1] in ("privacy", "changes", "bot", "weekly-review"))
+    # Дата редакции — у всех, кроме главной (SERBITO-445, SERBITO-470): у главной честной даты нет
+    assert ("dateModified" in page) == (page_key != "home") and page.get("dateModified") == P.modified(page_key)
     crumbs = nodes.get("BreadcrumbList")
     if path in ("/", "/en/"):
         assert crumbs is None
@@ -85,7 +102,7 @@ def test_public_page_seo_tags(client, path, lang):
 def test_seo_search_words(client):
     ru, en = client.get("/").text, client.get("/en/").text
     for words in ("GTD онлайн бесплатно", "Getting Things Done приложение", "telegram бот"):
-        assert words.lower() in ru.lower(), words
+        assert words.lower() in ru.lower().replace("-", " "), words  # «Telegram-бот» поисковик читает как «telegram бот»
     for words in ("GTD online", "Getting Things Done app", "Telegram bot"):
         assert words in en, words
 
@@ -200,7 +217,7 @@ def test_open_source_links(client, path, lang):
         assert f'<p class="note">{P.T[lang]["oss_note"]} · <a href="{P.REPO_URL}">GitHub</a></p>' in root
     elif path.endswith("/about"):
         body = h[:h.index("<footer>")]
-        assert ("<h2>Открытый код</h2>" if lang == "ru" else "<h2>Open source</h2>") in body
+        assert ("Где открытый код?</h2>" if lang == "ru" else "Where is the source code?</h2>") in body
         assert f'href="{P.REPO_URL}"' in body and f'href="{P.SELF_HOST_URL}"' in body
     assert P.REPO_URL == "https://github.com/alxndr-bnd/gtd"
     assert P.SELF_HOST_URL == P.REPO_URL + "/blob/main/docs/self-host.md"
@@ -222,7 +239,8 @@ def test_robots(client):
     r = client.get("/robots.txt")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
     lines = r.text.splitlines()
-    for p in ("/", "/about", "/privacy", "/changes", "/bot", "/weekly-review", "/en/"):
+    for p in ("/", "/about", "/privacy", "/changes", "/bot", "/weekly-review", "/alternativa-todoist",
+              "/gtd-dlya-nachinayushih", "/en/"):
         assert f"Allow: {p}" in lines
     for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/"):
         assert f"Disallow: {p}" in lines
@@ -238,9 +256,9 @@ def test_llms_txt(client):
     r = client.get("/llms.txt")
     assert r.status_code == 200 and r.headers["content-type"] == "text/plain; charset=utf-8"
     assert r.text.startswith("# GTD\n\n> ") and "Getting Things Done" in r.text and "<" not in r.text
-    for path in ("/", "/en/", "/about", "/en/about", "/changes", "/en/changes", "/bot", "/en/bot", "/weekly-review",
-                 "/en/weekly-review"):
-        assert f"({BASE}{path})" in r.text, path
+    for path in PUBLIC:
+        if "privacy" not in path:  # политика — не про продукт
+            assert f"({BASE}{path})" in r.text, path
     assert f"({P.REPO_URL})" in r.text and f"({P.BOT_URL})" in r.text
     assert "Sitemap" not in r.text and r.text.endswith("\n")
 
@@ -271,7 +289,10 @@ def test_sitemap(client):
     assert [u.find("s:loc", ns).text for u in urls] == [BASE + p for p in PUBLIC]
     for u in urls:
         alts = {a.get("hreflang"): a.get("href") for a in u.findall("x:link", ns)}
-        assert set(alts) == {"ru", "en", "x-default"} and alts["x-default"] == alts["ru"]
+        if u.find("s:loc", ns).text.removeprefix(BASE) in SINGLE:
+            assert alts == {}  # пары на другом языке нет
+        else:
+            assert set(alts) == {"ru", "en", "x-default"} and alts["x-default"] == alts["ru"]
     # lastmod — только где дата настоящая (SERBITO-445): «Что нового» — последний релиз, политика — её редакция
     lastmod = {u.find("s:loc", ns).text: getattr(u.find("s:lastmod", ns), "text", None) for u in urls}
     for p in ("/changes", "/en/changes"):
@@ -280,7 +301,12 @@ def test_sitemap(client):
         assert lastmod[BASE + p] == P.PRIVACY_DAY
     for p in ("/bot", "/en/bot", "/weekly-review", "/en/weekly-review"):  # дата редакции текста страницы
         assert lastmod[BASE + p] == P.GUIDES_DAY
-    for p in ("/", "/en/", "/about", "/en/about"):
+    for p in ("/about", "/en/about"):  # /about переписан с видимой датой «Обновлено» (SERBITO-470)
+        assert lastmod[BASE + p] == P.ABOUT_DAY
+    for p in ("/alternativa-todoist", "/en/todoist-alternative-open-source", "/en/free-gtd-apps",
+              "/gtd-dlya-nachinayushih"):
+        assert lastmod[BASE + p] == P.COMPARE_DAY
+    for p in ("/", "/en/"):
         assert lastmod[BASE + p] is None
 
 
@@ -589,3 +615,154 @@ def test_service_pages_have_main(lang):
     for html in (P.auth_stale(lang, "gtd_test_bot"), P.auth_confirm(lang, "alice@example.com", "tok", current="bob")):
         o = outline(html)
         assert o.mains == 1 and [lvl for lvl, _ in o.heads] == [1] and o.heads[0][1]
+
+
+# ── Лендинг: отличие, скриншоты, сравнение, FAQ, свой сервер, кто делает (SERBITO-442) ──
+
+def landing_main(client, lang) -> str:
+    h = client.get(P.PATHS[(lang, "home")]).text
+    return h[h.index("<main>"):h.index("</main>")]
+
+
+def webp_size(data: bytes) -> tuple[int, int]:
+    """Ширина и высота WebP по заголовку: VP8 (с потерями), VP8L (без потерь) или VP8X (расширенный)."""
+    assert data[:4] == b"RIFF" and data[8:12] == b"WEBP", data[:16]
+    kind = data[12:16]
+    if kind == b"VP8 ":
+        return int.from_bytes(data[26:28], "little") & 0x3FFF, int.from_bytes(data[28:30], "little") & 0x3FFF
+    if kind == b"VP8L":
+        b = int.from_bytes(data[21:25], "little")
+        return (b & 0x3FFF) + 1, ((b >> 14) & 0x3FFF) + 1
+    assert kind == b"VP8X", kind
+    return int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_landing_states_the_difference_and_has_600_words(client, lang):
+    """Первый экран называет отличие (GTD + Telegram-бот + открытый код), описание не длиннее 155 знаков,
+    а текста на странице — 600+ слов (аудит SEO: было ~270)."""
+    body = landing_main(client, lang)
+    h1 = re.search(r"<h1>([^<]+)</h1>", body).group(1)
+    for w in {"ru": ("GTD", "Telegram", "открытым кодом", "бесплатно"), "en": ("GTD", "Telegram", "open source", "Free")}[lang]:
+        assert w in h1, (w, h1)
+    assert len(P.T[lang]["home_desc"]) <= 155
+    assert words(body) >= 600, words(body)
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_landing_screenshots(client, lang):
+    """Три настоящих скриншота (Inbox, Next по контексту, Weekly Review): у каждого alt, width и height — место
+    под картинку есть до загрузки (CLS); файлы отдаются как WebP нужного размера и кэшируются."""
+    imgs = re.findall(r"<img ([^>]+)>", landing_main(client, lang))
+    assert len(imgs) == 3
+    for view, img in zip(P.SHOT_VIEWS, imgs):
+        attrs = dict(re.findall(r'(\w+)="([^"]*)"', img))
+        assert attrs["src"] == f"/shots/{view}-{lang}.webp"
+        assert (int(attrs["width"]), int(attrs["height"])) == P.SHOT_SIZE
+        assert len(attrs["alt"].split()) >= 6 and attrs["loading"] == "lazy"
+        r = client.get(attrs["src"])
+        assert r.status_code == 200 and r.headers["content-type"] == "image/webp"
+        assert "max-age=" in r.headers["cache-control"]
+        assert webp_size(r.content) == P.SHOT_SIZE, attrs["src"]
+        assert len(r.content) < 80_000  # лёгкие: картинки внизу страницы не тормозят телефон
+
+
+@pytest.mark.parametrize("path", ["/shots/nope.webp", "/shots/..%2Fpages.py", "/shots/index.html"])
+def test_screenshots_route_serves_only_listed_files(client, path):
+    assert client.get(path).status_code == 404
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_landing_comparison_is_sourced_and_honest(client, lang):
+    """Сравнение с Todoist, TickTick и Things: факты — со ссылками на официальные страницы и с датой проверки;
+    есть «кому не стоит переходить» и ссылка на подробное сравнение."""
+    body = landing_main(client, lang)
+    table = body[body.index('<table class="cmp">'):body.index("</table>")]
+    for name in ("GTD", "Todoist", "TickTick", "Things"):
+        assert f"<td>{name}</td>" in table, name
+    for app in ("todoist", "ticktick", "things"):
+        for u, _ in P.APPS[app]["src"]:
+            assert u.startswith("https://") and f'href="{u}"' in body, u
+    assert P.COMPARE_DAY.startswith("2026-10") and ("октябрь 2026" if lang == "ru" else "October 2026") in body
+    for item in P.WHO_NOT[lang]:
+        assert f"<li>{item}</li>" in body
+    assert f'href="{P.PATHS[(lang, "alt")]}"' in body
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_landing_faq_plain_html(client, lang):
+    """FAQ — обычный HTML, 5–6 вопросов, ответы по 40–60 слов. Разметки FAQPage нет: Google больше не показывает
+    FAQ в выдаче (решение аудита SERBITO-437)."""
+    h = client.get(P.PATHS[(lang, "home")]).text
+    faq = re.search(r'<section class="faq">(.+?)</section>', h, re.S).group(1)
+    qa = re.findall(r"<h3>([^<]+)</h3><p>(.+?)</p>", faq, re.S)
+    assert 5 <= len(qa) <= 6
+    for q, a in qa:
+        assert q.endswith("?") and 40 <= words(a) <= 60, (q, words(a))
+    assert "FAQPage" not in h and "Question" not in re.search(r'application/ld\+json">(.+?)</script>', h).group(1)
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_landing_self_host_mcp_and_who_makes_it(client, lang):
+    """Для разработчиков — свой сервер и MCP; «Кто делает» — только то, что уже публично: No Handoff, лицензия
+    и Issues на GitHub, дата первой версии и их число. Личных данных сверх этого нет (почта — только на /privacy)."""
+    body = landing_main(client, lang)
+    assert f'href="{P.SELF_HOST_URL}"' in body and "Docker Compose" in body and "MCP" in body
+    assert f'href="{P.PATHS[(lang, "bot")]}#claude"' in body
+    assert f'href="{P.NOHANDOFF_URL}">No Handoff</a>' in body
+    assert f'href="{P.REPO_URL}/blob/main/LICENSE"' in body and f'href="{P.REPO_URL}/issues"' in body
+    assert "Alexander Bondarchuk" in body and P.human_date(P.RELEASES[-1].date, lang) in body
+    assert P.PRIVACY_EMAIL not in body and "tel:" not in body
+    assert P.WHY == {"ru": "", "en": ""}  # истории «почему» публично ещё нет — блок появится, когда владелец впишет
+
+
+# ── /about в форме «сначала ответ» (SERBITO-470) ──
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_about_is_answer_first(client, lang):
+    """Первый абзац отвечает, что это, для кого и бесплатно ли. Заголовки разделов — вопросы, сразу под каждым —
+    ответ на 40–60 слов, и ровно одно определение на 140–160 слов. Видна дата «Обновлено»."""
+    body = main_of(client.get(P.PATHS[(lang, "about")]).text)
+    lead = re.search(r'<p class="lead">(.+?)</p>', body, re.S).group(1)
+    for w in {"ru": ("бесплатное приложение", "Getting Things Done", "Telegram"),
+              "en": ("free app", "Getting Things Done", "Telegram")}[lang]:
+        assert w in lead, w
+    assert f"{P.UPDATED[lang]} {P.human_date(P.ABOUT_DAY, lang)}" in body
+    heads = re.findall(r"<h2>([^<]+)</h2>", body)
+    answers = re.findall(r"<h2>[^<]+</h2>\s*<p>(.+?)</p>", body, re.S)
+    assert len(heads) == len(answers) >= 6 and all(q.endswith("?") for q in heads), heads
+    counts = [words(a) for a in answers]
+    assert sum(140 <= n <= 160 for n in counts) == 1, counts
+    assert all(40 <= n <= 60 for n in counts if not 140 <= n <= 160), counts
+
+
+# ── Сравнение и опорные страницы (SERBITO-470) ──
+
+@pytest.mark.parametrize("path, lang", [("/alternativa-todoist", "ru"), ("/en/todoist-alternative-open-source", "en"),
+                                        ("/en/free-gtd-apps", "en"), ("/gtd-dlya-nachinayushih", "ru")])
+def test_comparison_and_pillar_pages(client, path, lang):
+    h = client.get(path).text
+    body = main_of(h)
+    assert all(q.endswith("?") for q in re.findall(r"<h2>([^<]+)</h2>", body))  # заголовки — вопросы
+    assert f"{P.UPDATED[lang]} {P.human_date(P.COMPARE_DAY, lang)}" in body
+    if path != "/gtd-dlya-nachinayushih":  # сравнения: источники с датой и «кому не стоит переходить»
+        assert ("октябрь 2026" if lang == "ru" else "October 2026") in body
+        assert 'href="https://www.todoist.com/pricing"' in body
+        for item in P.WHO_NOT[lang]:
+            assert f"<li>{item}</li>" in body
+    else:  # опорная: ведёт на все справочные страницы
+        for page in ("about", "weekly", "bot", "alt"):
+            assert f'href="{P.PATHS[("ru", page)]}"' in body, page
+    # Переключатель языка: на ту же страницу, а если пары нет — на главную другого языка
+    other = "en" if lang == "ru" else "ru"
+    key = next(pg for (lg, pg), p in P.PATHS.items() if p == path)
+    switch = re.search(r'<a href="([^"]+)" hreflang="' + other, h).group(1)
+    assert switch == P.PATHS.get((other, key), P.PATHS[(other, "home")])
+
+
+def test_free_gtd_apps_lists_five_apps_with_sources(client):
+    body = main_of(client.get("/en/free-gtd-apps").text)
+    for app in ("gtd", "nirvana", "todoist", "ticktick", "things"):
+        assert f"<td>{P.APPS[app]['name']}</td>" in body, app
+        for u, _ in P.APPS[app]["src"]:
+            assert f'href="{u}"' in body, u

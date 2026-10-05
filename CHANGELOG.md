@@ -16,6 +16,18 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- The home page now shows what GTD looks like (three app screenshots), how it differs from Todoist, TickTick and Things, who should not switch, common questions, self-hosting and MCP, and who makes GTD.
+  - RU: На главной теперь видно, как выглядит GTD (три скриншота), чем он отличается от Todoist, TickTick и Things, кому не стоит переходить, ответы на частые вопросы, свой сервер и MCP и кто делает GTD.
+- New pages: an open-source Todoist alternative (/en/todoist-alternative-open-source) with an honest comparison, free GTD apps (/en/free-gtd-apps) and a GTD guide for beginners in Russian.
+  - RU: Новые страницы: альтернатива Todoist (/alternativa-todoist) с честным сравнением, «GTD для начинающих» (/gtd-dlya-nachinayushih) и обзор бесплатных GTD-приложений на английском.
+
+### Changed
+
+- "How it works" now answers questions first: what GTD is, the five steps, quick capture, the bot, hotkeys, open source and the phone, with an "Updated" date.
+  - RU: Страница «Как это работает» теперь сразу отвечает на вопросы: что такое GTD, пять шагов, быстрый захват, бот, горячие клавиши, открытый код и телефон — с датой «Обновлено».
+
 ## [0.40.0] - 2026-10-05
 
 ### Added

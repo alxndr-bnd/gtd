@@ -57,7 +57,11 @@ PATHS = {("ru", "home"): "/", ("ru", "about"): "/about", ("en", "home"): "/en/",
          ("ru", "changes"): "/changes", ("en", "changes"): "/en/changes",
          # Страницы под поисковый запрос (SERBITO-441, SERBITO-446)
          ("ru", "bot"): "/bot", ("en", "bot"): "/en/bot",
-         ("ru", "weekly"): "/weekly-review", ("en", "weekly"): "/en/weekly-review"}
+         ("ru", "weekly"): "/weekly-review", ("en", "weekly"): "/en/weekly-review",
+         # Сравнение и опорные страницы (SERBITO-470). У двух последних нет пары на другом языке: запрос
+         # «free GTD apps» — английский, «GTD для начинающих» — русский. Тогда нет и hreflang (см. langs_of)
+         ("ru", "alt"): "/alternativa-todoist", ("en", "alt"): "/en/todoist-alternative-open-source",
+         ("en", "freeapps"): "/en/free-gtd-apps", ("ru", "beginners"): "/gtd-dlya-nachinayushih"}
 
 # Версия, которая сейчас работает (SERBITO-329): APP_VERSION ставит деплой из тега (v0.16.0 → 0.16.0),
 # локально и в self-hosted копии без него — «dev». Показывается в подвале, в меню приложения (/api/config)
@@ -78,11 +82,12 @@ FOOTER_UTM = "?utm_source=gtd&utm_medium=crosspromo&utm_campaign=footer"
 T = {
     "ru": {
         "home_title": "GTD онлайн бесплатно — Getting Things Done приложение и Telegram-бот",
-        "home_desc": "GTD онлайн бесплатно: приложение по методу Getting Things Done Дэвида Аллена. Записывай задачи "
-                     "в один тап на сайте или через telegram бот для задач, разбирай Inbox, веди проекты и напоминания.",
+        # Описания — не длиннее 155 знаков: длиннее Google обрезает (SERBITO-442, SERBITO-470)
+        "home_desc": "Бесплатное GTD-приложение с открытым кодом: задачи через Telegram-бот, Inbox, проекты, "
+                     "@контексты и Weekly Review. На сайте и в Telegram.",
         "about_title": "Как работает GTD: 5 шагов метода Getting Things Done — GTD онлайн",
-        "about_desc": "Метод GTD Дэвида Аллена за минуту: собрать, обработать, организовать, пересмотреть, делать — "
-                      "и где это в приложении. Примеры быстрого захвата, telegram бот для задач, горячие клавиши.",
+        "about_desc": "Что такое GTD и приложение GTD: пять шагов метода Дэвида Аллена, где они в приложении, "
+                      "Telegram-бот и быстрый захват. Бесплатно, код открыт.",
         "og_alt": "GTD — Записал → Разобрал → Сделал. Бесплатно, на сайте и в Telegram",
         "locale": "ru_RU", "how": "Как это работает", "other_lang": "English", "open": "Открыть GTD",
         "other": "Другие проекты", "made": "Сделано",
@@ -92,11 +97,11 @@ T = {
     },
     "en": {
         "home_title": "GTD online for free — Getting Things Done app and Telegram bot",
-        "home_desc": "Free GTD online: a Getting Things Done app based on David Allen's method. Capture tasks in one tap "
-                     "on the web or with a Telegram bot for tasks, clear your Inbox, track projects and reminders.",
+        "home_desc": "Free, open-source GTD app with a Telegram bot: send tasks as messages, clear your Inbox, track "
+                     "projects and contexts, do a weekly review.",
         "about_title": "How GTD works: the 5 steps of Getting Things Done — GTD online",
-        "about_desc": "David Allen's GTD method in a minute: capture, clarify, organize, reflect, engage — and where "
-                      "each step lives in the app. Quick-capture examples, a Telegram bot for tasks, hotkeys.",
+        "about_desc": "What GTD is and how the GTD app works: David Allen's five steps, where each one lives in the app, "
+                      "the Telegram bot. Free and open source.",
         "og_alt": "GTD — Capture → Clarify → Do. Free, on the web and in Telegram",
         "locale": "en_US", "how": "How it works", "other_lang": "Русский", "open": "Open GTD",
         "other": "Other projects", "made": "Made by",
@@ -142,6 +147,22 @@ PUBLIC_CSS = """<style>
 .pub .rel h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap} .pub .rel h2 .note{font-weight:400}
 .pub .rel h3{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 4px}
 .pub .rel ul{margin:0;padding-left:20px} .pub .rel li{margin:4px 0}
+/* Скриншоты (SERBITO-442): width/height в разметке — место под картинку есть до загрузки, страница не прыгает */
+.pub .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0}
+.pub .shots figure{margin:0} .pub .shots figcaption{font-size:14px;color:var(--mut);margin-top:6px}
+.pub .shots img{display:block;width:100%;height:auto;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+/* Таблицы сравнения: текст в ячейках переносится, и на телефоне таблица влезает в экран. Если всё же не влезет
+   (320 px), прокручивается таблица, а не страница. Минимальной ширины у колонок нет: иначе на 390 px таблица
+   прокручивалась бы, а прокручиваемый блок Chromium делает остановкой Tab — высокой, под баннер cookie */
+.pub .tbl{overflow-x:auto;margin:0 0 12px} .pub .cmp td:first-child{white-space:normal;font-weight:600}
+.pub .cmp td{overflow-wrap:break-word}
+/* Телефон: четыре узкие колонки рвали слова посередине — каждая строка становится карточкой, подпись колонки
+   (data-label) стоит над значением */
+@media(max-width:700px){.pub .cmp thead{display:none}
+  .pub .cmp tr{display:block;padding:10px 0;border-bottom:1px solid var(--bd)}
+  .pub .cmp td{display:block;border:0;padding:2px 0}
+  .pub .cmp td[data-label]::before{content:attr(data-label);display:block;font-size:14px;font-weight:600;color:var(--mut)}}
+.pub .faq h3{font-size:17px;margin:22px 0 6px}
 /* minmax(0,1fr), а не 1fr: колонка не шире экрана, даже если строка почты или кнопка входа шире (320 px, WCAG 1.4.10) */
 @media(max-width:700px){.pub .intro{grid-template-columns:minmax(0,1fr)}.pub h1{font-size:25px}}
 /* Читается и нажимается на телефоне (SERBITO-448). Текст — не мельче 14 px (подпись, «или» и сообщения блока входа
@@ -309,7 +330,18 @@ def url(base: str, lang: str, page: str) -> str:
     return base + PATHS[(lang, page)]
 
 
-CRUMB = {"about": "how", "privacy": "privacy", "changes": "changes", "bot": "bot", "weekly": "weekly"}  # имя страницы в хлебных крошках — ключ T
+def langs_of(page: str) -> list[str]:
+    """Языки, на которых есть страница: у большинства — оба, у страниц под запрос одного языка — один."""
+    return [lg for lg in LANGS if (lg, page) in PATHS]
+
+
+def switch_path(lang: str, page: str) -> str:
+    """Куда ведёт переключатель языка: на ту же страницу другого языка, а если её нет — на главную."""
+    return PATHS.get((lang, page), PATHS[(lang, "home")])
+
+
+CRUMB = {"about": "how", "privacy": "privacy", "changes": "changes", "bot": "bot", "weekly": "weekly",
+         "alt": "alt", "freeapps": "freeapps", "beginners": "beginners"}  # имя страницы в хлебных крошках — ключ T
 
 
 def structured_data(base: str, lang: str, page: str, img: str) -> dict:
@@ -349,9 +381,13 @@ def head(base: str, lang: str, page: str) -> str:
     """<title>, description, canonical, hreflang, OG, twitter:card и JSON-LD."""
     t, me = T[lang], url(base, lang, page)
     title, desc = t[page + "_title"], t[page + "_desc"]
-    alt = [f'<link rel="alternate" hreflang="{lg}" href="{url(base, lg, page)}">' for lg in LANGS]
-    alt.append(f'<link rel="alternate" hreflang="x-default" href="{url(base, "ru", page)}">')
+    # hreflang — только у страниц с парой на другом языке; x-default — русская версия
+    alt = []
+    if len(langs_of(page)) > 1:
+        alt = [f'<link rel="alternate" hreflang="{lg}" href="{url(base, lg, page)}">' for lg in LANGS]
+        alt.append(f'<link rel="alternate" hreflang="x-default" href="{url(base, "ru", page)}">')
     other = T["en" if lang == "ru" else "ru"]["locale"]
+    other_locale = [f'<meta property="og:locale:alternate" content="{other}">'] if alt else []
     img = f"{base}/og.png" if lang == "ru" else f"{base}/og-en.png"
     ld = structured_data(base, lang, page, img)
     return "\n".join([
@@ -364,7 +400,7 @@ def head(base: str, lang: str, page: str) -> str:
         f'<meta property="og:description" content="{desc}">',
         f'<meta property="og:url" content="{me}">',
         f'<meta property="og:locale" content="{t["locale"]}">',
-        f'<meta property="og:locale:alternate" content="{other}">',
+        *other_locale,
         f'<meta property="og:image" content="{img}">',
         '<meta property="og:image:type" content="image/png">',
         '<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">',
@@ -381,7 +417,7 @@ def topbar(lang: str, page: str) -> str:
     link = (f'<a href="{PATHS[(lang, "about")]}">{t["how"]}</a>' if page == "home"
             else f'<a href="{PATHS[(lang, "home")]}">{t["open"]}</a>')
     return (f'<header class="top"><a class="brand" href="{PATHS[(lang, "home")]}">{mark(28)} {SITE_NAME}</a>{link}'
-            f'<a href="{PATHS[(other, page)]}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></header>')
+            f'<a href="{switch_path(other, page)}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></header>')
 
 
 def footer(lang: str, consent: bool = False) -> str:
@@ -396,8 +432,7 @@ def footer(lang: str, consent: bool = False) -> str:
     # «Что нового» и работающая версия (SERBITO-329)
     changes = f' · <a href="{PATHS[(lang, "changes")]}">{t["changes"]}</a> · <span class="ver">{VERSION_LABEL}</span>'
     # Справочные страницы (SERBITO-441, SERBITO-446) — ссылки со всех публичных страниц
-    guides = " · ".join(f'<a href="{PATHS[(lang, page)]}">{t[key]}</a>'
-                        for page, key in (("about", "how"), ("bot", "bot"), ("weekly", "weekly")))
+    guides = " · ".join(f'<a href="{PATHS[(lang, page)]}">{t[CRUMB[page]]}</a>' for page in GUIDE_PAGES[lang])
     return (f'<footer><p>{guides}</p><b>{t["other"]}</b><ul>{items}</ul>'
             f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{changes}{contact}</p>'
             f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a> · '
@@ -406,9 +441,10 @@ def footer(lang: str, consent: bool = False) -> str:
 
 
 LANDING = {
-    "ru": """<h1>GTD онлайн — бесплатно, на сайте и в Telegram</h1>
+    # h1 называет отличие (SERBITO-442): GTD + Telegram-бот + открытый код
+    "ru": """<h1>GTD-приложение с Telegram-ботом и открытым кодом — бесплатно</h1>
 <p class="lead">Запиши всё, что крутится в голове, за секунду — и разбери потом, по методу Getting Things Done.</p>""",
-    "en": """<h1>GTD online — free, on the web and in Telegram</h1>
+    "en": """<h1>Free GTD app with a Telegram bot — open source</h1>
 <p class="lead">Capture everything on your mind in a second, then sort it out later with the Getting Things Done method.</p>""",
 }
 LANDING_SIGNIN = {
@@ -479,15 +515,33 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
             f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>'
             f'{PRIVACY_NOTE[lang]}</div>'
-            f'</div>{LANDING_STEPS[lang]}</main>{footer(lang, consent)}</div>')
+            f'</div>{LANDING_STEPS[lang]}{landing_more(lang)}</main>{footer(lang, consent)}</div>')
 
 
 ABOUT = {
     "ru": """<h1>Как работает GTD</h1>
-<p class="lead">GTD (Getting Things Done) — метод Дэвида Аллена из книги «Getting Things Done» (2001; по-русски —
-«Как привести дела в порядок»). Голова — для идей, а не для хранения: всё, что требует внимания, сразу записываешь
-в Inbox, потом решаешь, что это и какой следующий конкретный шаг.</p>
-<h2>Пять шагов метода — и где они в приложении</h2>
+<p class="lead">GTD — бесплатное приложение для тех, кто ведёт дела по методу Getting Things Done: сайт
+и Telegram-бот @gtdsrbot с одним аккаунтом. Записываешь задачу в один тап, потом разбираешь Inbox и делаешь
+следующие шаги. Платных тарифов и рекламы нет, код открыт (MIT).</p>
+<p class="note">{updated}</p>
+<h2>Что такое приложение GTD?</h2>
+<p>GTD — бесплатный менеджер задач по методу Getting Things Done Дэвида Аллена. Он работает в браузере на компьютере
+и на телефоне, а ещё в Telegram: бот @gtdsrbot принимает задачи обычными сообщениями и присылает напоминания. Сайт
+и бот — один аккаунт. Войти можно через Google, по коду из письма или через Telegram, пароль не нужен. В приложении
+есть все списки метода: Inbox, Next, Waiting, Projects, Someday, Reference и календарь напоминаний. У задачи может
+быть проект и несколько @контекстов, а список Next можно отфильтровать по контексту. Срок, #проект и @контекст
+пишутся прямо в тексте задачи. Раздел Weekly Review раз
+в неделю проводит по шести шагам обзора. Интерфейс — на русском и английском. Платных тарифов нет. Код открыт под
+лицензией MIT: его можно прочитать на GitHub или поднять свою копию через Docker Compose. Для Claude и других
+AI-ассистентов есть MCP-сервер: они умеют записывать задачи, показывать списки и проводить обзор.</p>
+<h2>Что такое метод GTD?</h2>
+<p>GTD (Getting Things Done) — метод Дэвида Аллена из книги «Getting Things Done» (2001; по-русски —
+«Как привести дела в порядок»). Главная мысль метода: голова — для идей, а не для хранения. Всё, что требует внимания, сразу
+записываешь в Inbox. Потом спокойно решаешь, что это и какой следующий конкретный шаг.</p>
+<h2>Какие пять шагов у метода GTD?</h2>
+<p>Пять шагов — собрать, обработать, организовать, пересмотреть и делать. Первые три превращают поток мыслей
+в понятные списки. Четвёртый раз в неделю держит эти списки честными. Пятый — выбор следующего действия по месту
+и ситуации. Ниже — что значит каждый шаг и где он в приложении.</p>
 <ol class="steps">
 <li><b>1. Собрать</b>Всё, что крутится в голове, — сразу записать, не разбирая.
 <span class="where">Поле захвата на сайте, Telegram-бот</span></li>
@@ -500,7 +554,10 @@ ABOUT = {
 <li><b>5. Делать</b>Выбрать следующее действие по месту и ситуации.
 <span class="where">Next с фильтром по @контексту</span></li>
 </ol>
-<h2>Быстрый захват</h2>
+<h2>Как быстро записать задачу?</h2>
+<p>Напиши задачу в поле захвата на сайте или сообщением боту. Срок, #проект и @контекст пиши прямо в тексте:
+приложение само поставит напоминание и уберёт эти слова из названия. Без проекта и контекста задача попадает
+в Inbox, а с ними — сразу в Next, в нужный проект.</p>
 <ul class="ex">
 <li><q>позвонить маме завтра в 10:00</q> — задача в Inbox и напоминание завтра в 10:00.</li>
 <li><q>отчёт #Работа @комп</q> — сразу в Next, в проект «Работа», контекст @комп.</li>
@@ -508,13 +565,16 @@ ABOUT = {
 она видна в Next и под @телефон, и под @комп.</li>
 <li>Сроки понимаются и так: <q>через 2 часа</q>, <q>в пятницу</q>, <q>24.10 12:00</q>.</li>
 </ul>
-<h2>Telegram-бот</h2>
-<p><a href="https://t.me/gtdsrbot">@gtdsrbot</a> принимает задачи обычными сообщениями — с тем же синтаксисом —
+<h2>Есть ли у GTD Telegram-бот?</h2>
+<p>Да. <a href="https://t.me/gtdsrbot">@gtdsrbot</a> принимает задачи обычными сообщениями — с тем же синтаксисом —
 и присылает напоминания с кнопками ✅ Готово, 💤 +1ч и ⏭ Next. Бот и сайт — один аккаунт: войди на сайте
 через Telegram или привяжи бота в «Аккаунте». Все примеры, команды и подключение Claude —
 <a href="/bot">на странице бота</a>.</p>
 <p><a class="btn" href="https://t.me/gtdsrbot">Открыть @gtdsrbot</a></p>
-<h2>Горячие клавиши</h2>
+<h2>Можно ли работать с клавиатуры?</h2>
+<p>Да, по спискам можно ходить без мыши. Клавиша C или N ставит курсор в поле захвата, стрелки переключают задачи
+и меню, Enter открывает задачу, а Esc сбрасывает выбор. C и N работают и на русской раскладке, поэтому язык
+клавиатуры переключать не нужно.</p>
 <ul class="ex">
 <li><kbd>C</kbd> или <kbd>N</kbd> — к полю захвата (работает и на русской раскладке)</li>
 <li><kbd>↑</kbd> <kbd>↓</kbd> — по задачам, <kbd>Enter</kbd> — открыть задачу</li>
@@ -522,10 +582,25 @@ ABOUT = {
 </ul>
 <p><a class="btn" href="/">Открыть GTD</a></p>""",
     "en": """<h1>How GTD works</h1>
-<p class="lead">GTD (Getting Things Done) is David Allen's method from his book “Getting Things Done” (2001).
-Your head is for having ideas, not holding them: capture everything that needs attention into an Inbox right away,
-then decide what it is and what the next concrete step is.</p>
-<h2>The five steps — and where they live in the app</h2>
+<p class="lead">GTD is a free app for people who run their tasks with the Getting Things Done method: a website
+and the Telegram bot @gtdsrbot with one account. Capture a task in one tap, then clear the Inbox and do the next
+steps. No paid plans, no ads, and the code is open source (MIT).</p>
+<p class="note">{updated}</p>
+<h2>What is the GTD app?</h2>
+<p>GTD is a free task manager built on David Allen's Getting Things Done method. It runs in the browser on your
+computer and phone, and in Telegram: the bot @gtdsrbot takes tasks as plain messages and sends reminders. The website
+and the bot share one account. You sign in with Google, with a code from an email, or with Telegram. The app has all the lists of the method: Inbox, Next, Waiting, Projects, Someday, Reference and a calendar
+of reminders. A task can have a project and several @contexts, and you can filter Next by context. Once a week, the
+Weekly Review view takes you through six steps. The interface is in English and Russian. The code is open source under the MIT license: read it on GitHub or run your own copy with Docker Compose. Claude
+and other AI assistants connect through an MCP server: they can capture tasks, show your lists and run the review.</p>
+<h2>What is the GTD method?</h2>
+<p>GTD (Getting Things Done) is David Allen's method from his book “Getting Things Done” (2001). The main idea: your
+head is for having ideas, not for holding them. Capture everything that needs attention into an Inbox right away.
+Then decide what it is and what the next concrete step is.</p>
+<h2>What are the five steps of GTD?</h2>
+<p>The five steps are capture, clarify, organize, reflect and engage. The first three turn a stream of thoughts into
+clear lists. The fourth keeps the lists trustworthy, once a week. The fifth is choosing the next action that fits
+where you are. Below is what each step means and where it lives in the app.</p>
 <ol class="steps">
 <li><b>1. Capture</b>Write down everything on your mind right away, without sorting it.
 <span class="where">Capture field on the site, Telegram bot</span></li>
@@ -538,7 +613,10 @@ then decide what it is and what the next concrete step is.</p>
 <li><b>5. Engage</b>Pick the next action that fits where you are and what you have at hand.
 <span class="where">Next, filtered by @context</span></li>
 </ol>
-<h2>Quick capture</h2>
+<h2>How do I capture a task quickly?</h2>
+<p>Type the task into the capture field on the website or send it to the bot. Put the date, #Project and @context
+right in the text: the app sets the reminder and removes these words from the title. Without a project or a context,
+the task goes to the Inbox; with them, it goes straight to Next.</p>
 <ul class="ex">
 <li><q>call mom tomorrow at 10:00</q> — a task in the Inbox and a reminder tomorrow at 10:00.</li>
 <li><q>report #Work @computer</q> — straight to Next, in the “Work” project, with the @computer context.</li>
@@ -547,13 +625,16 @@ in Next it shows under both @phone and @computer.</li>
 <li>Times and dates are understood too: <q>in 2 hours</q>, <q>tomorrow 10am</q>, <q>next monday</q>, <q>24 oct 12:00</q>.</li>
 <li>Russian works too: <q>позвонить маме завтра в 10:00</q>, <q>отчёт #Работа @комп</q>.</li>
 </ul>
-<h2>Telegram bot</h2>
-<p><a href="https://t.me/gtdsrbot">@gtdsrbot</a> takes tasks as plain messages — same syntax — and sends reminders
+<h2>Is there a Telegram bot?</h2>
+<p>Yes. <a href="https://t.me/gtdsrbot">@gtdsrbot</a> takes tasks as plain messages — same syntax — and sends reminders
 with ✅ Done, 💤 +1h and ⏭ Next buttons. The bot and the site share one account: sign in on the site with Telegram
 or link the bot under “Account”. All examples, commands and how to connect Claude are
 <a href="/en/bot">on the bot page</a>.</p>
 <p><a class="btn" href="https://t.me/gtdsrbot">Open @gtdsrbot</a></p>
-<h2>Hotkeys</h2>
+<h2>Can I use GTD from the keyboard?</h2>
+<p>Yes, you can work through your lists without a mouse. C or N jumps to the capture field, the arrow keys move
+between tasks and the menu, Enter opens a task and Esc clears the selection. C and N work in any keyboard layout,
+so you do not need to switch it first.</p>
 <ul class="ex">
 <li><kbd>C</kbd> or <kbd>N</kbd> — jump to the capture field (works in any keyboard layout)</li>
 <li><kbd>↑</kbd> <kbd>↓</kbd> — move between tasks, <kbd>Enter</kbd> — open a task</li>
@@ -565,24 +646,32 @@ or link the bot under “Account”. All examples, commands and how to connect C
 
 # Последний раздел /about: как поставить сайт на экран телефона (манифест — /manifest.webmanifest)
 INSTALL = {
-    "ru": """<h2>GTD на экране телефона</h2>
-<p>Сайт ставится как приложение, без магазина: на iPhone — «Поделиться» → «На экран «Домой»»,
-на Android — меню ⋮ → «Установить приложение».</p>""",
-    "en": """<h2>GTD on your home screen</h2>
-<p>Install the site like an app, no store needed: on iPhone, Share → Add to Home Screen;
-on Android, the ⋮ menu → Install app.</p>""",
+    "ru": """<h2>Можно ли поставить GTD на телефон?</h2>
+<p>Да, сайт ставится как приложение, без магазина: на iPhone — «Поделиться» → «На экран «Домой»»,
+на Android — меню ⋮ → «Установить приложение». Иконка на экране откроет GTD без адресной строки браузера,
+а напоминания по-прежнему придут от бота в Telegram. Обновлять ничего не нужно: всегда открывается последняя
+версия.</p>""",
+    "en": """<h2>Can I install GTD on my phone?</h2>
+<p>Yes, the website installs like an app, no store needed: on iPhone, Share → Add to Home Screen;
+on Android, the ⋮ menu → Install app. The icon opens GTD without the browser's address bar, and your reminders
+still come from the bot in Telegram.</p>""",
 }
 
 # Раздел /about про открытый код; инструкция по self-hosting — только на английском
 OSS = {
-    "ru": f"""<h2>Открытый код</h2>
-<p>GTD — открытый проект под лицензией MIT: код и история изменений — на <a href="{REPO_URL}">GitHub</a>.
-Можно посмотреть, как всё устроено, предложить правку или поднять свою копию —
-<a href="{SELF_HOST_URL}">инструкция по self-hosting</a> (на английском).</p>""",
-    "en": f"""<h2>Open source</h2>
-<p>GTD is open source under the MIT license: the code and its history are on <a href="{REPO_URL}">GitHub</a>.
-Read how it works, suggest a fix, or run your own copy — see the <a href="{SELF_HOST_URL}">self-hosting guide</a>.</p>""",
+    "ru": f"""<h2>GTD бесплатный? Где открытый код?</h2>
+<p>Да, GTD бесплатный: платных тарифов нет. Код открыт под лицензией MIT и лежит на <a href="{REPO_URL}">GitHub</a>
+вместе с историей изменений. Можно посмотреть, как всё устроено, предложить правку или поднять свою копию —
+<a href="{SELF_HOST_URL}">инструкция по self-hosting</a> (на английском). Что менялось в каждой версии —
+на странице <a href="/changes">«Что нового»</a>.</p>""",
+    "en": f"""<h2>Is GTD free? Where is the source code?</h2>
+<p>Yes, GTD is free: there are no paid plans. The code is open source under the MIT license and lives on
+<a href="{REPO_URL}">GitHub</a> with its full history. Read how it works, suggest a fix, or run your own copy —
+see the <a href="{SELF_HOST_URL}">self-hosting guide</a>.</p>""",
 }
+# Редакция текста /about (SERBITO-470): дата «Обновлено» на странице, dateModified и lastmod в sitemap.
+# Правишь текст /about — ставь новую дату
+ABOUT_DAY = "2026-10-05"
 
 
 def about(base: str, lang: str, ga: str) -> str:
@@ -592,7 +681,8 @@ def about(base: str, lang: str, ga: str) -> str:
     track = ("<script>function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, params); }\n"
              f"ga('page_view', {{page_location: location.origin + '{path}', page_title: 'GTD — {T[lang]['how']}'}});\n"
              f"ga('about_view', {{language: '{lang}'}});</script>")
-    return public_page(base, lang, "about", ga, ABOUT[lang] + OSS[lang] + INSTALL[lang], track)
+    main = ABOUT[lang].replace("{updated}", f"{UPDATED[lang]} {human_date(ABOUT_DAY, lang)}")
+    return public_page(base, lang, "about", ga, main + OSS[lang] + INSTALL[lang], track)
 
 
 # Политика конфиденциальности (SERBITO-282). Каждое утверждение сверено с app.py и index.html — меняешь, что
@@ -766,7 +856,8 @@ def modified(page: str) -> str | None:
     Только там, где дата известна: «Что нового» — последний релиз, политика — её редакция. Главной и /about
     дату не ставим: дата деплоя — неправда, и Google перестаёт верить lastmod сайта"""
     return {"changes": RELEASES[0].date if RELEASES else None, "privacy": PRIVACY_DAY,
-            "bot": GUIDES_DAY, "weekly": GUIDES_DAY}.get(page)
+            "bot": GUIDES_DAY, "weekly": GUIDES_DAY, "about": ABOUT_DAY,
+            "alt": COMPARE_DAY, "freeapps": COMPARE_DAY, "beginners": COMPARE_DAY}.get(page)
 SEEN_KEY = "gtd-seen-version"  # localStorage: версия, которую человек уже видел на /changes (точка в меню SPA)
 T["ru"].update(changes="Что нового", changes_title="Что нового в GTD — история версий приложения Getting Things Done",
                changes_desc="Что появилось и что исправлено в GTD онлайн: все версии приложения и Telegram-бота, "
@@ -1231,11 +1322,487 @@ def weekly(base: str, lang: str, ga: str) -> str:
     return public_page(base, lang, "weekly", ga, main, COPY_JS + "\n" + page_view(lang, "weekly"))
 
 
+# ── Сравнение с другими приложениями (SERBITO-442, SERBITO-470) ──
+# Только то, что написано на официальных страницах (src) на дату COMPARE_DAY. Чего на странице нет — нет и здесь:
+# цену Todoist Pro страница рисует скриптом, в HTML её нет — поэтому цены в таблице нет. Цены и лимиты меняются:
+# перепроверь раз в квартал и поставь новую дату. Про GTD — только то, что есть в коде (см. WHO_NOT)
+COMPARE_DAY = "2026-10-05"
+T["ru"].update(
+    alt="Альтернатива Todoist",
+    alt_title=f"Альтернатива Todoist с открытым кодом и Telegram-ботом — {SITE_NAME}",
+    alt_desc="Бесплатная альтернатива Todoist для метода GTD: открытый код (MIT) и Telegram-бот. Честное сравнение "
+             "тарифов и кому переходить не стоит.",
+    beginners="GTD для начинающих",
+    beginners_title=f"GTD для начинающих: как начать по методу Getting Things Done — {SITE_NAME}",
+    beginners_desc="GTD для начинающих: какие списки завести, что такое контексты, как разбирать Inbox и зачем "
+                   "еженедельный обзор. Пошагово, с примерами.")
+T["en"].update(
+    alt="Todoist alternative",
+    alt_title=f"Open-source Todoist alternative for GTD, with a Telegram bot — {SITE_NAME}",
+    alt_desc="A free, open-source Todoist alternative built for GTD, with a Telegram bot. An honest comparison of "
+             "plans, and who should not switch.",
+    freeapps="Free GTD apps",
+    freeapps_title=f"Free GTD apps compared: what the free plans include in 2026 — {SITE_NAME}",
+    freeapps_desc="Free GTD apps compared, as of October 2026: what the free plans of GTD, Nirvana, Todoist, "
+                  "TickTick and Things include. With sources.")
+# Справочные страницы в подвале каждой публичной страницы — по языку
+GUIDE_PAGES = {"ru": ("about", "bot", "weekly", "beginners", "alt"), "en": ("about", "bot", "weekly", "freeapps", "alt")}
+
+# Строки таблицы: имя, (бесплатно, платно, где работает) по языкам, источники
+APPS = {
+    "gtd": {"name": SITE_NAME, "src": [],
+            "ru": ("Все функции приложения", "Платных тарифов нет", "Браузер (ставится на экран телефона) и Telegram-бот"),
+            "en": ("Every feature of the app", "No paid plans", "Browser (installs on the phone home screen) and a Telegram bot")},
+    "nirvana": {"name": "Nirvana", "src": [("https://nirvanahq.com/pricing", "nirvanahq.com/pricing")],
+                "en": ("Inbox, Next, Waiting, Scheduled and Someday lists; basic projects and areas; tags and contexts",
+                       "Pro, $36 a year: unlimited projects and areas, recurring to-dos",
+                       "Web, iOS, Android, Mac, Windows")},
+    "todoist": {"name": "Todoist", "src": [("https://www.todoist.com/pricing", "todoist.com/pricing"),
+                                           ("https://www.todoist.com/downloads", "todoist.com/downloads")],
+                "ru": ("Тариф Beginner: 5 личных проектов, напоминания, 3 фильтра, история действий за неделю",
+                       "Pro: 300 проектов, календарь, свои напоминания; Business — для команд",
+                       "Linux, Mac, Windows, iPhone, iPad, Android, Apple Watch, Wear OS"),
+                "en": ("Beginner plan: 5 personal projects, task reminders, 3 filter views, 1 week of activity history",
+                       "Pro: 300 projects, calendar layout, custom reminders; Business for teams",
+                       "Linux, Mac, Windows, iPhone, iPad, Android, Apple Watch, Wear OS")},
+    "ticktick": {"name": "TickTick", "src": [("https://ticktick.com/about/upgrade", "ticktick.com/about/upgrade"),
+                                             ("https://ticktick.com/download", "ticktick.com/download")],
+                 "ru": ("9 списков по 99 задач, напоминания, синхронизация между устройствами",
+                        "Premium — US$49.99 в год: 299 списков по 999 задач, календарь",
+                        "Веб, iOS и iPadOS, Android, Windows, macOS, Linux"),
+                 "en": ("9 lists, 99 tasks per list, task reminders, sync across devices",
+                        "Premium, US$49.99 a year: 299 lists, 999 tasks per list, calendar views",
+                        "Web, iOS and iPadOS, Android, Windows, macOS, Linux")},
+    "things": {"name": "Things", "src": [("https://culturedcode.com/things/", "culturedcode.com/things")],
+               "ru": ("Нет; пробная версия — только для Mac", "Своя цена для Mac, iPhone и Apple Watch, iPad, Vision Pro",
+                      "Mac, iPhone, iPad, Apple Watch, Vision Pro"),
+               "en": ("None; a free trial for Mac only", "A separate price for Mac, iPhone and Apple Watch, iPad, Vision Pro",
+                      "Mac, iPhone, iPad, Apple Watch, Vision Pro")},
+}
+CMP = {
+    "ru": {"head": ("Приложение", "Бесплатно", "Платно", "Где работает"),
+           "src": "Данные о других приложениях — с их официальных сайтов, на октябрь 2026:",
+           "only": "Telegram-бот и открытый код есть только у GTD: на официальных страницах {others} мы их не нашли."},
+    "en": {"head": ("App", "Free plan", "Paid plan", "Platforms"),
+           "src": "Facts about other apps come from their official websites, as of October 2026:",
+           "only": "Only GTD has a Telegram bot and open source code: we did not find either on the official pages "
+                   "of {others}."},
+}
+
+
+def sources(lang: str, apps) -> str:
+    links = ", ".join(f'<a href="{u}">{name}</a>' for a in apps for u, name in APPS[a]["src"])
+    return f'<p class="note">{CMP[lang]["src"]} {links}.</p>'
+
+
+def compare_table(lang: str, apps) -> str:
+    """Таблица «бесплатно / платно / где работает» и строка об отличиях GTD — с источниками под ней."""
+    c = CMP[lang]
+    head = "".join(f"<th>{h}</th>" for h in c["head"])
+    body = "".join(f"<tr><td>{APPS[a]['name']}</td>"
+                   + "".join(f'<td data-label="{h}">{x}</td>' for h, x in zip(c["head"][1:], APPS[a][lang])) + "</tr>"
+                   for a in apps)
+    others = [APPS[a]["name"] for a in apps if a != "gtd"]
+    names = (", ".join(others[:-1]) + (" и " if lang == "ru" else " or ") + others[-1]) if len(others) > 1 else others[0]
+    return (f'<div class="tbl"><table class="cmp"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+            f'<p>{c["only"].format(others=names)}</p>' + sources(lang, apps))
+
+
+# Кому GTD не подойдёт — сверено с кодом: повторов, общих проектов, импорта, подзадач, приоритетов и вложений
+# в app.py нет; service worker нет (без сети не работает); напоминания шлёт только бот (send_due_reminders)
+WHO_NOT = {
+    "ru": ["Нужны повторяющиеся задачи — в GTD их пока нет.",
+           "Работаешь в команде: общих проектов и задач для других людей нет.",
+           "Нужно приложение из App Store или Google Play и работа без интернета. GTD — это сайт (его можно поставить "
+           "на экран телефона) и бот, без сети он не работает.",
+           "Напоминания нужны не в Telegram: push-уведомлений и писем с напоминаниями GTD не шлёт.",
+           "Нужны подзадачи, приоритеты или вложения.",
+           "Нужно перенести задачи одной кнопкой: импорта из других приложений нет."],
+    "en": ["You need recurring tasks — GTD does not have them yet.",
+           "You work in a team: there are no shared projects and no tasks for other people.",
+           "You need an app from the App Store or Google Play that works offline. GTD is a website (you can install it "
+           "on your phone home screen) and a bot; it does not work without a connection.",
+           "You want reminders outside Telegram: GTD sends no push notifications and no reminder emails.",
+           "You need subtasks, priorities or attachments.",
+           "You want to move your tasks in one click: there is no import from other apps."],
+}
+
+
+def who_not(lang: str) -> str:
+    return "<ul>" + "".join(f"<li>{x}</li>" for x in WHO_NOT[lang]) + "</ul>"
+
+
+# ── Лендинг: скриншоты, сравнение, FAQ, для разработчиков, кто делает (SERBITO-442) ──
+# Скриншоты — scripts/screenshots.py: демо-данные во временной базе, телефон 390×700, WebP шириной 600 px.
+# Отдаёт их app.py по /shots/<имя>; размеры — в разметке, чтобы страница не прыгала при загрузке
+SHOT_VIEWS = ("inbox", "next", "review")
+SHOT_SIZE = (600, 1077)
+SHOT_FILES = {f"{v}-{lg}.webp" for v in SHOT_VIEWS for lg in LANGS}
+SHOTS = {
+    "ru": {"h": "Как выглядит GTD", "lead": "Три экрана на телефоне. Задачи на них — демо.",
+           "inbox": ("Inbox на телефоне: поле захвата и новые задачи с кнопками Next, Project, Waiting, Someday и Ref",
+                     "Inbox: записал — потом разобрал кнопками"),
+           "next": ("Список Next с фильтром по контексту @магазин: две задачи, одна из них — в проекте «Ремонт кухни»",
+                    "Next по контексту: только то, что можно сделать в магазине"),
+           "review": ("Weekly Review: шесть шагов обзора, у каждого — данные из списков задач",
+                      "Weekly Review: шесть шагов по твоим спискам")},
+    "en": {"h": "What GTD looks like", "lead": "Three screens on a phone. The tasks are demo data.",
+           "inbox": ("The Inbox on a phone: the capture field and new tasks with Next, Project, Waiting, Someday and "
+                     "Ref buttons", "Inbox: capture now, sort later with one tap"),
+           "next": ("The Next list filtered by the @store context: two tasks, one of them in the “Kitchen renovation” "
+                    "project", "Next by context: only what you can do at the store"),
+           "review": ("Weekly Review: six steps, each filled with data from your task lists",
+                      "Weekly Review: six steps over your own lists")},
+}
+
+
+def shots(lang: str) -> str:
+    s, (w, h) = SHOTS[lang], SHOT_SIZE
+    figs = "".join(f'<figure><img src="/shots/{v}-{lang}.webp" width="{w}" height="{h}" alt="{s[v][0]}" '
+                   f'loading="lazy" decoding="async"><figcaption>{s[v][1]}</figcaption></figure>' for v in SHOT_VIEWS)
+    return f'<h2>{s["h"]}</h2><p>{s["lead"]}</p><div class="shots">{figs}</div>'
+
+
+# Частые вопросы — обычный HTML: FAQPage в JSON-LD не нужен, Google больше не показывает FAQ в выдаче.
+# Ответы — 40–60 слов: их удобно цитировать AI-ассистентам (SERBITO-442)
+FAQ = {
+    "ru": [
+        ("GTD правда бесплатный?",
+         "Да. Платных тарифов и рекламы нет, банковская карта не нужна. Все функции, которые описаны на этой странице, "
+         "доступны сразу после входа. Код открыт под лицензией MIT: если не хочешь зависеть от нашего сервера, "
+         "подними свою копию по инструкции на GitHub. Задачи при этом останутся только у тебя."),
+        ("Нужно ли знать метод GTD, чтобы начать?",
+         "Нет. Начни с одной привычки: всё, что приходит в голову, записывай в Inbox. Раз в день разбирай его кнопками "
+         "Next, Waiting, Someday или Reference. Остальное подскажет приложение: в Inbox есть чек-лист первых шагов, "
+         "а раздел Weekly Review проводит по обзору. Метод за минуту — на странице «Как это работает»."),
+        ("Можно ли пользоваться без Telegram?",
+         "Да. На сайт можно войти через Google или по коду из письма, и все списки, проекты и Weekly Review работают "
+         "в браузере. Без Telegram не будет только напоминаний: их присылает бот. Срок у задачи всё равно сохранится, "
+         "и она будет видна в календаре напоминаний на сайте."),
+        ("Есть ли приложение для телефона?",
+         "Отдельного приложения в App Store и Google Play нет. Сайт ставится на экран телефона как приложение: "
+         "на iPhone — «Поделиться» → «На экран «Домой»», на Android — «Установить приложение». А чтобы записать "
+         "задачу на ходу, хватит Telegram: напиши её боту одним сообщением, и напоминание придёт туда же."),
+        ("Кто видит мои задачи?",
+         "Задачи привязаны к твоему аккаунту: по ссылке их не откроет никто другой. Хранятся они в базе в Google Cloud, "
+         "в Бельгии. В Google Analytics уходят только названия разделов и события, без текста задач. Данные мы "
+         "не продаём. Подробности — в политике конфиденциальности."),
+        ("Как перенести задачи из Todoist?",
+         "Импорта пока нет. Перенеси только активные задачи: вставь их в поле захвата на сайте или напиши боту, "
+         "по одной. Срок, #проект и @контекст пиши прямо в тексте. Заодно это хороший первый шаг GTD: собрать всё "
+         "в одном Inbox и не тащить за собой старое."),
+    ],
+    "en": [
+        ("Is GTD really free?",
+         "Yes. There are no paid plans and no ads, and you do not need a credit card. Every feature on this page is "
+         "available right after you sign in. The code is open source under the MIT license: if you do not want to "
+         "depend on our server, run your own copy with the guide on GitHub."),
+        ("Do I need to know the GTD method to start?",
+         "No. Start with one habit: write everything that comes to mind into the Inbox. Once a day, sort it with the "
+         "Next, Waiting, Someday or Reference buttons. The app helps with the rest: the Inbox shows a first-steps "
+         "checklist, and the Weekly Review view walks you through the review. See “How it works” for the method "
+         "in a minute."),
+        ("Can I use it without Telegram?",
+         "Yes. Sign in on the website with Google or with a code from an email, and all lists, projects and the "
+         "Weekly Review work in the browser. Without Telegram you only miss the reminders, because the bot sends "
+         "them. The task still keeps its date and shows up in the calendar of reminders on the website."),
+        ("Is there a phone app?",
+         "There is no separate app in the App Store or Google Play. The website installs on your phone like an app: "
+         "on iPhone, Share → Add to Home Screen; on Android, Install app. To capture a task on the go, Telegram is "
+         "enough: send it to the bot as one message."),
+        ("Who can see my tasks?",
+         "Your tasks belong to your account: nobody else can open them by a link. They are stored in a database on "
+         "Google Cloud, in Belgium. Google Analytics gets only section names and events, never task text. We do not "
+         "sell data. The details are in the privacy policy."),
+        ("How do I move my tasks from Todoist?",
+         "There is no import yet. Move only your active tasks: paste them into the capture field on the website or "
+         "send them to the bot, one by one. Put the date, #Project and @context right in the text. It is also a good "
+         "first GTD step: collect everything in one Inbox and leave the old stuff behind."),
+    ],
+}
+LANDING_TEXT = {
+    "ru": {"cmp_h": "Чем GTD отличается от Todoist, TickTick и Things",
+           "cmp_lead": "Коротко: GTD бесплатный целиком и сделан под один метод, а у других больше платформ "
+                       "и функций.",
+           "not_h": "Кому не стоит переходить",
+           "cmp_more": "Подробное сравнение с Todoist →",
+           "faq_h": "Частые вопросы",
+           "dev_h": "Для разработчиков: свой сервер и MCP",
+           "dev": f"""<p>Код GTD открыт под лицензией MIT. Свою копию можно поднять одной командой через Docker Compose:
+приложение и PostgreSQL 17. Вход — по почте, через Google или своего Telegram-бота. Всё описано
+в <a href="{SELF_HOST_URL}">инструкции по self-hosting</a> (на английском).</p>
+<p>У GTD есть MCP-сервер. Подключи его к Claude, ChatGPT, Cursor или VS Code — и ассистент запишет задачу, покажет
+списки, закроет задачу или проведёт Weekly Review. Адрес сервера и шаги подключения —
+<a href="/bot#claude">на странице бота</a>.</p>""",
+           "who_h": "Кто делает GTD",
+           "who": """<p>GTD делает <a href="{org}">No Handoff</a>. Другие проекты No Handoff — Planning Poker, Javi
+и Serbito — перечислены внизу страницы. Права на код — у Alexander Bondarchuk, код открыт по лицензии MIT, её
+текст лежит <a href="{license}">в репозитории на GitHub</a>. Первая версия вышла {first}, всего версий — {count}: всё, что
+менялось, есть на странице <a href="{changes}">«Что нового»</a>. Вопросы и идеи пишите
+в <a href="{issues}">Issues на GitHub</a>.</p>"""},
+    "en": {"cmp_h": "How GTD differs from Todoist, TickTick and Things",
+           "cmp_lead": "In short: GTD is free in full and built for one method; the others run on more devices "
+                       "and do more.",
+           "not_h": "Who should not switch",
+           "cmp_more": "Full comparison with Todoist →",
+           "faq_h": "Questions and answers",
+           "dev_h": "For developers: self-hosting and MCP",
+           "dev": f"""<p>The GTD code is open source under the MIT license. Run your own copy with one Docker Compose
+command: the app and PostgreSQL 17. Sign-in works by email, with Google or with your own Telegram bot. The
+<a href="{SELF_HOST_URL}">self-hosting guide</a> has all the steps.</p>
+<p>GTD has an MCP server. Connect it to Claude, ChatGPT, Cursor or VS Code, and the assistant can capture a task,
+show your lists, complete a task or run the weekly review. The server address and the setup steps are
+<a href="/en/bot#claude">on the bot page</a>.</p>""",
+           "who_h": "Who makes GTD",
+           "who": """<p>GTD is made by <a href="{org}">No Handoff</a>. Its other projects — Planning Poker, Javi and
+Serbito — are listed at the bottom of this page. The copyright holder is Alexander Bondarchuk, and the code is open
+under the MIT license: the license text is <a href="{license}">in the GitHub repository</a>. The first version came out on
+{first}, and there have been {count} versions so far: every change is on the <a href="{changes}">What's new</a> page.
+Send questions and ideas to <a href="{issues}">GitHub Issues</a>.</p>"""},
+}
+# «Почему я это сделал» — история владельца (SERBITO-442). Публично её ещё нет нигде, поэтому и на сайте её нет:
+# TODO(владелец): впиши 2–3 предложения на каждом языке — блок появится в «Кто делает GTD» сам
+WHY = {"ru": "", "en": ""}
+
+
+def landing_more(lang: str) -> str:
+    """Лендинг ниже первого экрана: скриншоты, сравнение, кому не стоит переходить, FAQ, свой сервер и MCP,
+    кто делает. Всё — обычный HTML от сервера."""
+    x = LANDING_TEXT[lang]
+    faq = "".join(f"<h3>{q}</h3><p>{a}</p>" for q, a in FAQ[lang])
+    first = human_date(RELEASES[-1].date, lang) + (" года" if lang == "ru" else "") if RELEASES else "—"
+    who = x["who"].format(org=NOHANDOFF_URL, license=REPO_URL + "/blob/main/LICENSE", first=first,
+                          count=len(RELEASES), changes=PATHS[(lang, "changes")], issues=REPO_URL + "/issues")
+    why = f"<p>{WHY[lang]}</p>" if WHY[lang] else ""
+    return (shots(lang)
+            + f'<h2>{x["cmp_h"]}</h2><p>{x["cmp_lead"]}</p>' + compare_table(lang, ("gtd", "todoist", "ticktick", "things"))
+            + f'<h3>{x["not_h"]}</h3>{who_not(lang)}'
+            + f'<p class="more"><a href="{PATHS[(lang, "alt")]}">{x["cmp_more"]}</a></p>'
+            + f'<section class="faq"><h2>{x["faq_h"]}</h2>{faq}</section>'
+            + f'<h2>{x["dev_h"]}</h2>{x["dev"]}'
+            + f'<h2>{x["who_h"]}</h2>{who}{why}')
+
+
+# ── Альтернатива Todoist (SERBITO-470): RU и EN, у EN свои ключевые слова ──
+# Строки: (что сравниваем, GTD, Todoist) по языкам. Todoist — todoist.com/pricing и /downloads на COMPARE_DAY
+ALT_ROWS = {
+    "ru": [("Цена", "Бесплатно, платных тарифов нет", "Бесплатный тариф Beginner, платные Pro и Business"),
+           ("Бесплатно", "Всё, что есть в приложении", "5 личных проектов, 3 фильтра, история действий за неделю"),
+           ("Где работает", "Браузер (ставится на экран телефона) и Telegram",
+            "Linux, Mac, Windows, iPhone, iPad, Android, Apple Watch, Wear OS"),
+           ("Напоминания", "В Telegram, с кнопками ✅ Готово и 💤 +1ч", "Есть в Beginner; свои напоминания — в Pro"),
+           ("Повторяющиеся задачи", "Нет", "Есть"),
+           ("Совместная работа", "Нет", "До 5 человек в личном проекте; командные проекты — в Business"),
+           ("AI", "MCP-сервер для Claude, ChatGPT и других ассистентов", "Ramble и Task Assist (Task Assist — в Pro)"),
+           ("Telegram-бот", "Есть: @gtdsrbot", "На официальных страницах не нашли"),
+           ("Открытый код", "MIT, можно поднять свой сервер", "На официальных страницах не нашли")],
+    "en": [("Price", "Free, no paid plans", "Free Beginner plan; paid Pro and Business plans"),
+           ("Free plan", "Everything in the app", "5 personal projects, 3 filter views, 1 week of activity history"),
+           ("Platforms", "Browser (installs on the phone home screen) and Telegram",
+            "Linux, Mac, Windows, iPhone, iPad, Android, Apple Watch, Wear OS"),
+           ("Reminders", "In Telegram, with ✅ Done and 💤 +1h buttons", "Task reminders in Beginner; custom reminders in Pro"),
+           ("Recurring tasks", "No", "Yes"),
+           ("Sharing", "No", "Up to 5 people per personal project; team projects in Business"),
+           ("AI", "An MCP server for Claude, ChatGPT and other assistants", "Ramble and Task Assist (Task Assist in Pro)"),
+           ("Telegram bot", "Yes: @gtdsrbot", "Not found on the official pages"),
+           ("Open source", "MIT, you can self-host it", "Not found on the official pages")],
+}
+ALT = {
+    "ru": """<h1>Альтернатива Todoist с открытым кодом: GTD с Telegram-ботом</h1>
+<p class="lead">GTD — бесплатная альтернатива Todoist для тех, кто ведёт дела по методу Getting Things Done. Код
+открыт (MIT), задачи можно записывать сообщением Telegram-боту, а списки метода — Inbox, Next, Waiting, Someday —
+готовы с первого входа. Зато у Todoist больше платформ и функций. Ниже — честное сравнение.</p>
+<p class="note">{updated}</p>
+<h2>Чем GTD отличается от Todoist?</h2>
+<p>Подходом. GTD сделан под один метод и бесплатен целиком: код открыт, задачи можно слать боту в Telegram.
+Todoist — универсальный менеджер задач с бесплатным тарифом, платными Pro и Business и приложениями почти для всех
+устройств.</p>
+{table}
+<h2>Кому не стоит переходить с Todoist?</h2>
+<p>Если тебе важно что-то из списка ниже, оставайся в Todoist: в GTD этого нет.</p>
+{who_not}
+<h2>Как перенести задачи из Todoist?</h2>
+<p>Импорта нет. Перенеси только активные задачи: вставь их в поле захвата на сайте или напиши боту, по одной.
+Срок, #проект и @контекст пиши прямо в тексте: <q>выбрать плитку #Ремонт_кухни @магазин</q>. Старое и ненужное
+можно не переносить — это и есть шаг «Собрать» в GTD.</p>
+<h2>Можно ли поднять GTD на своём сервере?</h2>
+<p>Да. Код открыт под лицензией MIT, а свою копию можно поднять одной командой через Docker Compose: приложение
+и PostgreSQL 17. Вход — по почте, через Google или своего Telegram-бота. Подробно — в
+<a href="{self_host}">инструкции по self-hosting</a> (на английском).</p>
+<h2>Как попробовать GTD?</h2>
+<p>Войди на сайте через Google, по коду из письма или через Telegram — аккаунт создастся сам. Или сразу напиши
+задачу боту <a href="{bot_url}">@{bot}</a>. Как устроен метод — на странице <a href="{about}">«Как это работает»</a>,
+с чего начать — в разделе <a href="{beginners}">«GTD для начинающих»</a>.</p>
+<p><a class="btn" href="{home}">Открыть GTD</a></p>""",
+    "en": """<h1>Open-source Todoist alternative for GTD, with a Telegram bot</h1>
+<p class="lead">GTD is a free, open-source Todoist alternative for people who use the Getting Things Done method.
+The code is under the MIT license, you can send tasks to a Telegram bot, and the GTD lists — Inbox, Next, Waiting,
+Someday — are ready from the first sign-in. Todoist runs on more devices and has more features. Here is an honest
+comparison.</p>
+<p class="note">{updated}</p>
+<h2>How is GTD different from Todoist?</h2>
+<p>In its approach. GTD is built for one method and is free in full: the code is open, and you can send tasks to
+a bot in Telegram. Todoist is a general task manager with a free plan, paid Pro and Business plans, and apps for
+almost every device.</p>
+{table}
+<h2>Who should not switch from Todoist?</h2>
+<p>If anything in this list matters to you, stay with Todoist: GTD does not have it.</p>
+{who_not}
+<h2>How do I move my tasks from Todoist?</h2>
+<p>There is no import. Move only your active tasks: paste them into the capture field on the website or send them to
+the bot, one by one. Put the date, #Project and @context right in the text: <q>choose tiles #Kitchen_renovation
+@store</q>. Leave the old stuff behind — that is the “capture” step of GTD.</p>
+<h2>Can I self-host GTD?</h2>
+<p>Yes. The code is under the MIT license, and one Docker Compose command runs your own copy: the app and
+PostgreSQL 17. Sign-in works by email, with Google or with your own Telegram bot. See the
+<a href="{self_host}">self-hosting guide</a>.</p>
+<h2>How do I try GTD?</h2>
+<p>Sign in on the website with Google, with a code from an email or with Telegram — the account is created for you.
+Or send a task to <a href="{bot_url}">@{bot}</a> right away. The method is explained on
+<a href="{about}">How it works</a>, and other free options are in <a href="{freeapps}">Free GTD apps</a>.</p>
+<p><a class="btn" href="{home}">Open GTD</a></p>""",
+}
+
+
+def alt_table(lang: str) -> str:
+    head = ("", SITE_NAME, "Todoist")
+    rows = "".join(f"<tr><td>{r[0]}</td>" + "".join(f'<td data-label="{h}">{c}</td>' for h, c in zip(head[1:], r[1:]))
+                   + "</tr>" for r in ALT_ROWS[lang])
+    return (f'<div class="tbl"><table class="cmp"><thead><tr>{"".join(f"<th>{h}</th>" for h in head)}</tr></thead>'
+            f"<tbody>{rows}</tbody></table></div>" + sources(lang, ("todoist",)))
+
+
+def alt(base: str, lang: str, ga: str) -> str:
+    """Альтернатива Todoist (SERBITO-470): честное сравнение, кому не стоит переходить, перенос, свой сервер."""
+    main = ALT[lang].format(
+        updated=f"{UPDATED[lang]} {human_date(COMPARE_DAY, lang)}", table=alt_table(lang), who_not=who_not(lang),
+        self_host=SELF_HOST_URL, bot=BOT_NAME, bot_url=BOT_URL, about=PATHS[(lang, "about")],
+        beginners=PATHS.get(("ru", "beginners")), freeapps=PATHS.get(("en", "freeapps")), home=PATHS[(lang, "home")])
+    return public_page(base, lang, "alt", ga, main, page_view(lang, "alt"))
+
+
+# ── Бесплатные GTD-приложения (SERBITO-470): только английский — запрос «free GTD apps» ──
+FREEAPPS = """<h1>Free GTD apps: what the free plans include in 2026</h1>
+<p class="lead">We compared five apps people use for GTD (Getting Things Done): GTD (this site), Nirvana, Todoist,
+TickTick and Things. GTD has no paid plan at all and is open source. Nirvana has the GTD lists built in. Todoist and
+TickTick limit their free plans. Things has no free plan.</p>
+<p class="note">{updated}</p>
+<h2>What do the free plans include?</h2>
+<p>Each free plan limits something different. Todoist caps projects, TickTick caps lists and tasks, Nirvana keeps
+unlimited projects for Pro, and Things offers a trial instead of a free plan.</p>
+{table}
+<h2>Which free GTD app should I choose?</h2>
+<p>Choose by where you capture tasks and which devices you use.</p>
+<ul>
+<li><b>You capture in Telegram and want everything free:</b> GTD.</li>
+<li><b>You want the GTD lists and native apps on many devices:</b> Nirvana. Its free plan has basic projects
+and areas.</li>
+<li><b>You want a general to-do app with apps for every device:</b> Todoist or TickTick, within the limits of their
+free plans.</li>
+<li><b>You only use Apple devices and are fine with a paid app:</b> Things.</li>
+</ul>
+<h2>When is GTD the wrong choice?</h2>
+<p>GTD is small on purpose. Pick another app if any of these is true for you.</p>
+{who_not}
+<h2>How do I start with GTD?</h2>
+<p>Sign in with Google, with a code from an email or with Telegram, or send a task to <a href="{bot_url}">@{bot}</a>.
+The method in a minute is on <a href="{about}">How it works</a>, and a 30-minute checklist is on
+<a href="{weekly}">GTD weekly review</a>. How GTD compares with Todoist in detail:
+<a href="{alt}">open-source Todoist alternative</a>.</p>
+<p><a class="btn" href="/en/">Open GTD</a></p>"""
+
+
+def freeapps(base: str, ga: str) -> str:
+    main = FREEAPPS.format(
+        updated=f"{UPDATED['en']} {human_date(COMPARE_DAY, 'en')}",
+        table=compare_table("en", ("gtd", "nirvana", "todoist", "ticktick", "things")), who_not=who_not("en"),
+        bot=BOT_NAME, bot_url=BOT_URL, about=PATHS[("en", "about")], weekly=PATHS[("en", "weekly")],
+        alt=PATHS[("en", "alt")])
+    return public_page(base, "en", "freeapps", ga, main, page_view("en", "freeapps"))
+
+
+# ── GTD для начинающих (SERBITO-470): только русский — опорная страница, ссылки на все справочные ──
+BEGINNERS = """<h1>GTD для начинающих: как начать по методу Getting Things Done</h1>
+<p class="lead">GTD (Getting Things Done) — метод Дэвида Аллена, который переносит дела из головы в надёжные
+списки. Начать можно за один вечер: собрать всё в Inbox, разобрать, разложить по спискам и раз в неделю делать
+обзор. Ниже — что нужно знать новичку и как это сделать в приложении {site}.</p>
+<p class="note">{updated}</p>
+<h2>Что такое GTD простыми словами?</h2>
+<p>Это способ не держать дела в голове. Всё, что требует внимания, сразу записываешь в одно место — Inbox. Потом
+по каждой записи решаешь, что это и какой следующий шаг. О пяти шагах метода подробно — на странице
+<a href="{about}">«Как это работает»</a>.</p>
+<h2>Какие списки нужны для GTD?</h2>
+<p>Хватит семи списков. В приложении {site} они уже есть, заводить их не нужно.</p>
+<ul class="ex">
+<li><b>Inbox</b> — всё новое, ещё не разобранное.</li>
+<li><b>Next</b> — конкретные следующие действия: «позвонить в банк», а не «разобраться с банком».</li>
+<li><b>Waiting</b> — то, что ждёшь от других: ответ, посылку, счёт.</li>
+<li><b>Projects</b> — всё, что требует больше одного шага.</li>
+<li><b>Someday</b> — идеи на потом: курсы, поездки, хобби.</li>
+<li><b>Reference</b> — справка, которая пригодится, но не требует действий.</li>
+<li><b>Календарь</b> — задачи с датой и временем. В {site} о них напомнит бот в Telegram.</li>
+</ul>
+<h2>Что такое контексты в GTD?</h2>
+<p>Контекст — место или инструмент, без которого шаг не сделать: @комп, @телефон, @магазин, @дом. В магазине
+открываешь Next с фильтром @магазин и видишь только то, что можно сделать здесь. В {site} контекст пишется прямо
+в задаче, и их может быть несколько.</p>
+<h2>Как разбирать Inbox?</h2>
+<p>Бери записи по одной, сверху вниз, и не возвращай их обратно в Inbox. По каждой ответь на вопросы:</p>
+<ol>
+<li>Нужно ли что-то делать? Нет — удали, отложи в Someday или сохрани в Reference.</li>
+<li>Займёт меньше двух минут? Сделай сразу — это правило двух минут из книги Аллена.</li>
+<li>Должен сделать кто-то другой? Попроси его и перенеси задачу в Waiting.</li>
+<li>Нужно больше одного шага? Заведи проект и запиши первый шаг в Next.</li>
+<li>Есть точная дата? Поставь срок — бот напомнит.</li>
+<li>Всё остальное — в Next, с @контекстом.</li>
+</ol>
+<h2>Что такое проект в GTD?</h2>
+<p>Проект — любой результат, для которого нужно больше одного шага: «отпуск летом», «ремонт кухни», «налоговая
+декларация». У проекта всегда должен быть хотя бы один шаг в Next. В {site} проект пишется в задаче через решётку:
+<q>выбрать плитку #Ремонт_кухни @магазин</q>.</p>
+<h2>Зачем нужен еженедельный обзор?</h2>
+<p>Без обзора списки устаревают, и голова снова начинает держать всё сама. Раз в неделю, за 30 минут, проходишь
+по всем спискам: разбираешь Inbox, проверяешь проекты и ожидания. Чек-лист и шаблон — на странице
+<a href="{weekly}">«Еженедельный обзор GTD»</a>.</p>
+<h2>С чего начать сегодня?</h2>
+<p>Выдели вечер и пройди пять шагов в приложении {site}.</p>
+<ol>
+<li>Войди на сайте через Google, по коду из письма или через Telegram.</li>
+<li>15 минут записывай всё, что крутится в голове: дела, обещания, идеи. Не разбирай — просто пиши.</li>
+<li>Разбери Inbox по вопросам выше.</li>
+<li>Добавь задачам в Next @контексты.</li>
+<li>Выбери время для еженедельного обзора — например, пятницу после обеда.</li>
+</ol>
+<p><a class="btn" href="/">Открыть {site}</a></p>
+<h2>Какие ошибки делают новички?</h2>
+<p>Чаще всего метод бросают из-за трёх ошибок.</p>
+<ul>
+<li><b>Неконкретные задачи.</b> «Машина» — не задача. <q>записаться на ТО @телефон</q> — задача.</li>
+<li><b>Нет обзора.</b> Через пару недель без обзора спискам перестаёшь верить.</li>
+<li><b>Всё в Next.</b> Если в Next сто задач, переложи лишнее в Someday.</li>
+</ul>
+<h2>Что почитать дальше?</h2>
+<ul>
+<li><a href="{about}">Как работает GTD</a> — пять шагов метода и где они в приложении.</li>
+<li><a href="{weekly}">Еженедельный обзор GTD</a> — чек-лист на 30 минут и шаблон.</li>
+<li><a href="{bot}">Telegram-бот для задач</a> — как записывать задачи сообщением.</li>
+<li><a href="{alt}">Альтернатива Todoist</a> — чем {site} отличается от Todoist и кому переходить не стоит.</li>
+</ul>"""
+
+
+def beginners(base: str, ga: str) -> str:
+    main = BEGINNERS.format(
+        site=SITE_NAME, updated=f"{UPDATED['ru']} {human_date(COMPARE_DAY, 'ru')}", about=PATHS[("ru", "about")],
+        weekly=PATHS[("ru", "weekly")], bot=PATHS[("ru", "bot")], alt=PATHS[("ru", "alt")])
+    return public_page(base, "ru", "beginners", ga, main, page_view("ru", "beginners"))
+
+
 def robots(base: str) -> str:
     # /i/N не закрываем (SERBITO-448): адрес под Disallow робот не открывает и не видит его X-Robots-Tag: noindex —
     # а ссылку на него, найденную где-то ещё, Google оставляет в индексе без текста. Пусть читает и не индексирует
     return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /changes", "Allow: /bot",
-                      "Allow: /weekly-review", "Allow: /en/",
+                      "Allow: /weekly-review", "Allow: /alternativa-todoist", "Allow: /gtd-dlya-nachinayushih",
+                      "Allow: /en/",
                       *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/")),
                       "", f"Sitemap: {base}/sitemap.xml", ""])
 
@@ -1259,7 +1826,13 @@ def llms(base: str) -> str:
         page("en", "bot", "Telegram bot for tasks (English)") + ": capture syntax, reminders, commands, linking, MCP",
         page("ru", "bot", "Telegram bot for tasks (Russian)"),
         page("en", "weekly", "GTD weekly review (English)") + ": the 6-step checklist, a 30-minute example, a template",
-        page("ru", "weekly", "GTD weekly review (Russian)"), "",
+        page("ru", "weekly", "GTD weekly review (Russian)"),
+        page("en", "alt", "Open-source Todoist alternative (English)") + ": an honest comparison with Todoist and "
+        "who should not switch",
+        page("ru", "alt", "Todoist alternative (Russian)"),
+        page("en", "freeapps", "Free GTD apps (English)") + ": what the free plans of GTD, Nirvana, Todoist, TickTick "
+        "and Things include",
+        page("ru", "beginners", "GTD for beginners (Russian)") + ": lists, contexts, the Inbox and the weekly review", "",
         "## Elsewhere", "",
         f"- [Telegram bot @{BOT_NAME}]({BOT_URL}): send a task as a message, get reminders in the chat",
         f"- [Source code on GitHub]({REPO_URL}): MIT license, self-hosting guide", ""])
@@ -1270,7 +1843,9 @@ def sitemap(base: str) -> str:
     out = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">']
     for (lang, page) in PATHS:
-        alts = [(lg, url(base, lg, page)) for lg in LANGS] + [("x-default", url(base, "ru", page))]
+        alts = []
+        if len(langs_of(page)) > 1:  # у страницы одного языка альтернатив нет
+            alts = [(lg, url(base, lg, page)) for lg in LANGS] + [("x-default", url(base, "ru", page))]
         day = modified(page)
         out.append(f"<url><loc>{url(base, lang, page)}</loc>" + (f"<lastmod>{day}</lastmod>" if day else "")
                    + "".join(f'<xhtml:link rel="alternate" hreflang="{h}" href="{u}"/>' for h, u in alts) + "</url>")
