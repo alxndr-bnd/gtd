@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- Links without the last slash, such as gtd.serbito.rs/en, now open the page in one step over a secure connection.
+  - RU: Ссылки без последнего слэша, например gtd.serbito.rs/en, теперь открываются за один шаг и по защищённому соединению.
+
 ## [0.35.0] - 2026-10-05
 
 ### Changed

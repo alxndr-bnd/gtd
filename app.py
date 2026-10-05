@@ -1461,6 +1461,27 @@ class RunAppGuard:
 
 app.add_middleware(RunAppGuard)
 
+
+# Схема запроса — со слов прокси (SERBITO-440). TLS снимают Cloudflare и Google Front End, к контейнеру приходит
+# http, и Starlette строил абсолютный URL редиректа на слэш со схемой http: /en → 307 http://…/en/ → 301 https.
+# uvicorn --proxy-headers не подходит: вместе со схемой он переписывает адрес клиента из X-Forwarded-For, а
+# client_ip() опирается на адрес соединения (модель доверия ниже). Здесь меняется только схема и только для
+# соединения от прокси — та же проверка from_proxy, что в client_ip. Значение берём у ближнего прокси (справа)
+class ForwardedProto:
+    def __init__(self, asgi):
+        self.asgi = asgi
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket") and scope.get("client"):
+            proto = Headers(scope=scope).get("x-forwarded-proto", "").split(",")[-1].strip().lower()
+            if proto in ("http", "https") and from_proxy(scope["client"][0]):
+                scheme = proto if scope["type"] == "http" else {"http": "ws", "https": "wss"}[proto]
+                scope = dict(scope, scheme=scheme)
+        return await self.asgi(scope, receive, send)
+
+
+app.add_middleware(ForwardedProto)
+
 # ── Защита запросов и заголовки ответов (SERBITO-360)
 # GTD-6: запрос, меняющий данные, принимаем только со своей страницы. SameSite=Lax не спасает от соседних
 # поддоменов *.serbito.rs — для браузера это тот же «сайт», и cookie уходит. Поэтому: Sec-Fetch-Site (современные
@@ -1688,12 +1709,18 @@ def _within(ip, nets) -> bool:
     return any(ip.version == n.version and ip in n for n in nets)
 
 
+def from_proxy(peer: str) -> bool:
+    """Соединение пришло от нашего прокси: loopback, частная или link-local сеть, TRUSTED_PROXIES."""
+    ip = _ip(peer)
+    return bool(ip) and (ip.is_private or ip.is_loopback or ip.is_link_local or _within(ip, TRUSTED_PROXIES))
+
+
 def client_ip(request: Request) -> str:
     """Адрес клиента для лимитов — по модели доверия выше."""
     peer = request.client.host if request.client else ""
-    ip = _ip(peer)
-    if not ip or not (ip.is_private or ip.is_loopback or ip.is_link_local or _within(ip, TRUSTED_PROXIES)):
+    if not from_proxy(peer):
         return peer
+    ip = _ip(peer)
     for hop in reversed(",".join(request.headers.getlist("x-forwarded-for")).split(",")):
         a = _ip(hop)
         if a is None:
