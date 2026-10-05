@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- On a phone, the Telegram sign-in button on the home page is again on the first screen, above the cookie banner.
+  - RU: На телефоне кнопка входа через Telegram на главной снова видна на первом экране, над баннером cookie.
+
 ## [0.41.0] - 2026-10-05
 
 ### Added
