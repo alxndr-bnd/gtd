@@ -2,7 +2,7 @@
 
 2026-09-26 · Alexander Bondarchuk · живой документ: [Claude Docs](https://claude.ai/code/artifact/551429aa-8bb7-48af-847e-7dbc2b4c4a58) · эпик [SERBITO-254](https://serbito.atlassian.net/browse/SERBITO-254)
 
-Jira: SERBITO-254 (эпик) · реализуют SERBITO-255…261, 263…267, 280…284, 291, 292, 297, 422 · осталось: SERBITO-262, SERBITO-469, SERBITO-484
+Jira: SERBITO-254 (эпик) · реализуют SERBITO-255…261, 263…267, 280…284, 291, 292, 297, 422 · осталось: SERBITO-262, SERBITO-469
 
 > Копия плана в репозитории — чтобы по истории коммитов было видно, что разрабатывалось, по каким
 > требованиям и задачам. Статусы в таблице ниже обновляются вместе с Jira.
@@ -169,7 +169,7 @@ Jira: SERBITO-254 (эпик) · реализуют SERBITO-255…261, 263…267,
 - [x] Подпись в общем блоке: «Сделано No Handoff» сразу, ссылка на LinkedIn — решено 2026-09-26.
 - [x] Блок на serbito.rs — да, одна строка в подвале — решено 2026-09-26.
 - [x] Языки gtd: `/en/` для публичных страниц, авто в приложении — решено 2026-09-26.
-- [ ] Платить ли $5 за быструю модерацию AlternativeTo (1–2 дня вместо нескольких месяцев)? Заявка подана (SERBITO-297); закрыть вопрос — SERBITO-484.
+- [x] Платить ли $5 за быструю модерацию AlternativeTo (1–2 дня вместо нескольких месяцев)? Не нужно: gtd уже в каталоге (SERBITO-297 закрыта) — решено 2026-10-05, SERBITO-484.
 - [x] Какие каталоги Telegram-ботов и подборки GTD-инструментов брать — решено 2026-09-26: `docs/research/2026-09-26-catalogs.md` (SERBITO-261); подача — SERBITO-469.
 - [x] Баннер согласия на cookies для GA4: нужен, если в аудитории будут жители ЕС (GDPR); в poker его тоже нет — решено 2026-09-27: SERBITO-319, gtd v0.15.0.
 - [x] Политика конфиденциальности gtd — каталоги и Google часто требуют её для сервиса со входом — решено 2026-09-26: SERBITO-282, gtd v0.12.0.
@@ -180,7 +180,6 @@ Jira: SERBITO-254 (эпик) · реализуют SERBITO-255…261, 263…267,
 
 - Замер через 6 недель и решение по гипотезе — [SERBITO-262](https://serbito.atlassian.net/browse/SERBITO-262).
 - Подача в каталоги Telegram-ботов, vc.ru, SaaSHub, Show HN — [SERBITO-469](https://serbito.atlassian.net/browse/SERBITO-469); Habr, Product Hunt, Reddit и др. — [SERBITO-443](https://serbito.atlassian.net/browse/SERBITO-443).
-- Мелочи (вопрос про $5 за модерацию AlternativeTo) — [SERBITO-484](https://serbito.atlassian.net/browse/SERBITO-484).
 
 ## Источники
 

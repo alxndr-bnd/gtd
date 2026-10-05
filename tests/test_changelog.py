@@ -107,9 +107,15 @@ def test_release_refuses_without_entries():
         C.release(GOOD.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Fixed\n- X\n  - RU: Х\n"), "0.1.5", "2026-09-28")
 
 
-def test_real_changelog_notes_are_english():
-    notes = C.notes(TEXT, "0.16.0")
-    assert notes.startswith("### Fixed\n- ") and not CYR.search(notes)
+@pytest.mark.parametrize("release", C.released(C.parse(TEXT)), ids=lambda r: r.version)
+def test_real_changelog_notes_are_english(release):
+    """Заметки GitHub Release у каждой выпущенной версии (SERBITO-484: раньше — только у 0.16.0): все разделы
+    по порядку, каждый английский пункт, ни одной кириллической буквы"""
+    notes = C.notes(TEXT, release.version)
+    first = next(name for name in C.SECTIONS if name in release.sections)
+    assert notes.startswith(f"### {first}\n- ") and not CYR.search(notes)
+    for en, _ in release.entries:
+        assert f"\n- {en}\n" in notes
 
 
 def test_docker_image_has_the_changelog():
