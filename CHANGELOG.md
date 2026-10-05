@@ -16,14 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
-## [0.40.0] - 2026-10-05
-
 ### Added
 
-- A new page about the Telegram bot (/en/bot): how to start in 3 steps, how to write dates, #Project and @context, reminder buttons, commands, linking the bot to your account and connecting Claude.
-  - RU: Новая страница о Telegram-боте (/bot): как начать за 3 шага, как писать сроки, #Проект и @контекст, кнопки напоминаний, команды, привязка бота к аккаунту и подключение Claude.
-- A new weekly review page (/en/weekly-review): the same six steps as in the app, a 30-minute example and a plain-text checklist you can copy.
-  - RU: Новая страница о еженедельном обзоре (/weekly-review): те же шесть шагов, что в приложении, пример на 30 минут и чек-лист простым текстом, который можно скопировать.
 - The home page now shows what GTD looks like (three app screenshots), how it differs from Todoist, TickTick and Things, who should not switch, common questions, self-hosting and MCP, and who makes GTD.
   - RU: На главной теперь видно, как выглядит GTD (три скриншота), чем он отличается от Todoist, TickTick и Things, кому не стоит переходить, ответы на частые вопросы, свой сервер и MCP и кто делает GTD.
 - New pages: an open-source Todoist alternative (/en/todoist-alternative-open-source) with an honest comparison, free GTD apps (/en/free-gtd-apps) and a GTD guide for beginners in Russian.
@@ -33,6 +27,15 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 - "How it works" now answers questions first: what GTD is, the five steps, quick capture, the bot, hotkeys, open source and the phone, with an "Updated" date.
   - RU: Страница «Как это работает» теперь сразу отвечает на вопросы: что такое GTD, пять шагов, быстрый захват, бот, горячие клавиши, открытый код и телефон — с датой «Обновлено».
+
+## [0.40.0] - 2026-10-05
+
+### Added
+
+- A new page about the Telegram bot (/en/bot): how to start in 3 steps, how to write dates, #Project and @context, reminder buttons, commands, linking the bot to your account and connecting Claude.
+  - RU: Новая страница о Telegram-боте (/bot): как начать за 3 шага, как писать сроки, #Проект и @контекст, кнопки напоминаний, команды, привязка бота к аккаунту и подключение Claude.
+- A new weekly review page (/en/weekly-review): the same six steps as in the app, a 30-minute example and a plain-text checklist you can copy.
+  - RU: Новая страница о еженедельном обзоре (/weekly-review): те же шесть шагов, что в приложении, пример на 30 минут и чек-лист простым текстом, который можно скопировать.
 
 ## [0.39.0] - 2026-10-05
 
