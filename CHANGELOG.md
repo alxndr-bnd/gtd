@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-10-06
+
 ### Fixed
 
 - On a phone, the Telegram sign-in button on the home page is again on the first screen, above the cookie banner.
@@ -435,7 +437,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.41.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.42.0...HEAD
+[0.42.0]: https://github.com/alxndr-bnd/gtd/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/alxndr-bnd/gtd/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/alxndr-bnd/gtd/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/alxndr-bnd/gtd/compare/v0.38.0...v0.39.0
