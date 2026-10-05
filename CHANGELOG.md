@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- The "What's new" page now starts with a short note: what it lists and how often new versions come out.
+  - RU: Страница «Что нового» теперь начинается с короткого пояснения: что в ней и как часто выходят новые версии.
+
 ## [0.38.0] - 2026-10-05
 
 ### Changed

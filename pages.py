@@ -1,6 +1,6 @@
 """Публичные страницы для гостей и поисковиков: лендинг на входе (/, /en/), «Как это работает»
 (/about, /en/about), политика конфиденциальности (/privacy, /en/privacy), «Что нового» (/changes, /en/changes),
-SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
+SEO-теги, robots.txt, llms.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
 Google индексирует его без JS. Маршруты — в app.py, здесь только содержимое; base — BASE_URL."""
 import html
 import json
@@ -585,15 +585,16 @@ T["ru"].update(privacy="Конфиденциальность", privacy_title="П
 T["en"].update(privacy="Privacy", privacy_title="Privacy policy — GTD online",
                privacy_desc="What data GTD online stores, what analytics receive, how to give or withdraw "
                             "cookie consent, who processes it and how to delete your account.")
-# Ссылка на политику под кнопками входа на лендинге
-# Строка о боте в блоке входа на лендинге (SERBITO-422): имя-ссылка и что он делает. Тот же текст — на экране
-# входа в приложении (bot_line в index.html), там имя бота — из /api/config
+# Строка о боте на лендинге (SERBITO-422): имя-ссылка и что он делает. Стоит под текстом, над блоком входа
+# (SERBITO-448): под ним на телефоне её закрывал баннер cookie. Тот же текст — на экране входа в приложении
+# (bot_line в index.html), там имя бота — из /api/config
 BOT_NOTE = {
     "ru": f'<p class="note" style="margin:14px 0 0">Telegram-бот <a href="{BOT_URL}">@{BOT_NAME}</a>: задача — '
           f'одним сообщением, напоминания приходят в чат</p>',
     "en": f'<p class="note" style="margin:14px 0 0">Telegram bot <a href="{BOT_URL}">@{BOT_NAME}</a>: send a task '
           f'as a message, get reminders in the chat</p>',
 }
+# Ссылка на политику под кнопками входа на лендинге
 PRIVACY_NOTE = {
     "ru": '<p class="note" style="margin:14px 0 0">Что мы храним — <a href="/privacy">политика конфиденциальности</a></p>',
     "en": '<p class="note" style="margin:14px 0 0">What we store — <a href="/en/privacy">privacy policy</a></p>',
@@ -768,13 +769,18 @@ T["en"].update(changes="What's new", changes_title="What's new in GTD — releas
                changes_desc="What's new and what got fixed in GTD online: every version of the app and the Telegram "
                             "bot, newest first.")
 CHANGES = {
-    "ru": {"lead": "Изменения GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
+    # Вступление под заголовком (SERBITO-448): что это за страница и как часто выходят версии
+    "ru": {"intro": "Здесь — всё, что менялось в GTD для пользователей: новые возможности и исправления на сайте "
+                    "и в Telegram-боте. Новые версии выходят несколько раз в неделю.",
+           "lead": "Изменения GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
            "dev": "Это локальная сборка (dev).",
            "src": f'Тот же список на английском — <a href="{CHANGELOG_URL}">CHANGELOG.md</a> на GitHub.',
            "sections": {"Added": "Новое", "Changed": "Изменено", "Fixed": "Исправлено", "Security": "Безопасность"},
            "months": ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
                       "октября", "ноября", "декабря")},
-    "en": {"lead": "What changed in GTD, version by version, newest first.", "now": "You are using {v}.",
+    "en": {"intro": "This page lists every change in GTD that users can see: new features and fixes on the site "
+                    "and in the Telegram bot. New versions come out several times a week.",
+           "lead": "What changed in GTD, version by version, newest first.", "now": "You are using {v}.",
            "dev": "This is a local build (dev).",
            "src": f'Also on GitHub: <a href="{CHANGELOG_URL}">CHANGELOG.md</a>.',
            "sections": {"Added": "Added", "Changed": "Changed", "Fixed": "Fixed", "Security": "Security"},
@@ -806,7 +812,7 @@ def changes(base: str, lang: str, ga: str) -> str:
     """Страница «Что нового» — такая же лёгкая, как /about. Открыл её — текущая версия считается увиденной."""
     c, path = CHANGES[lang], PATHS[(lang, "changes")]
     now = c["now"].format(v=VERSION_LABEL) if VERSION else c["dev"]
-    body = (f'<h1>{T[lang]["changes"]}</h1><p class="lead">{c["lead"]} {now}</p>'
+    body = (f'<h1>{T[lang]["changes"]}</h1><p class="lead">{c["intro"]}</p><p>{c["lead"]} {now}</p>'
             + "".join(release_html(r, lang) for r in RELEASES) + f'<p class="note" style="margin-top:32px">{c["src"]}</p>')
     title = json.dumps(f'GTD — {T[lang]["changes"]}', ensure_ascii=False)
     track = (f"<script>try{{ localStorage.setItem('{SEEN_KEY}', '{VERSION_LABEL}'); }}catch(e){{}}\n"
@@ -831,9 +837,32 @@ def changes(base: str, lang: str, ga: str) -> str:
 
 
 def robots(base: str) -> str:
+    # /i/N не закрываем (SERBITO-448): адрес под Disallow робот не открывает и не видит его X-Robots-Tag: noindex —
+    # а ссылку на него, найденную где-то ещё, Google оставляет в индексе без текста. Пусть читает и не индексирует
     return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /changes", "Allow: /en/",
-                      *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/", "/i/")),
+                      *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/")),
                       "", f"Sitemap: {base}/sitemap.xml", ""])
+
+
+def llms(base: str) -> str:
+    """/llms.txt (llmstxt.org, SERBITO-448): что такое GTD и ссылки на главное — для LLM-ассистентов. Google его
+    не читает; файл короткий и дешёвый. Только текст: тот же набор страниц, что в sitemap, плюс бот и код."""
+    page = lambda lang, p, name: f"- [{name}]({url(base, lang, p)})"  # noqa: E731
+    return "\n".join([
+        f"# {SITE_NAME}", "",
+        "> GTD is a free app for David Allen's Getting Things Done method. Capture tasks on the web or in the "
+        f"Telegram bot @{BOT_NAME}, clear the Inbox, track next actions, projects and reminders. Open source (MIT), "
+        "in English and Russian.", "",
+        "## Pages", "",
+        page("en", "home", "Home (English)") + ": sign in with Google, an email code or Telegram",
+        page("ru", "home", "Home (Russian)"),
+        page("en", "about", "How it works (English)") + ": the 5 GTD steps and where each one lives in the app",
+        page("ru", "about", "How it works (Russian)"),
+        page("en", "changes", "What's new (English)") + ": release history, newest first",
+        page("ru", "changes", "What's new (Russian)"), "",
+        "## Elsewhere", "",
+        f"- [Telegram bot @{BOT_NAME}]({BOT_URL}): send a task as a message, get reminders in the chat",
+        f"- [Source code on GitHub]({REPO_URL}): MIT license, self-hosting guide", ""])
 
 
 def sitemap(base: str) -> str:

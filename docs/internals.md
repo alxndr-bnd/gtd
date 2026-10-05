@@ -165,7 +165,11 @@ tasks explains this; its dismissal is stored per user (`users.dnd_tip_seen`, SER
 
 Public pages are `pages.py`; the server renders the text (for search engines): landing for guests on `/` and
 `/en/`, “How it works” on `/about` and `/en/about`, privacy policy on `/privacy`, “What's new” on `/changes`
-(rendered from `CHANGELOG.md` via `changelog.py`, parsed once at startup), `robots.txt`, `sitemap.xml`.
+(rendered from `CHANGELOG.md` via `changelog.py`, parsed once at startup), `robots.txt`, `sitemap.xml`, `llms.txt`
+(a short summary with links for AI assistants; Google ignores it). `robots.txt` does not block `/i/<N>`: a blocked
+page hides its `X-Robots-Tag: noindex` from crawlers, so app pages stay crawlable and `noindex` (SERBITO-448).
+The trailing-slash redirect (`/en` → `/en/`, `/about/` → `/about`) is permanent (308) for `GET`/`HEAD` outside
+`/api/`; API paths and other methods keep Starlette's 307 (`app.PermanentSlashRedirect`).
 The running version (`APP_VERSION` from the deploy tag, else `dev`) is in every public footer and, via
 `/api/config`, in the app menu next to “What's new”; a dot marks a version not yet seen on `/changes`
 (localStorage `gtd-seen-version`). Preview images `static/og*.png`
