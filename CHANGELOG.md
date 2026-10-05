@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-10-05
+
 ### Security
 - Requests to the direct Cloud Run address now go to gtd.serbito.rs, so the site's edge protection always applies.
   - RU: Запросы на прямой адрес Cloud Run теперь уходят на gtd.serbito.rs, поэтому защита сайта на входе работает всегда.
@@ -366,7 +368,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/alxndr-bnd/gtd/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/alxndr-bnd/gtd/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/alxndr-bnd/gtd/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/alxndr-bnd/gtd/compare/v0.30.0...v0.31.0
