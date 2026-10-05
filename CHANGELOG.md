@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-10-05
+
 ### Changed
 
 - On phones the cookie notice takes one line of text and a row of buttons, so it no longer hides the sign-in block.
@@ -405,7 +407,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.38.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/alxndr-bnd/gtd/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/alxndr-bnd/gtd/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/alxndr-bnd/gtd/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/alxndr-bnd/gtd/compare/v0.35.0...v0.36.0
