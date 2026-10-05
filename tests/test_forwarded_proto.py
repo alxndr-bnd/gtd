@@ -19,7 +19,7 @@ def via(peer):
 @pytest.mark.parametrize("path, target", [("/en", "/en/"), ("/about/", "/about")])
 def test_slash_redirect_keeps_https_behind_the_proxy(path, target):
     r = via(CLOUD_RUN).get(path, headers={"X-Forwarded-Proto": "https"})
-    assert r.status_code in (301, 307, 308) and r.headers["location"] == "https://testserver" + target
+    assert r.status_code == 308 and r.headers["location"] == "https://testserver" + target
 
 
 def test_nearest_proxy_value_wins():

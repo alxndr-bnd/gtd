@@ -155,14 +155,13 @@ def test_landing_links_privacy_near_signin(client, path, link):
     ("/en/about", ["takes tasks as plain messages", "sends reminders"]),
 ])
 def test_bot_name_and_link_on_site(client, path, words):
-    """SERBITO-422: имя бота — ссылкой t.me на лендинге (и в блоке входа) и на странице помощи, с одной строкой о том,
+    """SERBITO-422: имя бота — ссылкой t.me на лендинге (над блоком входа) и на странице помощи, с одной строкой о том,
     что бот делает."""
     assert P.BOT_URL == "https://t.me/gtdsrbot"
     h = client.get(path).text
     part = h
-    if "about" not in path:  # лендинг: в блоке входа — между кнопками (#signin) и ссылкой на политику
-        part = h[h.index('<div class="card signin">'):h.index("<footer>")]
-        part = part[part.index('id="signin"'):part.index('privacy"')]
+    if "about" not in path:  # лендинг: над блоком входа, под текстом (SERBITO-448: на телефоне её не закрывает баннер)
+        part = h[h.index('<div class="intro">'):h.index('<div class="card signin">')]
     assert f'<a href="{P.BOT_URL}">@{P.BOT_NAME}</a>' in part
     for w in words:
         assert w in part, w
@@ -221,9 +220,41 @@ def test_robots(client):
     lines = r.text.splitlines()
     for p in ("/", "/about", "/privacy", "/changes", "/en/"):
         assert f"Allow: {p}" in lines
-    for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/", "/i/"):
+    for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/"):
         assert f"Disallow: {p}" in lines
+    # /i/N не закрыт (SERBITO-448): робот, которому запрещён адрес, не видит его X-Robots-Tag: noindex, и Google
+    # оставлял такие ссылки в индексе без текста. noindex у /i/N — test_item_page_noindex
+    assert not any(line.startswith("Disallow: /i") for line in lines)
     assert f"Sitemap: {BASE}/sitemap.xml" in lines
+
+
+def test_llms_txt(client):
+    """SERBITO-448: /llms.txt — короткая справка для LLM: что это за сервис и где главное. Google её не читает,
+    но файл дешёвый."""
+    r = client.get("/llms.txt")
+    assert r.status_code == 200 and r.headers["content-type"] == "text/plain; charset=utf-8"
+    assert r.text.startswith("# GTD\n\n> ") and "Getting Things Done" in r.text and "<" not in r.text
+    for path in ("/", "/en/", "/about", "/en/about", "/changes", "/en/changes"):
+        assert f"({BASE}{path})" in r.text, path
+    assert f"({P.REPO_URL})" in r.text and f"({P.BOT_URL})" in r.text
+    assert "Sitemap" not in r.text and r.text.endswith("\n")
+
+
+@pytest.mark.parametrize("path, to", [("/en", "/en/"), ("/about/", "/about"), ("/en/about/", "/en/about"),
+                                      ("/changes/", "/changes")])
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+def test_trailing_slash_redirect_is_permanent(client, method, path, to):
+    """SERBITO-448: /en → /en/ и /about/ → /about — постоянный редирект (308), а не временный 307: поисковик
+    переносит вес ссылки на адрес со слэшем (или без), а браузер запоминает переход."""
+    r = client.request(method, path, follow_redirects=False)
+    assert r.status_code == 308 and r.headers["location"] == "http://testserver" + to
+
+
+def test_api_slash_redirect_stays_temporary(client):
+    """POST и /api/ — как раньше, 307: постоянный редирект запросов API браузер запомнил бы навсегда."""
+    r = client.post("/api/auth/email/start/", json={"email": "a@b.c"}, follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"].endswith("/api/auth/email/start")
+    assert client.get("/api/config/", follow_redirects=False).status_code == 307
 
 
 def test_sitemap(client):
@@ -326,6 +357,10 @@ def test_changes_page_lists_releases_newest_first(client, lang):
             assert P.entry_html(ru if lang == "ru" else en) in body
             assert P.entry_html(en if lang == "ru" else ru) not in body
     assert f'href="{P.CHANGELOG_URL}"' in body and "function loginScreen" not in h
+    # Под заголовком — что это за страница и как часто выходят версии (SERBITO-448)
+    intro = re.search(r"</h1><p class=\"lead\">([^<]+)</p>", body).group(1)
+    assert intro == P.CHANGES[lang]["intro"]
+    assert ("несколько раз в неделю" if lang == "ru" else "several times a week") in intro
     # открыл страницу — текущая версия увидена: точка в меню приложения гаснет
     assert f"localStorage.setItem('{P.SEEN_KEY}', '{P.VERSION_LABEL}')" in h
 

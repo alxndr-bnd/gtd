@@ -1386,6 +1386,33 @@ class Gzip:
 
 app.add_middleware(Gzip)
 
+
+# Редирект на слэш (/en → /en/, /about/ → /about) — постоянный (SERBITO-448). Starlette отвечает на него 307
+# («временно»), и поисковик держит в индексе оба адреса. Здесь 307 этого редиректа становится 308: тоже без смены
+# метода, но «навсегда». Только GET (и HEAD — HeadAsGet снаружи уже сделал его GET) и не /api/: постоянный
+# редирект браузер запоминает, а адреса API и запросы с телом пусть остаются как были. Узнаём редирект по адресу:
+# Location — тот же путь с другим слэшем в конце; остальные 307 (их в приложении нет) не трогаем
+class PermanentSlashRedirect:
+    def __init__(self, asgi):
+        self.asgi = asgi
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] != "http" or scope["method"] != "GET" or (path + "/").startswith("/api/"):
+            return await self.asgi(scope, receive, send)
+        other = path.rstrip("/") if path.endswith("/") else path + "/"
+
+        async def send_308(msg):
+            if msg["type"] == "http.response.start" and msg["status"] == 307:
+                if urlsplit(MutableHeaders(raw=list(msg.get("headers", []))).get("location", "")).path == other:
+                    msg = {**msg, "status": 308}
+            await send(msg)
+
+        await self.asgi(scope, receive, send_308)
+
+
+app.add_middleware(PermanentSlashRedirect)
+
 # HEAD отвечаем как GET, только без тела. Мониторинги аптайма и превью ссылок (Slack и др.) сперва шлют HEAD,
 # а FastAPI сам его не добавляет — без этого на HEAD / был 405 и сайт считался лежащим.
 # API и ссылки входа — только GET: HEAD от бота-превью не должен сжечь одноразовый токен /auth.
@@ -2788,7 +2815,7 @@ def ga_snippet(request: Request) -> str:
 def signin_methods() -> list[str]:
     """Способы входа, которые покажет лендинг, — те же условия, что /api/config отдаёт SPA."""
     on = {"google": GOOGLE_CLIENT_ID, "email": SMTP_PASSWORD or DEV, "bot": BOT_USERNAME if TOKEN else ""}
-    return [m for m in ("google", "email", "bot") if on[m]]
+    return [m for m in ("google", "email", "bot") if on[m]]  # порядок — как в loginScreen (index.html)
 
 
 # SPA — внешним файлом (SERBITO-444). В static/index.html словарь #i18n и код приложения лежат прямо в странице
@@ -2888,6 +2915,11 @@ def changes_en(request: Request):
 @app.get("/robots.txt")
 def robots_txt():
     return PlainTextResponse(pages.robots(BASE_URL))
+
+
+@app.get("/llms.txt")
+def llms_txt():
+    return PlainTextResponse(pages.llms(BASE_URL))
 
 
 @app.get("/sitemap.xml")

@@ -1,6 +1,6 @@
 """Публичные страницы для гостей и поисковиков: лендинг на входе (/, /en/), «Как это работает»
 (/about, /en/about), политика конфиденциальности (/privacy, /en/privacy), «Что нового» (/changes, /en/changes),
-SEO-теги, robots.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
+SEO-теги, robots.txt, llms.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
 Google индексирует его без JS. Маршруты — в app.py, здесь только содержимое; base — BASE_URL."""
 import html
 import json
@@ -114,33 +114,45 @@ PUBLIC_CSS = """<style>
 .pub h1{font-size:30px;line-height:1.2;margin:0 0 12px}
 .pub h2{font-size:20px;margin:36px 0 12px}
 .pub .lead{font-size:18px;color:var(--mut);margin:0 0 16px}
-.pub .note{color:var(--mut);font-size:13px}
+.pub .note{color:var(--mut);font-size:14px}
 .pub .intro{display:grid;grid-template-columns:1fr 380px;gap:28px;align-items:start}
 .pub .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 20px}
 .pub .signin{text-align:center} .pub .signin h2{margin:0 0 4px}
+/* Поля первой и последней кнопки входа не выходят за блок (SERBITO-448): пока виджет Telegram не загружен,
+   поле «или» под ним иначе сдвигало весь блок на 14 px */
+.pub #signin{display:flow-root}
 .pub .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .pub .steps li{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px}
 .pub .steps b{display:block;font-size:17px;margin-bottom:4px}
-.pub .steps .where{display:block;color:var(--mut);font-size:13px;margin-top:6px}
+.pub .steps .where{display:block;color:var(--mut);font-size:14px;margin-top:6px}
 .pub button.btn{border:0;font-family:inherit;font-size:inherit;cursor:pointer}
 .pub .btn{display:inline-block;padding:10px 18px;border-radius:10px;background:var(--ac);color:var(--on-ac);text-decoration:none;font-weight:600}
 .pub .ex{list-style:none;padding:0} .pub .ex li{margin:6px 0}
 .pub q{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .pub q::before,.pub q::after{content:none}
-.pub kbd{font:12.5px ui-monospace,Menlo,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
-.pub footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--bd);color:var(--mut);font-size:13px}
+.pub kbd{font:14px ui-monospace,Menlo,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
+.pub footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--bd);color:var(--mut);font-size:14px}
 .pub footer ul{list-style:none;padding:0;margin:6px 0 14px} .pub footer li{margin:3px 0}
 .pub .rel h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap} .pub .rel h2 .note{font-weight:400}
-.pub .rel h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 4px}
+.pub .rel h3{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 4px}
 .pub .rel ul{margin:0;padding-left:20px} .pub .rel li{margin:4px 0}
 /* minmax(0,1fr), а не 1fr: колонка не шире экрана, даже если строка почты или кнопка входа шире (320 px, WCAG 1.4.10) */
 @media(max-width:700px){.pub .intro{grid-template-columns:minmax(0,1fr)}.pub h1{font-size:25px}}
+/* Читается и нажимается на телефоне (SERBITO-448). Текст — не мельче 14 px (подпись, «или» и сообщения блока входа
+   в приложении — 13 px), серый --mut — контраст от 7:1. Ссылки шапки, строк под текстом и подвала — зона нажатия
+   не меньше 44×44 px: поля внутри ссылки и такие же отрицательные снаружи, поэтому строки не раздвигаются */
+.pub .hint,.pub .or,.pub .msg{font-size:14px}
+@media(max-width:700px),(pointer:coarse){
+  .pub .top a{display:inline-flex;align-items:center;min-height:44px;min-width:44px}
+  .pub .note a,.pub .more a,.pub footer a{display:inline-block;padding:12px 4px;margin:-12px -4px}
+  .pub footer li a{padding:12px 10px;margin:-12px -10px}
+}
 </style>"""
 
 # /about — отдельная лёгкая страница без JS приложения: цвета те же, что в index.html
 BASE_CSS = """<style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#5f6a7a;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
-@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18}}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#4b5563;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#a1abb9;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
 </style>"""
@@ -166,8 +178,10 @@ CONSENT_DAYS = 365
 CONSENT = {
     "ru": {"text": "GTD использует cookie Google Analytics, чтобы понимать, какие разделы полезны, — "
                    "без текста задач.",
+           "short": "Cookie Google Analytics — без текста задач",
            "more": "Подробнее", "yes": "Принять", "no": "Отклонить", "label": "Cookie", "settings": "Настройки cookie"},
     "en": {"text": "GTD uses Google Analytics cookies to learn which sections are useful — never your task text.",
+           "short": "Google Analytics cookies, never your task text",
            "more": "Details", "yes": "Accept", "no": "Decline", "label": "Cookies", "settings": "Cookie settings"},
 }
 CONSENT_CSS = """<style>
@@ -176,10 +190,10 @@ CONSENT_CSS = """<style>
   border:1px solid var(--bd);border-radius:12px;padding:12px 14px;box-shadow:0 8px 30px #0003;
   font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 .cc[hidden]{display:none}
-.cc p{flex:1 1 280px;margin:0} .cc a{color:var(--ac)}
+.cc p{flex:1 1 280px;margin:0} .cc a{color:var(--ac)} .cc .ccs{display:none}
 /* «Принять» и «Отклонить» — одного веса (решение владельца, SERBITO-349): тот же вид и та же ширина */
 .cc .ccb{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-left:auto}
-.cc button{font:inherit;font-weight:600;min-height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--ac);
+.cc button{font:inherit;font-weight:600;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--ac);
   background:var(--card);color:var(--tx);cursor:pointer}
 .cc button:focus-visible,.cc a:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 body.cc-open .pub{padding-bottom:calc(var(--cc-h,0px) + 32px)}
@@ -189,7 +203,13 @@ body.cc-open .toast{bottom:calc(var(--cc-h,0px) + 24px)}
    и у страницы, и у выезжающего меню приложения (nav на телефоне прокручивается сам) */
 html.cc-open{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px)}
 @media(max-width:700px){html.cc-open nav{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px);padding-bottom:calc(var(--cc-h,0px) + 16px)}}
-@media(max-width:700px){.cc{bottom:8px;padding:10px 12px}.cc .ccb{flex:1}.cc button{flex:1;min-height:44px}
+/* Телефон (SERBITO-448): баннер закрывал до 137 px первого экрана и строку о боте. Теперь — короткий текст в одну
+   строку, под ним «Подробнее» и кнопки (~86 px). <p> раскрыт в сетку (display:contents): короткий текст — на всю
+   ширину, ссылка — в одну строку с кнопками. Полный текст — на широком экране */
+@media(max-width:700px){.cc{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;bottom:8px;padding:8px 12px}
+  .cc p{display:contents} .cc .ccl{display:none} .cc .ccs{display:block;grid-column:1/-1}
+  .cc a{display:inline-flex;align-items:center;min-height:44px;padding:0 4px;margin:0 -4px}
+  .cc .ccb{margin:0} .cc button{padding:0 12px}
   body.cc-kb .cc{display:none}}
 </style>"""
 CONSENT_JS = """<script>
@@ -215,7 +235,8 @@ function gtag(){ dataLayer.push(arguments); }
     const lg = lang(); if(!el || drawn === lg) return;
     const t = TXT[drawn = lg];
     el.setAttribute('aria-label', t.label);
-    el.innerHTML = `<p>${t.text} <a href="${t.privacy}#cookies">${t.more}</a></p><div class="ccb">`
+    el.innerHTML = `<p><span class="ccl">${t.text}</span> <span class="ccs">${t.short}</span> `
+      + `<a href="${t.privacy}#cookies">${t.more}</a></p><div class="ccb">`
       + `<button type="button" data-cc="granted">${t.yes}</button>`
       + `<button type="button" data-cc="denied">${t.no}</button></div>`;
   }
@@ -395,7 +416,7 @@ LANDING_STEPS = {
 <li><b>3. Сделал</b>В Next — только конкретные шаги, по контексту: @комп, @телефон, @дом.
 Раз в неделю — Weekly Review, чтобы ничего не потерялось.</li>
 </ol>
-<p><a href="/about">Подробнее о методе и приложении →</a></p>
+<p class="more"><a href="/about">Подробнее о методе и приложении →</a></p>
 <h2>Telegram-бот @gtdsrbot</h2>
 <div class="card"><p style="margin-top:0">Пиши задачи боту обычными сообщениями — они попадут в Inbox.
 Напоминания приходят в Telegram с кнопками ✅ Готово и 💤 +1ч. Бот и сайт — один аккаунт:
@@ -409,7 +430,7 @@ LANDING_STEPS = {
 <li><b>3. Do</b>Next holds only concrete steps, filtered by context: @computer, @phone, @home.
 A weekly review keeps anything from slipping through.</li>
 </ol>
-<p><a href="/en/about">More about the method and the app →</a></p>
+<p class="more"><a href="/en/about">More about the method and the app →</a></p>
 <h2>Telegram bot @gtdsrbot</h2>
 <div class="card"><p style="margin-top:0">Send tasks to the bot as plain messages — they land in your Inbox.
 Reminders arrive in Telegram with ✅ Done and 💤 +1h buttons. The bot and the site share one account:
@@ -420,12 +441,13 @@ sign in on the site with Telegram or link the bot under “Account”.</p>
 
 # Место под кнопки входа (SERBITO-349): #signin в HTML пустой, JS заполняет его после /api/config — и лендинг
 # прыгал на ~260 px (CLS 0.13–0.17). Высоту резервируем заранее по включённым способам входа (порядок — как
-# в loginScreen: Google, почта, Telegram). Замер в Chromium, px: кнопка Google 44; строка почты 48, её нижний
-# отступ 16 больше соседнего (+2 перед «или», +6 перед сообщением); Telegram 46 — iframe виджета (запасная
-# кнопка ниже, 40); «или» 14+19+14; строка сообщения 10+13; «Нет способов входа» 50; «Dev login» 15+40.
+# в loginScreen и app.signin_methods: Google, почта, Telegram). #signin — flow-root: поля крайних
+# элементов внутри блока. Замер в Chromium, px: кнопка Google 44; строка почты 48, её нижний отступ 16 больше
+# соседнего (+2 перед «или», +6 перед сообщением); Telegram 46 — iframe виджета (запасная кнопка, 40); «или»
+# 14+20.3+14 (14 px); строка сообщения 10+14; «Нет способов входа» 15+21.75+15+14; «Dev login» 15+39.75+15.
 # Браузерный смоук сверяет резерв с реальной высотой.
 SIGNIN_PX = {"google": 44, "email": 48, "bot": 46}
-SIGNIN_OR, SIGNIN_MSG, SIGNIN_NONE, SIGNIN_DEV = 46.84, 23, 49.75, 54.75
+SIGNIN_OR, SIGNIN_MSG, SIGNIN_NONE, SIGNIN_DEV = 48.3, 24, 65.75, 69.75
 
 
 def signin_height(methods: list[str], dev: bool = False) -> int:
@@ -442,9 +464,9 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
     способы входа (для резерва высоты), dev — локальная кнопка «Dev login»."""
     h, hint = LANDING_SIGNIN[lang]
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
-    return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}</div>'
+    return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}{BOT_NOTE[lang]}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{BOT_NOTE[lang]}'
+            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>'
             f'{PRIVACY_NOTE[lang]}</div>'
             f'</div>{LANDING_STEPS[lang]}</main>{footer(lang, consent)}</div>')
 
@@ -585,15 +607,16 @@ T["ru"].update(privacy="Конфиденциальность", privacy_title="П
 T["en"].update(privacy="Privacy", privacy_title="Privacy policy — GTD online",
                privacy_desc="What data GTD online stores, what analytics receive, how to give or withdraw "
                             "cookie consent, who processes it and how to delete your account.")
-# Ссылка на политику под кнопками входа на лендинге
-# Строка о боте в блоке входа на лендинге (SERBITO-422): имя-ссылка и что он делает. Тот же текст — на экране
-# входа в приложении (bot_line в index.html), там имя бота — из /api/config
+# Строка о боте на лендинге (SERBITO-422): имя-ссылка и что он делает. Стоит под текстом, над блоком входа
+# (SERBITO-448): под ним на телефоне её закрывал баннер cookie. Тот же текст — на экране входа в приложении
+# (bot_line в index.html), там имя бота — из /api/config
 BOT_NOTE = {
     "ru": f'<p class="note" style="margin:14px 0 0">Telegram-бот <a href="{BOT_URL}">@{BOT_NAME}</a>: задача — '
           f'одним сообщением, напоминания приходят в чат</p>',
     "en": f'<p class="note" style="margin:14px 0 0">Telegram bot <a href="{BOT_URL}">@{BOT_NAME}</a>: send a task '
           f'as a message, get reminders in the chat</p>',
 }
+# Ссылка на политику под кнопками входа на лендинге
 PRIVACY_NOTE = {
     "ru": '<p class="note" style="margin:14px 0 0">Что мы храним — <a href="/privacy">политика конфиденциальности</a></p>',
     "en": '<p class="note" style="margin:14px 0 0">What we store — <a href="/en/privacy">privacy policy</a></p>',
@@ -768,13 +791,18 @@ T["en"].update(changes="What's new", changes_title="What's new in GTD — releas
                changes_desc="What's new and what got fixed in GTD online: every version of the app and the Telegram "
                             "bot, newest first.")
 CHANGES = {
-    "ru": {"lead": "Изменения GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
+    # Вступление под заголовком (SERBITO-448): что это за страница и как часто выходят версии
+    "ru": {"intro": "Здесь — всё, что менялось в GTD для пользователей: новые возможности и исправления на сайте "
+                    "и в Telegram-боте. Новые версии выходят несколько раз в неделю.",
+           "lead": "Изменения GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
            "dev": "Это локальная сборка (dev).",
            "src": f'Тот же список на английском — <a href="{CHANGELOG_URL}">CHANGELOG.md</a> на GitHub.',
            "sections": {"Added": "Новое", "Changed": "Изменено", "Fixed": "Исправлено", "Security": "Безопасность"},
            "months": ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
                       "октября", "ноября", "декабря")},
-    "en": {"lead": "What changed in GTD, version by version, newest first.", "now": "You are using {v}.",
+    "en": {"intro": "This page lists every change in GTD that users can see: new features and fixes on the site "
+                    "and in the Telegram bot. New versions come out several times a week.",
+           "lead": "What changed in GTD, version by version, newest first.", "now": "You are using {v}.",
            "dev": "This is a local build (dev).",
            "src": f'Also on GitHub: <a href="{CHANGELOG_URL}">CHANGELOG.md</a>.',
            "sections": {"Added": "Added", "Changed": "Changed", "Fixed": "Fixed", "Security": "Security"},
@@ -806,7 +834,7 @@ def changes(base: str, lang: str, ga: str) -> str:
     """Страница «Что нового» — такая же лёгкая, как /about. Открыл её — текущая версия считается увиденной."""
     c, path = CHANGES[lang], PATHS[(lang, "changes")]
     now = c["now"].format(v=VERSION_LABEL) if VERSION else c["dev"]
-    body = (f'<h1>{T[lang]["changes"]}</h1><p class="lead">{c["lead"]} {now}</p>'
+    body = (f'<h1>{T[lang]["changes"]}</h1><p class="lead">{c["intro"]}</p><p>{c["lead"]} {now}</p>'
             + "".join(release_html(r, lang) for r in RELEASES) + f'<p class="note" style="margin-top:32px">{c["src"]}</p>')
     title = json.dumps(f'GTD — {T[lang]["changes"]}', ensure_ascii=False)
     track = (f"<script>try{{ localStorage.setItem('{SEEN_KEY}', '{VERSION_LABEL}'); }}catch(e){{}}\n"
@@ -831,9 +859,32 @@ def changes(base: str, lang: str, ga: str) -> str:
 
 
 def robots(base: str) -> str:
+    # /i/N не закрываем (SERBITO-448): адрес под Disallow робот не открывает и не видит его X-Robots-Tag: noindex —
+    # а ссылку на него, найденную где-то ещё, Google оставляет в индексе без текста. Пусть читает и не индексирует
     return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /changes", "Allow: /en/",
-                      *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/", "/i/")),
+                      *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/")),
                       "", f"Sitemap: {base}/sitemap.xml", ""])
+
+
+def llms(base: str) -> str:
+    """/llms.txt (llmstxt.org, SERBITO-448): что такое GTD и ссылки на главное — для LLM-ассистентов. Google его
+    не читает; файл короткий и дешёвый. Только текст: тот же набор страниц, что в sitemap, плюс бот и код."""
+    page = lambda lang, p, name: f"- [{name}]({url(base, lang, p)})"  # noqa: E731
+    return "\n".join([
+        f"# {SITE_NAME}", "",
+        "> GTD is a free app for David Allen's Getting Things Done method. Capture tasks on the web or in the "
+        f"Telegram bot @{BOT_NAME}, clear the Inbox, track next actions, projects and reminders. Open source (MIT), "
+        "in English and Russian.", "",
+        "## Pages", "",
+        page("en", "home", "Home (English)") + ": sign in with Google, an email code or Telegram",
+        page("ru", "home", "Home (Russian)"),
+        page("en", "about", "How it works (English)") + ": the 5 GTD steps and where each one lives in the app",
+        page("ru", "about", "How it works (Russian)"),
+        page("en", "changes", "What's new (English)") + ": release history, newest first",
+        page("ru", "changes", "What's new (Russian)"), "",
+        "## Elsewhere", "",
+        f"- [Telegram bot @{BOT_NAME}]({BOT_URL}): send a task as a message, get reminders in the chat",
+        f"- [Source code on GitHub]({REPO_URL}): MIT license, self-hosting guide", ""])
 
 
 def sitemap(base: str) -> str:

@@ -16,6 +16,15 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- On phones the cookie notice takes one line of text and a row of buttons, so it no longer hides the sign-in block.
+  - RU: На телефоне уведомление о cookie занимает одну строку текста и ряд кнопок и больше не закрывает блок входа.
+- Links on the public pages are easier to tap on a phone, and small grey text is bigger and darker.
+  - RU: Ссылки на страницах сайта проще нажать на телефоне, а мелкий серый текст стал крупнее и темнее.
+- The "What's new" page now starts with a short note: what it lists and how often new versions come out.
+  - RU: Страница «Что нового» теперь начинается с короткого пояснения: что в ней и как часто выходят новые версии.
+
 ## [0.38.0] - 2026-10-05
 
 ### Changed

@@ -14,8 +14,8 @@ if(location.hostname==='gtd.serbito.rs'){
 }
 </script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#5f6a7a;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706;--bad:#c62828}
-@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18;--ok:#3ec97b;--warn:#f0a03c;--bad:#f07070}}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#4b5563;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706;--bad:#c62828}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#a1abb9;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18;--ok:#3ec97b;--warn:#f0a03c;--bad:#f07070}}
 :focus-visible{outline:2px solid var(--ac);outline-offset:1px} input:focus,textarea:focus,select:focus{outline:2px solid var(--ac);outline-offset:-1px}  /* фокус — в цвет логотипа, а не синий браузерный */
 *{accent-color:var(--ac)}
 *{box-sizing:border-box}
@@ -520,7 +520,7 @@ async function load(){
     if(!S.cfgLoaded){
       S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
       devLiveReload();
-      if(!S.cfg.user) return loginScreen();
+      if(!S.cfg.user) return loginScreen(S.cfg);  // настройки уже есть — второй раз не спрашиваем (SERBITO-448)
     }
     S.counts = await api('/counts');
     const resume = oauthResume(); if(resume) return location.replace(resume);  // вошли ради подключения приложения
@@ -592,12 +592,14 @@ function devLiveReload(){
   }, 1000);
 }
 
-async function loginScreen(){
-  S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
+// cfg — свежий /api/config от load(); без него (сессия истекла посреди работы) спрашиваем заново
+async function loginScreen(cfg){
+  S.cfg = cfg || await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
   routeApply(routeOf()); S.onb = null; S.me = null; S.fromLogin = true;  // следующий вход может быть в другой аккаунт;
   // раздел — из адреса: вошёл со ссылки /next — после входа откроется Next
   setLang($('#signin') ? document.documentElement.lang : autoLang());
   devLiveReload();
+  // Порядок — как app.signin_methods (резерв высоты на лендинге)
   const c = S.cfg, parts = [];
   if(c.google) parts.push('<div class="gbtn"></div>');
   if(c.email) parts.push(emailFormHtml(t('get_code')));
