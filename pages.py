@@ -164,7 +164,10 @@ PUBLIC_CSS = """<style>
   .pub .cmp td[data-label]::before{content:attr(data-label);display:block;font-size:14px;font-weight:600;color:var(--mut)}}
 .pub .faq h3{font-size:17px;margin:22px 0 6px}
 /* minmax(0,1fr), а не 1fr: колонка не шире экрана, даже если строка почты или кнопка входа шире (320 px, WCAG 1.4.10) */
-@media(max-width:700px){.pub .intro{grid-template-columns:minmax(0,1fr)}.pub h1{font-size:25px}}
+/* Телефон (SERBITO-520): плотнее шапка, зазор колонок и h1 — кнопка Telegram над баннером cookie, даже если
+   h1 из SERBITO-442 в широком шрифте (DejaVu/Verdana) занимает четыре строки */
+@media(max-width:700px){.pub .top{margin-bottom:16px}.pub .intro{grid-template-columns:minmax(0,1fr);gap:20px}
+  .pub h1{font-size:24px;line-height:1.15}}
 /* Читается и нажимается на телефоне (SERBITO-448). Текст — не мельче 14 px (подпись, «или» и сообщения блока входа
    в приложении — 13 px), серый --mut — контраст от 7:1. Ссылки шапки, строк под текстом и подвала — зона нажатия
    не меньше 44×44 px: поля внутри ссылки и такие же отрицательные снаружи, поэтому строки не раздвигаются */
