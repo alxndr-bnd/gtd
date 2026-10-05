@@ -439,7 +439,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 // Выбор: явная настройка в «Аккаунте» (me.lang) > вход на /en/ (браузер это запоминает) > язык браузера.
 // Язык браузера определяет сервер (/api/config → lang) по его Accept-Language — тем же правилом pages.lang_of,
 // что и для бота: русский — ru, uk, be, сербский кириллицей; английский — все остальные
-const I18N = JSON.parse($('#i18n').textContent);
+const I18N = window.GTD_I18N || JSON.parse($('#i18n').textContent);  // из бандла /app.<хеш>.js (SERBITO-444) или со страницы
 const LANG_NAMES = {ru:'Русский', en:'English'};  // название языка пишется на нём самом — поэтому не в словаре
 const VIEW_KEYS = ['inbox','next','waiting','scheduled','projects','someday','reference','done','review'];
 // VIEWS, HELP, EMPTY (пустой раздел: что сюда попадает + пример), ONB (чек-лист первого запуска:

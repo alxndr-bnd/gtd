@@ -2791,11 +2791,52 @@ def signin_methods() -> list[str]:
     return [m for m in ("google", "email", "bot") if on[m]]
 
 
+# SPA — внешним файлом (SERBITO-444). В static/index.html словарь #i18n и код приложения лежат прямо в странице
+# (так их правят и проверяют тесты), но отдавать их в каждом HTML — ~120 КБ из 160 на лендинге, который гость
+# видит раньше, чем входит. Сервер вырезает оба блока в /app.<хеш>.js (defer, кэш навсегда: новый код — новый
+# хеш) и ставит на их место ссылку. Порядок не меняется: defer выполняется после разбора страницы, как раньше
+# скрипт в конце <body>. CSS остаётся в странице — он нужен первой отрисовке. Пересборка — по mtime файла
+I18N_BLOCK = '<script type="application/json" id="i18n">'
+_shell: dict = {}
+
+
+def spa_shell() -> tuple[str, str, str]:
+    """(страница без словаря и кода, бандл, хеш) — из static/index.html, заново при его изменении."""
+    path = os.path.join(STATIC, "index.html")
+    mtime = os.stat(path).st_mtime_ns
+    if _shell.get("mtime") != mtime:
+        with open(path, encoding="utf-8") as f:
+            page = f.read()
+        # Словарь, сразу за ним — код до последнего </script> перед </body>. Начало кода ищем после словаря,
+        # а не «последний <script>»: строка «<script>» встречается и в комментариях кода
+        i18n_start = page.index(I18N_BLOCK)
+        i18n_end = page.index("</script>", i18n_start)
+        js_start = page.index("<script>\n", i18n_end)
+        js_end = page.rindex("</script>", 0, page.rindex("</body>"))
+        if page[i18n_end + len("</script>"):js_start].strip() or js_end < js_start:
+            raise RuntimeError("static/index.html: ожидаю словарь #i18n и сразу за ним — код приложения до </body>")
+        i18n = page[i18n_start + len(I18N_BLOCK):i18n_end].strip()
+        bundle = f"window.GTD_I18N = {i18n};\n" + page[js_start + len("<script>\n"):js_end]
+        digest = hashlib.sha256(bundle.encode()).hexdigest()[:12]
+        page = (page[:i18n_start] + f'<script defer src="/app.{digest}.js"></script>\n'
+                + page[i18n_end + len("</script>"):js_start].lstrip("\n") + page[js_end + len("</script>"):].lstrip("\n"))
+        _shell.update(mtime=mtime, page=page, bundle=bundle, digest=digest)
+    return _shell["page"], _shell["bundle"], _shell["digest"]
+
+
+@app.get("/app.{digest}.js", include_in_schema=False)
+def spa_bundle(digest: str):
+    # Чужой хеш — страница прошлой ревизии во время выкладки: отдаём текущий код (рабочая страница лучше 404),
+    # но без кэша, чтобы под старым адресом не застрял новый код
+    _, bundle, current = spa_shell()
+    cache = "public, max-age=31536000, immutable" if digest == current else "no-store"
+    return Response(bundle, media_type="text/javascript; charset=utf-8", headers={"Cache-Control": cache})
+
+
 def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLResponse:
     """Страница приложения. GA-сниппет — статично в HTML (чтобы Google видел тег), только на боевом домене.
     landing — гостю вместо пустого экрана входа: SEO-теги и текст лендинга прямо в HTML (pages.py)."""
-    with open(os.path.join(STATIC, "index.html"), encoding="utf-8") as f:
-        page = f.read().replace("<!--GA-->", ga_snippet(request)).replace("<!--ICONS-->", pages.ICONS)
+    page = spa_shell()[0].replace("<!--GA-->", ga_snippet(request)).replace("<!--ICONS-->", pages.ICONS)
     page = page.replace('<html lang="ru">', f'<html lang="{lang}">')  # SPA потом поставит язык интерфейса
     if landing:
         page = (page.replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))

@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- The home page opens faster, especially on phones: the app code now downloads once and the browser keeps it.
+  - RU: Главная открывается быстрее, особенно на телефоне: код приложения теперь скачивается один раз и остаётся в браузере.
+
 ## [0.37.0] - 2026-10-05
 
 ### Changed
