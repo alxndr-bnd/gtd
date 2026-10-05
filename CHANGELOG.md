@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+- Requests to the direct Cloud Run address now go to gtd.serbito.rs, so the site's edge protection always applies.
+  - RU: Запросы на прямой адрес Cloud Run теперь уходят на gtd.serbito.rs, поэтому защита сайта на входе работает всегда.
+
 ## [0.33.0] - 2026-10-04
 
 ### Added
