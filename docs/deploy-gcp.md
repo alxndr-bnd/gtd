@@ -36,9 +36,16 @@ The tag triggers `.github/workflows/deploy.yml`:
 5. Switch 100% of traffic to that revision by name.
 
 If the candidate doesn't answer, the previous revision keeps serving. The first deploy (no service yet)
-goes straight to 100% and is then probed. After the switch, the main page of the service URL must return 200;
-otherwise traffic goes back to the previous revision and the run fails. GCP auth is keyless (Workload Identity
-Federation) — no keys anywhere.
+goes straight to 100% and is then probed. After the switch, the main page of the new revision must return 200;
+otherwise traffic goes back to the previous revision and the run fails. Then the security headers of the main
+page are checked. All checks use the `candidate---…run.app` tag URL, and the last step removes the tag, also
+after a failure. GCP auth is keyless (Workload Identity Federation) — no keys anywhere.
+
+`*.run.app` (SERBITO-430): gtd.serbito.rs is behind the Cloudflare proxy (SERBITO-428), and a request to the
+Cloud Run URL skips it. On a `*.run.app` host the app (`RunAppGuard` in `app.py`) answers GET/HEAD with a 301 to
+the same path on the `BASE_URL` domain and other methods with 403. Only the `candidate---` tag host is served.
+Cloud Scheduler, the Telegram webhook, MCP and OAuth all use `BASE_URL`. The guard is off when `BASE_URL` is
+itself a `run.app` URL (self-host without a domain).
 
 Weekly OS refresh (SERBITO-401): the same workflow runs every Wednesday 03:00 UTC (Cloud SQL maintenance is
 Tuesday 02:00 UTC) and on *Run workflow*. It checks out the newest `vX.Y.Z` tag, never a branch, so unreleased
@@ -121,7 +128,7 @@ on the free plan the 300 emails/day limit covers both projects.
 4. First release, then the domain:
    `gcloud beta run domain-mappings create --service gtd --domain gtd.serbito.rs --region europe-west1`
    and DNS `CNAME gtd → ghs.googlehosted.com.` (on Cloudflare — DNS only, no proxy, otherwise Google
-   won't issue the certificate).
+   won't issue the certificate). Production runs proxied since SERBITO-428.
 
 ## Monitoring and analytics
 

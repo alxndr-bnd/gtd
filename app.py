@@ -1413,6 +1413,53 @@ class HeadAsGet:
 
 app.add_middleware(HeadAsGet)
 
+# ── Обход Cloudflare через *.run.app (SERBITO-430, как serbito SERBITO-348 PLT-4). Cloud Run отвечает и на своём
+# адресе gtd-….run.app, а запрос туда минует WAF, правила Cloudflare и Bot Fight Mode перед gtd.serbito.rs.
+# На run.app-хосте открыт только хост тега candidate---…run.app: деплой прогревает по нему новую ревизию,
+# проверяет главную и заголовки безопасности, потом снимает тег. Остальное: GET/HEAD — 301 на тот же путь
+# на домене из BASE_URL, другие методы — 403. Машинным адресам run.app не нужен: Cloud Scheduler (gtd-reminders),
+# вебхук Telegram, MCP и OAuth ходят на BASE_URL. Если BASE_URL сам на run.app (self-host без домена), защита
+# выключена — иначе редирект вёл бы сам на себя. Слой — внутри Guard: 301 и 403 тоже получают заголовки.
+RUN_APP_SUFFIX = ".run.app"
+CANDIDATE_TAG_PREFIX = "candidate---"
+
+
+def host_name(value: str) -> str:
+    """Имя хоста из заголовка Host: нижний регистр, без порта и точки в конце."""
+    host = value.strip().lower()
+    if host.startswith("["):  # IPv6-адрес — не имя run.app
+        return host
+    return host.split(":", 1)[0].rstrip(".")
+
+
+def run_app_host(host: str) -> bool:
+    return host.endswith(RUN_APP_SUFFIX)
+
+
+RUN_APP_GUARD = not run_app_host(host_name(urlsplit(BASE_URL).netloc))
+RUN_APP_TARGET = "{0.scheme}://{0.netloc}".format(urlsplit(BASE_URL))
+
+
+class RunAppGuard:
+    def __init__(self, asgi):
+        self.asgi = asgi
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not RUN_APP_GUARD:
+            return await self.asgi(scope, receive, send)
+        host = host_name(Headers(scope=scope).get("host", ""))
+        if not run_app_host(host) or host.startswith(CANDIDATE_TAG_PREFIX):
+            return await self.asgi(scope, receive, send)
+        if scope["method"] in ("GET", "HEAD"):
+            target = RUN_APP_TARGET + (scope.get("raw_path") or scope["path"].encode()).decode("latin-1")
+            if scope.get("query_string"):
+                target += "?" + scope["query_string"].decode("latin-1")
+            return await Response(status_code=301, headers={"location": target})(scope, receive, send)
+        return await PlainTextResponse(f"Use {RUN_APP_TARGET}", 403)(scope, receive, send)
+
+
+app.add_middleware(RunAppGuard)
+
 # ── Защита запросов и заголовки ответов (SERBITO-360)
 # GTD-6: запрос, меняющий данные, принимаем только со своей страницы. SameSite=Lax не спасает от соседних
 # поддоменов *.serbito.rs — для браузера это тот же «сайт», и cookie уходит. Поэтому: Sec-Fetch-Site (современные
@@ -1612,9 +1659,9 @@ def limit_count(key: str, window: int) -> int:
 #   правила балансировщика (или своего reverse proxy с публичным IP) задаётся в TRUSTED_PROXIES.
 # - Заголовок читаем, только если само соединение пришло от прокси: loopback, частная или link-local сеть,
 #   TRUSTED_PROXIES. uvicorn, открытый наружу без прокси, берёт адрес соединения — XFF клиента игнорируется.
-# - Cloudflare: сейчас DNS only, запросы идут мимо него. CF-Connecting-IP верим, только если найденный адрес
-#   клиента — из сетей Cloudflare, т.е. запрос действительно пришёл через его прокси; иначе этот заголовок
-#   подделывается так же, как XFF. Список сетей — https://www.cloudflare.com/ips/
+# - Cloudflare: gtd.serbito.rs за его прокси (SERBITO-428), адрес клиента — в CF-Connecting-IP. Верим ему, только
+#   если найденный адрес клиента — из сетей Cloudflare, т.е. запрос действительно пришёл через его прокси; иначе
+#   заголовок подделывается так же, как XFF. Прямой путь мимо Cloudflare (run.app) закрывает RunAppGuard. Список сетей — https://www.cloudflare.com/ips/
 def _nets(cidrs) -> tuple:
     return tuple(ipaddress.ip_network(c.strip(), strict=False) for c in cidrs if c.strip())
 

@@ -105,13 +105,14 @@ def _run_step(tmp_path, headers, cwd=ROOT):
                           timeout=30, env=env)
 
 
-def test_step_runs_last_on_every_deploy_and_checks_the_service_url(tmp_path):
+def test_step_runs_after_the_smoke_on_every_deploy_and_checks_the_candidate_url(tmp_path):
+    # SERBITO-430: на обычном run.app-адресе главная — 301 на gtd.serbito.rs, поэтому проверяем адрес тега
     smoke = next(i for i, s in enumerate(STEPS) if "Smoke check" in s.get("name", ""))
-    assert STEP == len(STEPS) - 1 and STEP > smoke
+    assert STEP == len(STEPS) - 2 and STEP > smoke  # после него — только снятие тега candidate
     assert "if" not in STEPS[STEP] and not STEPS[STEP].get("continue-on-error")
     r = _run_step(tmp_path, FULL)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "https://gtd-x.a.run.app/" in (tmp_path / "curl.log").read_text()
+    assert "https://candidate---gtd-x.a.run.app/" in (tmp_path / "curl.log").read_text()
 
 
 def test_step_fails_without_rollback_when_a_header_is_missing(tmp_path):

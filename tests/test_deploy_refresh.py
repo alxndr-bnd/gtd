@@ -36,6 +36,7 @@ PICK = _index(lambda s: s.get("id") == "release")
 PREV = _index(lambda s: s.get("id") == "prev")
 DEPLOY_STEP = _index(lambda s: "gcloud run deploy" in s.get("run", ""))
 SMOKE = _index(lambda s: "Smoke check" in s.get("name", ""))
+UNTAG = _index(lambda s: s.get("name") == "Remove the candidate tag")
 
 
 def _clean_env(**extra):
@@ -158,7 +159,8 @@ esac
 def fakes(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for name, body in {"gcloud": FAKE_GCLOUD, "curl": '#!/bin/sh\nprintf "%s" "$FAKE_CODE"\n',
+    curl = '#!/bin/sh\necho "$*" >> "$FAKE_LOG.curl"\nprintf "%s" "$FAKE_CODE"\n'
+    for name, body in {"gcloud": FAKE_GCLOUD, "curl": curl,
                        "sleep": "#!/bin/sh\nexit 0\n"}.items():
         (bin_dir / name).write_text(body)
         (bin_dir / name).chmod(0o755)
@@ -199,3 +201,39 @@ def test_smoke_rolls_back_to_the_previous_revision(tmp_path, fakes, code, prev, 
     assert ("--to-revisions gtd-00041=100" in log.read_text()) == rollback, log.read_text()
     if not ok:
         assert "::error::" in r.stdout
+
+
+# ── Адрес тега candidate (SERBITO-430) ──
+# На обычном run.app-адресе приложение отвечает 301/403 (RunAppGuard), поэтому прогрев, smoke и проверка
+# заголовков идут по candidate---…run.app, а тег снимает последний шаг — и после сбоя тоже.
+
+def test_smoke_checks_the_candidate_tag_url(tmp_path, fakes):
+    env, log = fakes
+    r, _ = _run(SMOKE, tmp_path, tmp_path, FAKE_CODE="200", PREV_REVISION="gtd-00041", **env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    curl = Path(f"{log}.curl").read_text()
+    assert "https://candidate---gtd-x.a.run.app/" in curl and " https://gtd-x.a.run.app/" not in curl
+
+
+def test_the_deploy_keeps_the_tag_and_the_first_deploy_gets_one_too():
+    script = STEPS[DEPLOY_STEP]["run"]
+    assert "--remove-tags" not in script
+    assert script.count("--tag candidate") == 2  # кандидат без трафика и первый деплой
+    assert 'probe "$SVC_URL"' not in script and script.count('probe "$CAND_URL"') == 2
+
+
+def test_the_candidate_tag_is_removed_last_even_after_a_failure(tmp_path, fakes):
+    step = STEPS[UNTAG]
+    assert UNTAG == len(STEPS) - 1 and step["if"] == "always()"
+    env, log = fakes
+    r, _ = _run(UNTAG, tmp_path, tmp_path, **env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "run services update-traffic gtd --region europe-west1 --remove-tags candidate" in log.read_text()
+
+
+def test_a_failed_tag_removal_warns_but_does_not_fail(tmp_path, fakes):
+    env, _ = fakes
+    gcloud = Path(env["PATH"].split(os.pathsep, 1)[0]) / "gcloud"
+    gcloud.write_text("#!/bin/sh\nexit 1\n")  # тега нет или токен протух
+    r, _ = _run(UNTAG, tmp_path, tmp_path, **env)
+    assert r.returncode == 0 and "::warning::" in r.stdout, r.stdout + r.stderr
