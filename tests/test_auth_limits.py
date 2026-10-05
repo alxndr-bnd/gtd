@@ -201,7 +201,7 @@ def test_xff_ignored_from_untrusted_peer():
 
 def test_cf_connecting_ip_only_via_cloudflare():
     assert A.client_ip(req(CLOUD_RUN, f"6.6.6.6, {CF_EDGE}", cf="203.0.113.7")) == "203.0.113.7"
-    assert A.client_ip(req(CLOUD_RUN, "198.51.100.1", cf="203.0.113.7")) == "198.51.100.1"  # DNS only
+    assert A.client_ip(req(CLOUD_RUN, "198.51.100.1", cf="203.0.113.7")) == "198.51.100.1"  # не через Cloudflare
     assert A.client_ip(req(CLOUD_RUN, CF_EDGE, cf="junk")) == CF_EDGE
 
 

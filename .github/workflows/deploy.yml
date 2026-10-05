@@ -159,8 +159,11 @@ jobs:
 
       # Новая ревизия поднимается без трафика под тегом candidate, прогревается до 200 и только
       # потом получает трафик. Не ответила — выходим, старая ревизия продолжает обслуживать.
-      # Первый деплой (сервиса ещё нет) — сразу на 100% и проверка, что он отвечает.
+      # Первый деплой (сервиса ещё нет) — сразу на 100% (тоже с тегом candidate) и проверка, что он отвечает.
       # После переключения — smoke главной страницы, при сбое откат (шаг ниже, SERBITO-401).
+      # SERBITO-430: все проверки — по адресу тега candidate---…run.app. На обычном run.app-адресе
+      # приложение отвечает 301 на gtd.serbito.rs или 403 (RunAppGuard, app.py). Тег снимает
+      # последний шаг, и при сбое тоже.
       #
       # Бот на вебхуке, напоминания будит Cloud Scheduler (/tasks/reminders) — фоновых циклов нет,
       # поэтому min=0 и CPU только на время запросов: без трафика инстанс спит и не стоит денег.
@@ -247,31 +250,32 @@ jobs:
             # По имени, а не --to-latest: иначе сервис остаётся в режиме автопромоута.
             REVISION="$(gcloud run services describe "$SERVICE" --region "$REGION" \
               --format='value(status.latestCreatedRevisionName)')"
+            # Тег candidate остаётся: по нему smoke и проверка заголовков, снимает его последний шаг
             gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions "$REVISION=100"
-            gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags candidate \
-              || echo "::warning::Трафик на $REVISION, но тег candidate не снялся — снять руками."
           else
             echo "Сервиса $SERVICE ещё нет — первый деплой."
-            gcloud run deploy "$SERVICE" "${COMMON[@]}"
+            gcloud run deploy "$SERVICE" "${COMMON[@]}" --tag candidate
             SVC_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
-            if ! probe "$SVC_URL"; then
-              echo "::error::Сервис создан, но не отвечает 200 на ${SVC_URL}/api/config."
+            CAND_URL="https://candidate---${SVC_URL#https://}"
+            if ! probe "$CAND_URL"; then
+              echo "::error::Сервис создан, но не отвечает 200 на ${CAND_URL}/api/config."
               exit 1
             fi
           fi
           echo "Deployed ${RELEASE_TAG}: $SVC_URL" >> "$GITHUB_STEP_SUMMARY"
 
       # SERBITO-401: smoke после переключения трафика, на каждом деплое (релиз и пересборка).
-      # Главная страница по адресу сервиса (run.app, редиректы по -L) должна ответить 200. Иначе
-      # трафик возвращается на прежнюю ревизию, а запуск падает (GitHub пришлёт письмо).
+      # Главная страница новой ревизии (адрес тега candidate, редиректы по -L) должна ответить 200.
+      # Иначе трафик возвращается на прежнюю ревизию, а запуск падает (GitHub пришлёт письмо).
       - name: Smoke check (roll back on failure)
         env:
           PREV_REVISION: ${{ steps.prev.outputs.revision }}
         run: |
           set -euo pipefail
           SVC_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
+          CAND_URL="https://candidate---${SVC_URL#https://}"
           for i in 1 2 3 4 5; do
-            code="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "$SVC_URL/")" || true
+            code="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "$CAND_URL/")" || true
             echo "  smoke $i -> $code"
             if [ "$code" = "200" ]; then exit 0; fi
             sleep 5
@@ -285,8 +289,8 @@ jobs:
           echo "::error::The main page does not return 200 after the deploy. Traffic is back on $PREV_REVISION."
           exit 1
 
-      # SERBITO-348: заголовки безопасности на главной сервиса (run.app — это та же ревизия, что за
-      # gtd.serbito.rs). Без отката: страница работает, но без защиты. Запуск падает и шлёт письмо.
+      # SERBITO-348: заголовки безопасности на главной новой ревизии (адрес тега candidate — та же
+      # ревизия, что за gtd.serbito.rs). Без отката: страница работает, но без защиты. Запуск падает и шлёт письмо.
       # Пересборка старого тега, в котором скрипта ещё нет, проверку пропускает с предупреждением.
       - name: Security headers check
         run: |
@@ -296,7 +300,16 @@ jobs:
             exit 0
           fi
           SVC_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
-          if ! bash scripts/check_security_headers.sh "$SVC_URL/"; then
-            echo "::error::Main page of $SVC_URL is missing security headers (see the list above)."
+          CAND_URL="https://candidate---${SVC_URL#https://}"
+          if ! bash scripts/check_security_headers.sh "$CAND_URL/"; then
+            echo "::error::Main page of $CAND_URL is missing security headers (see the list above)."
             exit 1
           fi
+
+      # SERBITO-430: адрес тега candidate — путь мимо Cloudflare, он не должен жить дольше деплоя.
+      # Шаг идёт и после сбоя (в том числе после неудачного прогрева кандидата).
+      - name: Remove the candidate tag
+        if: always()
+        run: |
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags candidate \
+            || echo "::warning::Could not remove the candidate tag. Remove it by hand: gcloud run services update-traffic $SERVICE --region $REGION --remove-tags candidate"
