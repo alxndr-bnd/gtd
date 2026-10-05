@@ -2017,8 +2017,7 @@ def test_next_offers_context_chips(watch):
 @pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
 def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
     """G11: кнопки входа одной ширины (Google — шириной блока, строка почты, Telegram) и с одним глаголом
-    («Войти …» / «Sign in …»); кнопка Telegram не выглядит выключенной: она главная — залитая (SERBITO-448),
-    «Войти по коду» — в цвет логотипа, жирная, с рамкой."""
+    («Войти …» / «Sign in …»); кнопка Telegram не выглядит выключенной — тот же вид, что у «Войти по коду»."""
     monkeypatch.setattr(A, "TOKEN", "smoke-token")
     monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
     w = watch(lang, viewport=viewport)
@@ -2035,9 +2034,8 @@ def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
     assert w.page.inner_text('#signin [data-act="emailsend"]').startswith(verb)
     assert verb in w.page.inner_text("#signin .tgfb")
     look = """el => { const c = getComputedStyle(el); return [c.color, c.borderColor, c.backgroundColor, c.fontWeight]; }"""
-    tg, code = w.page.eval_on_selector("#signin .tgfb", look), w.page.eval_on_selector('#signin [data-act="emailsend"]', look)
-    assert tg[1] == code[1] == tg[2] != code[2] and code[0] == tg[2], (tg, code)  # одна рамка в цвет логотипа; залита — только tg
-    assert int(tg[3]) >= 600 and int(code[3]) >= 600
+    assert w.page.eval_on_selector("#signin .tgfb", look) == w.page.eval_on_selector('#signin [data-act="emailsend"]', look)
+    assert int(w.page.eval_on_selector("#signin .tgfb", "el => getComputedStyle(el).fontWeight")) >= 600
     w.check("итог")
 
 
@@ -2067,9 +2065,9 @@ FILLED = """() => { const probe = document.createElement('i'); probe.style.backg
 
 @pytest.mark.parametrize("bot", [True, False])
 @pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
-def test_landing_has_one_primary_signin(watch, monkeypatch, bot, viewport):
-    """Один главный способ входа — залитая кнопка, остальные — с рамкой (SERBITO-448). Главный — Telegram: он же сразу
-    подключает бота с напоминаниями; бота нет (self-hosted копия) — главный «Войти по коду». Главный — первым."""
+def test_landing_signin_keeps_the_owner_order(watch, monkeypatch, bot, viewport):
+    """Порядок входа — прежний: Google, почта, Telegram; ни одна кнопка не выделена заливкой (SERBITO-448: аудит
+    предлагал одну главную — Telegram; владелец оставил прежний порядок, 2026-10-05)."""
     if bot:
         monkeypatch.setattr(A, "TOKEN", "test-token")
         monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
@@ -2078,9 +2076,13 @@ def test_landing_has_one_primary_signin(watch, monkeypatch, bot, viewport):
     w.wait('#signin a[href="/dev-login"]', "кнопки входа")
     w.page.hover("#signin") if viewport != PHONE else w.page.tap("#signin h2, .signin h2")
     w.page.wait_for_function("window.__gsi", timeout=WAIT_MS)
-    assert w.page.evaluate(FILLED) == (["tglogin"] if bot else ["emailsend"])
+    assert w.page.evaluate(FILLED) == []
     first = w.page.evaluate("document.querySelector('#signin').firstElementChild.className")
-    assert first == ("tgw" if bot else "gbtn"), first
+    assert first == "gbtn", first
+    if bot:
+        # Telegram — после строки почты
+        assert w.page.evaluate("(document.querySelector('#signin .cap').compareDocumentPosition("
+                               "document.querySelector('#signin .tgw')) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0")
     w.check("итог")
 
 

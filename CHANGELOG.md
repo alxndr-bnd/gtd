@@ -20,8 +20,6 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 - On phones the cookie notice takes one line of text and a row of buttons, so it no longer hides the sign-in block.
   - RU: На телефоне уведомление о cookie занимает одну строку текста и ряд кнопок и больше не закрывает блок входа.
-- Sign-in has one main button, "Sign in with Telegram": it also connects the bot with reminders. Google and email still work.
-  - RU: У входа одна главная кнопка — «Войти через Telegram»: она сразу подключает бота с напоминаниями. Google и почта работают, как раньше.
 - Links on the public pages are easier to tap on a phone, and small grey text is bigger and darker.
   - RU: Ссылки на страницах сайта проще нажать на телефоне, а мелкий серый текст стал крупнее и темнее.
 - The "What's new" page now starts with a short note: what it lists and how often new versions come out.

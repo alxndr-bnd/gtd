@@ -33,16 +33,10 @@ Sign-up is open: the first sign-in by any method creates an account.
     "Use default ignored sources" on, "Additional ignored sources" + `frontend-cdn.perplexity.ai`.
 - **Bot** answers only in private chats.
 
-**One primary sign-in button** (SERBITO-448). The landing and the sign-in screen show Telegram first, as the
-only filled button; Google and the email code follow with an outline. Why Telegram:
-- One step signs in and connects the bot, so reminders work from the first task. The bot is what sets GTD apart.
-- On gtd.serbito.rs desktop the Telegram Login Widget replaces our button. Telegram draws it filled, so the page
-  still has one filled action.
-- Google draws its own button (GSI iframe, outline theme): we cannot make it the primary one.
-- Email works for everyone, so it stays as the fallback. Without a bot (self-hosted copy) the email button is the
-  primary one.
-
-The order lives in `loginScreen` (index.html) and in `app.signin_methods` (the landing reserves height for it).
+**Sign-in order** (SERBITO-448, owner decision 2026-10-05): Google, the email code, then Telegram — the order
+from before; no single filled "primary" button. The audit suggested one primary action (Telegram, since it also
+connects the bot); the owner kept the old order. The order lives in `loginScreen` (index.html) and in
+`app.signin_methods` (the landing reserves height for it).
 
 Google and an email code for the same address are one account. Other methods are linked under
 “👤 Account” or in the bot: `/email you@example.com` → code by email → send the code to the bot.

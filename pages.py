@@ -118,7 +118,7 @@ PUBLIC_CSS = """<style>
 .pub .intro{display:grid;grid-template-columns:1fr 380px;gap:28px;align-items:start}
 .pub .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 20px}
 .pub .signin{text-align:center} .pub .signin h2{margin:0 0 4px}
-/* Поля первой и последней кнопки входа не выходят за блок (SERBITO-448): пока виджет Telegram (он первый) не загружен,
+/* Поля первой и последней кнопки входа не выходят за блок (SERBITO-448): пока виджет Telegram не загружен,
    поле «или» под ним иначе сдвигало весь блок на 14 px */
 .pub #signin{display:flow-root}
 .pub .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
@@ -441,7 +441,7 @@ sign in on the site with Telegram or link the bot under “Account”.</p>
 
 # Место под кнопки входа (SERBITO-349): #signin в HTML пустой, JS заполняет его после /api/config — и лендинг
 # прыгал на ~260 px (CLS 0.13–0.17). Высоту резервируем заранее по включённым способам входа (порядок — как
-# в loginScreen и app.signin_methods: Telegram, Google, почта; SERBITO-448). #signin — flow-root: поля крайних
+# в loginScreen и app.signin_methods: Google, почта, Telegram). #signin — flow-root: поля крайних
 # элементов внутри блока. Замер в Chromium, px: кнопка Google 44; строка почты 48, её нижний отступ 16 больше
 # соседнего (+2 перед «или», +6 перед сообщением); Telegram 46 — iframe виджета (запасная кнопка, 40); «или»
 # 14+20.3+14 (14 px); строка сообщения 10+14; «Нет способов входа» 15+21.75+15+14; «Dev login» 15+39.75+15.
