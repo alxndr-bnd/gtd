@@ -16,6 +16,13 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- A new page about the Telegram bot (/en/bot): how to start in 3 steps, how to write dates, #Project and @context, reminder buttons, commands, linking the bot to your account and connecting Claude.
+  - RU: Новая страница о Telegram-боте (/bot): как начать за 3 шага, как писать сроки, #Проект и @контекст, кнопки напоминаний, команды, привязка бота к аккаунту и подключение Claude.
+- A new weekly review page (/en/weekly-review): the same six steps as in the app, a 30-minute example and a plain-text checklist you can copy.
+  - RU: Новая страница о еженедельном обзоре (/weekly-review): те же шесть шагов, что в приложении, пример на 30 минут и чек-лист простым текстом, который можно скопировать.
+
 ## [0.39.0] - 2026-10-05
 
 ### Changed

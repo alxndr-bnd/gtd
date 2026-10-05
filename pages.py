@@ -1,6 +1,6 @@
 """Публичные страницы для гостей и поисковиков: лендинг на входе (/, /en/), «Как это работает»
 (/about, /en/about), политика конфиденциальности (/privacy, /en/privacy), «Что нового» (/changes, /en/changes),
-SEO-теги, robots.txt, llms.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
+Telegram-бот (/bot, /en/bot), чек-лист Weekly Review (/weekly-review, /en/weekly-review), SEO-теги, robots.txt, llms.txt и sitemap.xml. Текст отдаёт сервер прямо в HTML —
 Google индексирует его без JS. Маршруты — в app.py, здесь только содержимое; base — BASE_URL."""
 import html
 import json
@@ -54,7 +54,10 @@ ICONS = "\n".join([
 LANGS = ("ru", "en")
 PATHS = {("ru", "home"): "/", ("ru", "about"): "/about", ("en", "home"): "/en/", ("en", "about"): "/en/about",
          ("ru", "privacy"): "/privacy", ("en", "privacy"): "/en/privacy",
-         ("ru", "changes"): "/changes", ("en", "changes"): "/en/changes"}
+         ("ru", "changes"): "/changes", ("en", "changes"): "/en/changes",
+         # Страницы под поисковый запрос (SERBITO-441, SERBITO-446)
+         ("ru", "bot"): "/bot", ("en", "bot"): "/en/bot",
+         ("ru", "weekly"): "/weekly-review", ("en", "weekly"): "/en/weekly-review"}
 
 # Версия, которая сейчас работает (SERBITO-329): APP_VERSION ставит деплой из тега (v0.16.0 → 0.16.0),
 # локально и в self-hosted копии без него — «dev». Показывается в подвале, в меню приложения (/api/config)
@@ -130,6 +133,9 @@ PUBLIC_CSS = """<style>
 .pub .ex{list-style:none;padding:0} .pub .ex li{margin:6px 0}
 .pub q{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .pub q::before,.pub q::after{content:none}
+.pub pre{white-space:pre-wrap;font:14px/1.5 ui-monospace,Menlo,monospace;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin:0 0 12px}
+.pub table{border-collapse:collapse;width:100%} .pub th,.pub td{border-bottom:1px solid var(--bd);padding:8px 6px;text-align:left;vertical-align:top}
+.pub td{overflow-wrap:anywhere} .pub td:first-child{white-space:nowrap;padding-right:12px}
 .pub kbd{font:14px ui-monospace,Menlo,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
 .pub footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--bd);color:var(--mut);font-size:14px}
 .pub footer ul{list-style:none;padding:0;margin:6px 0 14px} .pub footer li{margin:3px 0}
@@ -303,7 +309,7 @@ def url(base: str, lang: str, page: str) -> str:
     return base + PATHS[(lang, page)]
 
 
-CRUMB = {"about": "how", "privacy": "privacy", "changes": "changes"}  # имя страницы в хлебных крошках — ключ T
+CRUMB = {"about": "how", "privacy": "privacy", "changes": "changes", "bot": "bot", "weekly": "weekly"}  # имя страницы в хлебных крошках — ключ T
 
 
 def structured_data(base: str, lang: str, page: str, img: str) -> dict:
@@ -374,7 +380,7 @@ def topbar(lang: str, page: str) -> str:
     t, other = T[lang], "en" if lang == "ru" else "ru"
     link = (f'<a href="{PATHS[(lang, "about")]}">{t["how"]}</a>' if page == "home"
             else f'<a href="{PATHS[(lang, "home")]}">{t["open"]}</a>')
-    return (f'<header class="top"><a class="brand" href="{PATHS[(lang, "home")]}">{mark(28)} GTD</a>{link}'
+    return (f'<header class="top"><a class="brand" href="{PATHS[(lang, "home")]}">{mark(28)} {SITE_NAME}</a>{link}'
             f'<a href="{PATHS[(other, page)]}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></header>')
 
 
@@ -389,7 +395,10 @@ def footer(lang: str, consent: bool = False) -> str:
               if consent else "")
     # «Что нового» и работающая версия (SERBITO-329)
     changes = f' · <a href="{PATHS[(lang, "changes")]}">{t["changes"]}</a> · <span class="ver">{VERSION_LABEL}</span>'
-    return (f'<footer><b>{t["other"]}</b><ul>{items}</ul>'
+    # Справочные страницы (SERBITO-441, SERBITO-446) — ссылки со всех публичных страниц
+    guides = " · ".join(f'<a href="{PATHS[(lang, page)]}">{t[key]}</a>'
+                        for page, key in (("about", "how"), ("bot", "bot"), ("weekly", "weekly")))
+    return (f'<footer><p>{guides}</p><b>{t["other"]}</b><ul>{items}</ul>'
             f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{changes}{contact}</p>'
             f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a> · '
             f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a>{cookie}</p>'
@@ -414,28 +423,30 @@ LANDING_STEPS = {
 <li><b>2. Разобрал</b>В Inbox решаешь, что это: следующее действие, проект, ожидание или идея на потом, — и кладёшь
 в Next, Projects, Waiting или Someday.</li>
 <li><b>3. Сделал</b>В Next — только конкретные шаги, по контексту: @комп, @телефон, @дом.
-Раз в неделю — Weekly Review, чтобы ничего не потерялось.</li>
+Раз в неделю — <a href="/weekly-review">Weekly Review</a>, чтобы ничего не потерялось.</li>
 </ol>
 <p class="more"><a href="/about">Подробнее о методе и приложении →</a></p>
 <h2>Telegram-бот @gtdsrbot</h2>
 <div class="card"><p style="margin-top:0">Пиши задачи боту обычными сообщениями — они попадут в Inbox.
 Напоминания приходят в Telegram с кнопками ✅ Готово и 💤 +1ч. Бот и сайт — один аккаунт:
 войди на сайте через Telegram или привяжи бота в «Аккаунте».</p>
-<a class="btn" href="https://t.me/gtdsrbot">Открыть @gtdsrbot</a></div>""",
+<a class="btn" href="https://t.me/gtdsrbot">Открыть @gtdsrbot</a>
+<p class="more" style="margin-bottom:0"><a href="/bot">Что умеет бот: сроки, #проекты, @контексты →</a></p></div>""",
     "en": """<h2>Capture → Clarify → Do</h2>
 <ol class="steps">
 <li><b>1. Capture</b>A thought, task or idea — into the capture field or as a message to the bot.
 <q>call mom tomorrow at 10:00</q> — and the reminder is set.</li>
 <li><b>2. Clarify</b>In the Inbox you decide what it is: a next action, a project, waiting for someone, or “someday”.</li>
 <li><b>3. Do</b>Next holds only concrete steps, filtered by context: @computer, @phone, @home.
-A weekly review keeps anything from slipping through.</li>
+A <a href="/en/weekly-review">weekly review</a> keeps anything from slipping through.</li>
 </ol>
 <p class="more"><a href="/en/about">More about the method and the app →</a></p>
 <h2>Telegram bot @gtdsrbot</h2>
 <div class="card"><p style="margin-top:0">Send tasks to the bot as plain messages — they land in your Inbox.
 Reminders arrive in Telegram with ✅ Done and 💤 +1h buttons. The bot and the site share one account:
 sign in on the site with Telegram or link the bot under “Account”.</p>
-<a class="btn" href="https://t.me/gtdsrbot">Open @gtdsrbot</a></div>""",
+<a class="btn" href="https://t.me/gtdsrbot">Open @gtdsrbot</a>
+<p class="more" style="margin-bottom:0"><a href="/en/bot">What the bot can do: dates, #projects, @contexts →</a></p></div>""",
 }
 
 
@@ -485,7 +496,7 @@ ABOUT = {
 <li><b>3. Организовать</b>Разложить по спискам: действия, ожидания, проекты, идеи на потом, справка, даты.
 <span class="where">Next, Waiting, Projects, Someday, Reference, Календарь</span></li>
 <li><b>4. Пересмотреть</b>Раз в неделю пройтись по всему, чтобы система оставалась честной.
-<span class="where">Weekly Review</span></li>
+<span class="where"><a href="/weekly-review">Weekly Review</a></span></li>
 <li><b>5. Делать</b>Выбрать следующее действие по месту и ситуации.
 <span class="where">Next с фильтром по @контексту</span></li>
 </ol>
@@ -500,7 +511,8 @@ ABOUT = {
 <h2>Telegram-бот</h2>
 <p><a href="https://t.me/gtdsrbot">@gtdsrbot</a> принимает задачи обычными сообщениями — с тем же синтаксисом —
 и присылает напоминания с кнопками ✅ Готово, 💤 +1ч и ⏭ Next. Бот и сайт — один аккаунт: войди на сайте
-через Telegram или привяжи бота в «Аккаунте».</p>
+через Telegram или привяжи бота в «Аккаунте». Все примеры, команды и подключение Claude —
+<a href="/bot">на странице бота</a>.</p>
 <p><a class="btn" href="https://t.me/gtdsrbot">Открыть @gtdsrbot</a></p>
 <h2>Горячие клавиши</h2>
 <ul class="ex">
@@ -522,7 +534,7 @@ then decide what it is and what the next concrete step is.</p>
 <li><b>3. Organize</b>Put things into lists: actions, waiting-fors, projects, someday ideas, reference, dates.
 <span class="where">Next, Waiting, Projects, Someday, Reference, Calendar</span></li>
 <li><b>4. Reflect</b>Once a week, go over everything so the system stays trustworthy.
-<span class="where">Weekly Review</span></li>
+<span class="where"><a href="/en/weekly-review">Weekly Review</a></span></li>
 <li><b>5. Engage</b>Pick the next action that fits where you are and what you have at hand.
 <span class="where">Next, filtered by @context</span></li>
 </ol>
@@ -538,7 +550,8 @@ in Next it shows under both @phone and @computer.</li>
 <h2>Telegram bot</h2>
 <p><a href="https://t.me/gtdsrbot">@gtdsrbot</a> takes tasks as plain messages — same syntax — and sends reminders
 with ✅ Done, 💤 +1h and ⏭ Next buttons. The bot and the site share one account: sign in on the site with Telegram
-or link the bot under “Account”.</p>
+or link the bot under “Account”. All examples, commands and how to connect Claude are
+<a href="/en/bot">on the bot page</a>.</p>
 <p><a class="btn" href="https://t.me/gtdsrbot">Open @gtdsrbot</a></p>
 <h2>Hotkeys</h2>
 <ul class="ex">
@@ -579,22 +592,7 @@ def about(base: str, lang: str, ga: str) -> str:
     track = ("<script>function ga(name, params = {}){ if(typeof gtag === 'function') gtag('event', name, params); }\n"
              f"ga('page_view', {{page_location: location.origin + '{path}', page_title: 'GTD — {T[lang]['how']}'}});\n"
              f"ga('about_view', {{language: '{lang}'}});</script>")
-    return f"""<!doctype html>
-<html lang="{lang}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-{head(base, lang, "about")}
-{ICONS}
-{ga}
-{CF_BEACON}
-{BASE_CSS}
-</head>
-<body>
-<div class="pub">{topbar(lang, "about")}<main>{ABOUT[lang]}{OSS[lang]}{INSTALL[lang]}</main>{footer(lang, bool(ga))}</div>
-{track}
-</body>
-</html>"""
+    return public_page(base, lang, "about", ga, ABOUT[lang] + OSS[lang] + INSTALL[lang], track)
 
 
 # Политика конфиденциальности (SERBITO-282). Каждое утверждение сверено с app.py и index.html — меняешь, что
@@ -754,22 +752,7 @@ def privacy(base: str, lang: str, ga: str) -> str:
     body = PRIVACY[lang].format(date=human_date(PRIVACY_DAY, lang), email=PRIVACY_EMAIL)
     track = ("<script>if(typeof gtag === 'function') gtag('event', 'page_view', "
              f"{{page_location: location.origin + '{path}', page_title: 'GTD — {T[lang]['privacy']}'}});</script>")
-    return f"""<!doctype html>
-<html lang="{lang}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-{head(base, lang, "privacy")}
-{ICONS}
-{ga}
-{CF_BEACON}
-{BASE_CSS}
-</head>
-<body>
-<div class="pub">{topbar(lang, "privacy")}<main>{body}</main>{footer(lang, bool(ga))}</div>
-{track}
-</body>
-</html>"""
+    return public_page(base, lang, "privacy", ga, body, track)
 
 
 # «Что нового» (SERBITO-329): история версий из CHANGELOG.md. Разбирается один раз при старте (формат и его
@@ -782,7 +765,8 @@ def modified(page: str) -> str | None:
     """Когда страница по-настоящему менялась: для JSON-LD dateModified и lastmod в sitemap (SERBITO-445).
     Только там, где дата известна: «Что нового» — последний релиз, политика — её редакция. Главной и /about
     дату не ставим: дата деплоя — неправда, и Google перестаёт верить lastmod сайта"""
-    return {"changes": RELEASES[0].date if RELEASES else None, "privacy": PRIVACY_DAY}.get(page)
+    return {"changes": RELEASES[0].date if RELEASES else None, "privacy": PRIVACY_DAY,
+            "bot": GUIDES_DAY, "weekly": GUIDES_DAY}.get(page)
 SEEN_KEY = "gtd-seen-version"  # localStorage: версия, которую человек уже видел на /changes (точка в меню SPA)
 T["ru"].update(changes="Что нового", changes_title="Что нового в GTD — история версий приложения Getting Things Done",
                changes_desc="Что появилось и что исправлено в GTD онлайн: все версии приложения и Telegram-бота, "
@@ -840,28 +824,418 @@ def changes(base: str, lang: str, ga: str) -> str:
     track = (f"<script>try{{ localStorage.setItem('{SEEN_KEY}', '{VERSION_LABEL}'); }}catch(e){{}}\n"
              "if(typeof gtag === 'function') gtag('event', 'page_view', "
              f"{{page_location: location.origin + '{path}', page_title: {title}}});</script>")
+    return public_page(base, lang, "changes", ga, body, track)
+
+
+def public_page(base: str, lang: str, page: str, ga: str, main: str, track: str = "") -> str:
+    """Лёгкая публичная страница без JS приложения (как /about): <head> с SEO-тегами, шапка, <main>, подвал.
+    ga — app.ga_snippet: согласие на cookie и (только на боевом домене) тег GA; track — свой <script> после body."""
     return f"""<!doctype html>
 <html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-{head(base, lang, "changes")}
+{head(base, lang, page)}
 {ICONS}
 {ga}
 {CF_BEACON}
 {BASE_CSS}
 </head>
 <body>
-<div class="pub">{topbar(lang, "changes")}<main>{body}</main>{footer(lang, bool(ga))}</div>
+<div class="pub">{topbar(lang, page)}<main>{main}</main>{footer(lang, bool(ga))}</div>
 {track}
 </body>
 </html>"""
 
 
+def page_view(lang: str, page: str) -> str:
+    """Событие page_view в GA (если тег есть): только адрес и название страницы — никаких данных пользователя."""
+    title = json.dumps(f"{SITE_NAME} — {T[lang][CRUMB[page]]}", ensure_ascii=False)
+    return ("<script>if(typeof gtag === 'function') gtag('event', 'page_view', "
+            f"{{page_location: location.origin + '{PATHS[(lang, page)]}', page_title: {title}}});</script>")
+
+
+# ── Справочные страницы под поисковые запросы (SERBITO-441, SERBITO-446) ──
+# Каждое утверждение сверено с кодом: захват — app.parse_task/parse_when, кнопки и команды бота — app.kb_item и
+# app.handle_message, привязка — «Аккаунт» в index.html, MCP — mcp_server.py, шаги обзора — reviewHtml в index.html.
+# Меняешь поведение — правь и текст. Примеры захвата проверяет test_bot_page_capture_examples_work, шаги обзора —
+# test_weekly_review_page_matches_app. GUIDES_DAY — редакция текста этих страниц: дата на странице, dateModified
+# и lastmod в sitemap; правишь текст — ставь новую дату
+GUIDES_DAY = "2026-10-05"
+T["ru"].update(
+    bot="Telegram-бот",
+    bot_title=f"Telegram бот для задач и напоминаний, бесплатно — {SITE_NAME}",
+    bot_desc="Бесплатный Telegram-бот для задач по методу GTD: пиши задачу сообщением, бот поймёт срок, #проект "
+             "и @контекст и напомнит с кнопками ✅ и +1ч.",
+    # Имя списка — по-английски (SERBITO-354). Поисковый запрос «еженедельный обзор» — только в title, h1 и description
+    weekly="Weekly Review",
+    weekly_title=f"Еженедельный обзор GTD: чек-лист на 30 минут и шаблон — {SITE_NAME}",
+    weekly_desc="Еженедельный обзор GTD за 30 минут: шесть шагов, как в приложении, пример по минутам и шаблон "
+                "чек-листа, который можно скопировать.")
+T["en"].update(
+    bot="Telegram bot",
+    bot_title=f"Telegram bot for tasks and reminders, free — {SITE_NAME}",
+    bot_desc="A free Telegram bot for tasks, built on GTD. Send a task as a message: it reads dates, #Project and "
+             "@context and reminds you with Done and +1h buttons.",
+    weekly="Weekly review",
+    weekly_title=f"GTD weekly review template: a 30-minute checklist — {SITE_NAME}",
+    weekly_desc="A GTD weekly review in 30 minutes: six steps that match the app, a minute-by-minute example and a "
+                "plain-text checklist template you can copy.")
+UPDATED = {"ru": "Обновлено", "en": "Updated"}
+
+# Примеры захвата на /bot: (что написать, что получится). Тест прогоняет каждый через настоящий захват
+BOT_CAPTURE = {
+    "ru": [("позвонить маме завтра в 10:00", "задача в Inbox и напоминание завтра в 10:00."),
+           ("через 2 часа забрать посылку", "напоминание через 2 часа."),
+           ("в пятницу отчёт #Клиент_X @работа", "сразу в Next: проект «Клиент X», контекст @работа, напоминание "
+                                                 "в пятницу в 9:00."),
+           ("оплатить счёт @телефон @комп", "два контекста: в Next задача видна и под @телефон, и под @комп."),
+           ("24.10 12:00 стоматолог", "напоминание 24 октября в 12:00."),
+           ("напомни купить хлеб в 18:30", "задача «купить хлеб»: слово «напомни» бот убирает. Напоминание "
+                                           "сегодня в 18:30, а если это время уже прошло — завтра.")],
+    "en": [("call mom tomorrow at 10am", "a task in the Inbox and a reminder tomorrow at 10:00."),
+           ("in 2 hours pick up the parcel", "a reminder in 2 hours."),
+           ("report on friday #Client_X @work", "straight to Next: project “Client X”, context @work, a reminder "
+                                                "on Friday at 9:00."),
+           ("pay the bill @phone @computer", "two contexts: in Next the task shows under both @phone and @computer."),
+           ("dentist 24 oct 12:00", "a reminder on 24 October at 12:00."),
+           ("remind me to buy bread at 6:30pm", "the task is “buy bread”: the bot drops “remind me to”. The reminder "
+                                                "is today at 18:30, or tomorrow if that time has passed.")],
+}
+
+BOT = {
+    "ru": """<h1>Telegram-бот для задач: пишешь в чат — задача в Inbox</h1>
+<p class="lead"><a href="{bot_url}">@{bot}</a> — бесплатный Telegram-бот для задач по методу GTD (Getting Things Done).
+Пиши задачу обычным сообщением: бот поймёт срок, проект и контекст и напомнит в нужное время.
+Бот и сайт — один аккаунт.</p>
+<p class="note">{updated}</p>
+<p><a class="btn" href="{bot_url}">Открыть @{bot}</a></p>
+<h2>Как начать за 3 шага?</h2>
+<p>Открой бота, напиши задачу, разбирай задачи на сайте. Регистрация не нужна.</p>
+<ol class="steps">
+<li><b>1. Открой бота</b>Нажми «Открыть @{bot}», затем Start. Аккаунт создастся сам — без почты и пароля.</li>
+<li><b>2. Напиши задачу</b>Обычным сообщением: <q>позвонить маме завтра в 10:00</q>. Бот ответит, куда попала
+задача — в Inbox или Next, — и поставит напоминание.</li>
+<li><b>3. Разбирай на сайте</b>Войди на <a href="{home}">сайте</a> через Telegram — это тот же аккаунт. Там удобно
+разбирать Inbox, вести проекты и делать <a href="{weekly}">Weekly Review</a>.</li>
+</ol>
+<h2>Как записать задачу со сроком, проектом и контекстом?</h2>
+<p>Пиши как обычно. Бот сам найдёт в тексте срок, #Проект и @контекст и уберёт их из названия задачи.</p>
+<ul class="ex">{examples}</ul>
+<p>Что ещё важно знать:</p>
+<ul>
+<li>Сроки: <q>сегодня</q>, <q>завтра</q>, <q>послезавтра</q>, день недели (<q>в пятницу</q>), <q>через 30 минут</q>,
+<q>через 3 дня</q>, <q>через 2 недели</q>, дата (<q>24.10</q>, <q>2026-10-24</q>) и время (<q>10:00</q>).
+Английские слова тоже работают: <q>tomorrow 10am</q>.</li>
+<li>Дата без времени — напоминание в 9:00. Время без даты — сегодня, а если оно уже прошло — завтра.</li>
+<li>#Проект — одно слово, вместо пробела — «_»: <q>#Ремонт_кухни</q>. Такого проекта нет — бот его создаст.</li>
+<li>@контекстов может быть несколько. С #проектом или @контекстом задача сразу идёт в Next, без них — в Inbox.</li>
+<li>Время считается по часовому поясу {tz}.</li>
+<li>Тот же синтаксис работает в поле захвата на сайте.</li>
+</ul>
+<h2>Как работают напоминания?</h2>
+<p>В назначенное время бот присылает сообщение с задачей и тремя кнопками.</p>
+<ul class="ex">
+<li><b>✅ Готово</b> — закрыть задачу.</li>
+<li><b>💤 +1ч</b> — напомнить ещё раз через час.</li>
+<li><b>⏭ Next</b> — перенести задачу в Next.</li>
+</ul>
+<p>Те же кнопки есть под ответом бота на каждую новую задачу. Напоминания приходят только в Telegram: если ты завёл
+аккаунт на сайте, привяжи к нему бота.</p>
+<h2>Какие команды понимает бот?</h2>
+<p>Семь команд. Всё остальное, что ты пишешь, бот записывает как задачу.</p>
+<ul class="ex">
+<li><code>/inbox</code> — что в Inbox, <code>/next</code> — что в Next (первые 20 задач).</li>
+<li><code>/done 12</code> — закрыть задачу №12. Номер бот показывает в ответе на каждую задачу.</li>
+<li><code>/login</code> — одноразовая ссылка для входа на сайт. Она работает 10 минут.</li>
+<li><code>/email you@example.com</code> — привязать почту, чтобы входить на сайте по коду или через Google.</li>
+<li><code>/about</code> — что такое GTD, <code>/help</code> — примеры захвата и список команд.</li>
+</ul>
+<h2>Как связать бота и аккаунт на сайте?</h2>
+<p>Бот и сайт — один аккаунт. Как его связать, зависит от того, с чего ты начал.</p>
+<ul class="ex">
+<li><b>Начал с бота.</b> На сайте нажми «Войти через Telegram» — откроется тот же аккаунт. Или пришли боту
+<code>/login</code> и открой ссылку из ответа.</li>
+<li><b>Начал на сайте</b> (Google или почта). Открой «👤 Аккаунт» → Telegram → «Привязать Telegram». В боте нажми
+Start, затем кнопку с числом, которое показал сайт.</li>
+<li><b>Хочешь входить и по почте.</b> Пришли боту <code>/email</code> и адрес. Код придёт в письме, его нужно
+отправить боту.</li>
+<li>Если у этого Telegram уже есть свой аккаунт с задачами, {site} предложит объединить аккаунты.</li>
+</ul>
+<h2 id="claude">Можно ли подключить Claude?</h2>
+<p>Да. У {site} есть MCP-сервер, и Claude работает с твоими задачами напрямую.</p>
+<p>Claude может записать задачу в Inbox — с тем же синтаксисом, — показать списки, проекты и контексты, закрыть
+или изменить задачу, перенести её в другой список или проект и провести Weekly Review.</p>
+<ol>
+<li>В Claude открой Settings → Connectors → Add custom connector.</li>
+<li>Введи адрес <code>{mcp}</code>. Поля OAuth оставь пустыми.</li>
+<li>Войди в {site} и нажми Allow.</li>
+</ol>
+<p>ChatGPT, Cursor, VS Code, Claude Code и другие клиенты — в <a href="{mcp_doc}">инструкции на GitHub</a>
+(на английском).</p>
+<h2>Что бот хранит?</h2>
+<p>Задачи и их поля: срок, проект, контексты. Из Telegram — id, имя и язык. Бот работает только в личных
+сообщениях: в группах он молчит. Подробнее — в <a href="{privacy}">политике конфиденциальности</a>.</p>
+<p><a class="btn" href="{bot_url}">Открыть @{bot}</a></p>""",
+    "en": """<h1>Telegram bot for tasks: send a message, get a task in your Inbox</h1>
+<p class="lead"><a href="{bot_url}">@{bot}</a> is a free Telegram bot for tasks, built on the GTD (Getting Things Done)
+method. Send a task as a plain message. The bot reads the date, project and context and reminds you on time.
+The bot and the website share one account.</p>
+<p class="note">{updated}</p>
+<p><a class="btn" href="{bot_url}">Open @{bot}</a></p>
+<h2>How do I start in 3 steps?</h2>
+<p>Open the bot, send a task, sort your tasks on the website. You do not need to sign up.</p>
+<ol class="steps">
+<li><b>1. Open the bot</b>Tap “Open @{bot}”, then Start. The account is created for you — no email, no password.</li>
+<li><b>2. Send a task</b>As a plain message: <q>call mom tomorrow at 10am</q>. The bot tells you where the task went —
+Inbox or Next — and sets the reminder.</li>
+<li><b>3. Sort it on the website</b>Sign in on the <a href="{home}">website</a> with Telegram — it is the same account.
+There you clear the Inbox, track projects and do the <a href="{weekly}">weekly review</a>.</li>
+</ol>
+<h2>How do I add a date, a project and a context?</h2>
+<p>Write as usual. The bot finds the date, #Project and @context in the text and removes them from the task title.</p>
+<ul class="ex">{examples}</ul>
+<p>Good to know:</p>
+<ul>
+<li>Dates: <q>today</q>, <q>tomorrow</q>, <q>day after tomorrow</q>, a weekday (<q>on friday</q>, <q>next monday</q>),
+<q>in 30 minutes</q>, <q>in 3 days</q>, <q>in 2 weeks</q>, a date (<q>24 oct</q>, <q>oct 24</q>, <q>2026-10-24</q>)
+and a time (<q>10am</q>, <q>3:30pm</q>, <q>18:30</q>). Russian works too: <q>завтра в 10:00</q>.</li>
+<li>A date without a time sets the reminder at 9:00. A time without a date means today, or tomorrow if that time
+has passed.</li>
+<li>A #Project is one word; use “_” for a space: <q>#Kitchen_renovation</q>. If the project does not exist, the bot
+creates it.</li>
+<li>A task can have several @contexts. With a #project or a @context the task goes straight to Next; without them, to
+the Inbox.</li>
+<li>Times use the {tz} time zone.</li>
+<li>The same syntax works in the capture field on the website.</li>
+</ul>
+<h2>How do reminders work?</h2>
+<p>At the set time the bot sends you the task with three buttons.</p>
+<ul class="ex">
+<li><b>✅ Done</b> — complete the task.</li>
+<li><b>💤 +1h</b> — remind you again in an hour.</li>
+<li><b>⏭ Next</b> — move the task to Next.</li>
+</ul>
+<p>The same buttons come with the bot's reply to every new task. Reminders arrive only in Telegram: if you signed up
+on the website, link the bot to your account.</p>
+<h2>Which commands does the bot know?</h2>
+<p>Seven commands. Everything else you send becomes a task.</p>
+<ul class="ex">
+<li><code>/inbox</code> — what is in your Inbox, <code>/next</code> — your next actions (the first 20 tasks).</li>
+<li><code>/done 12</code> — complete task #12. The bot shows the number in its reply to every task.</li>
+<li><code>/login</code> — a one-time sign-in link for the website. It works for 10 minutes.</li>
+<li><code>/email you@example.com</code> — link an email to sign in on the website with a code or with Google.</li>
+<li><code>/about</code> — what GTD is, <code>/help</code> — capture examples and the list of commands.</li>
+</ul>
+<h2>How do I link the bot and my website account?</h2>
+<p>The bot and the website share one account. How you link them depends on where you started.</p>
+<ul class="ex">
+<li><b>You started in the bot.</b> On the website, press “Sign in with Telegram” — the same account opens. Or send
+<code>/login</code> to the bot and open the link it sends.</li>
+<li><b>You started on the website</b> (Google or email). Open “👤 Account” → Telegram → “Link Telegram”. In the bot,
+tap Start, then the button with the number that the website shows.</li>
+<li><b>You also want to sign in with email.</b> Send <code>/email</code> and your address to the bot. Then send the code
+from the email back to the bot.</li>
+<li>If this Telegram already has its own account with tasks, {site} offers to merge the two accounts.</li>
+</ul>
+<h2 id="claude">Can I connect Claude?</h2>
+<p>Yes. {site} has an MCP server, so Claude can work with your tasks directly.</p>
+<p>Claude can capture a task to the Inbox — with the same syntax —, show your lists, projects and contexts, complete
+or edit a task, move it to another list or project, and run the weekly review.</p>
+<ol>
+<li>In Claude, open Settings → Connectors → Add custom connector.</li>
+<li>Enter the address <code>{mcp}</code>. Leave the OAuth fields empty.</li>
+<li>Sign in to {site} and press Allow.</li>
+</ol>
+<p>ChatGPT, Cursor, VS Code, Claude Code and other clients: see the <a href="{mcp_doc}">guide on GitHub</a>.</p>
+<h2>What does the bot store?</h2>
+<p>Your tasks and their fields: date, project, contexts. From Telegram: your ID, first name and language. The bot
+works only in private chats; in groups it stays silent. Details are in the <a href="{privacy}">privacy policy</a>.</p>
+<p><a class="btn" href="{bot_url}">Open @{bot}</a></p>""",
+}
+
+
+def bot(base: str, lang: str, ga: str, tz: str = "Europe/Belgrade") -> str:
+    """Страница Telegram-бота (SERBITO-441). tz — часовой пояс сервиса (app.TZ): по нему бот понимает время."""
+    examples = "".join(f"<li><q>{html.escape(text)}</q> — {html.escape(what, quote=False)}</li>"
+                       for text, what in BOT_CAPTURE[lang])
+    main = BOT[lang].format(
+        bot=BOT_NAME, bot_url=BOT_URL, home=PATHS[(lang, "home")], weekly=PATHS[(lang, "weekly")],
+        privacy=PATHS[(lang, "privacy")], examples=examples, tz=html.escape(tz), mcp=f"{base}/mcp",
+        mcp_doc=REPO_URL + "#connect-claude-mcp", site=SITE_NAME, updated=f"{UPDATED[lang]} {human_date(GUIDES_DAY, lang)}")
+    return public_page(base, lang, "bot", ga, main, page_view(lang, "bot"))
+
+
+# Шаблон обзора простым текстом — его копируют в заметки. Шаги — те же, что в разделе Weekly Review приложения
+# (review.s1…s6 в index.html), минуты — как в примере на 30 минут
+WEEKLY_TEMPLATE = {
+    "ru": """Weekly Review по GTD — чек-лист на 30 минут
+
+[ ] 1. Очистить голову (5 мин)
+    Запиши всё, что в голове: дела, идеи, обещания.
+[ ] 2. Разобрать Inbox до нуля (10 мин)
+    По каждой записи: что это и какой следующий шаг.
+[ ] 3. Проекты без следующего действия (5 мин)
+    У каждого проекта — хотя бы одна задача в Next.
+[ ] 4. В Waiting дольше недели (3 мин)
+    Кому пора напомнить? Чего больше не нужно ждать?
+[ ] 5. Ближайшие напоминания (4 мин)
+    Что впереди? Всё ли на своих местах?
+[ ] 6. Someday/Maybe (3 мин)
+    Что пора начать? Что больше не интересно?""",
+    "en": """GTD weekly review — a 30-minute checklist
+
+[ ] 1. Get clear (5 min)
+    Write down everything on your mind: tasks, ideas, promises.
+[ ] 2. Inbox to zero (10 min)
+    For each item: what is it, and what is the next step?
+[ ] 3. Projects without a next action (5 min)
+    Every project needs at least one task in Next.
+[ ] 4. Waiting for over a week (3 min)
+    Who needs a nudge? What can you stop waiting for?
+[ ] 5. Upcoming reminders (4 min)
+    What is coming up? Is everything in place?
+[ ] 6. Someday/Maybe (3 min)
+    What is it time to start? What no longer matters?""",
+}
+COPY = {"ru": ("Скопировать шаблон", "Скопировано ✓"), "en": ("Copy the template", "Copied ✓")}
+
+WEEKLY = {
+    "ru": """<h1>Еженедельный обзор GTD: чек-лист на 30 минут</h1>
+<p class="lead">Weekly Review — это полчаса раз в неделю, когда ты проходишь по всем своим спискам. Ниже — шесть
+шагов, как в разделе Weekly Review в {site}, пример по минутам и шаблон, который можно скопировать.</p>
+<p class="note">{updated}</p>
+<h2>Зачем нужен еженедельный обзор?</h2>
+<p>Чтобы снова доверять своим спискам. За неделю в Inbox копятся записи, проекты теряют следующий шаг, а ожидания
+забываются. Тогда голова опять начинает держать всё сама. Обзор возвращает всё на свои места.</p>
+<h2>Какие шаги у еженедельного обзора?</h2>
+<p>Шесть шагов — те же, что в разделе Weekly Review в {site}. На каждом шаге приложение само показывает, что требует
+внимания.</p>
+<ol class="steps">
+<li><b>1. Очистить голову</b>Запиши всё, что крутится в голове: дела, идеи, обещания. Не разбирай — просто записывай.
+<span class="where">Поле захвата сверху или сообщение <a href="{bot}">боту</a></span></li>
+<li><b>2. Разобрать Inbox до нуля</b>По каждой записи реши, что это и какой следующий шаг. Разложи по Next, Waiting,
+Someday, Reference или удали.
+<span class="where">Сколько записей в Inbox — и ссылка на него</span></li>
+<li><b>3. Проекты без следующего действия</b>У каждого активного проекта должна быть хотя бы одна задача в Next.
+<span class="where">Список проектов без задачи в Next, с пометкой ⚠</span></li>
+<li><b>4. В Waiting дольше недели</b>Пройди по ожиданиям: кому пора напомнить, а чего больше не нужно ждать.
+<span class="where">Задачи в Waiting, записанные больше недели назад</span></li>
+<li><b>5. Ближайшие напоминания</b>Посмотри, что впереди, и перенеси то, что не успеешь.
+<span class="where">Восемь ближайших напоминаний, включая просроченные</span></li>
+<li><b>6. Someday/Maybe</b>Перечитай идеи на потом. Что пора начать — перенеси в Next или сделай проектом.
+<span class="where">Сколько идей в Someday — и ссылка на список</span></li>
+</ol>
+<h2>Как провести обзор за 30 минут?</h2>
+<p>Поставь таймер и иди по шагам по порядку. Вот пример обычной недели: 14 записей в Inbox и пять проектов.</p>
+<table>
+<thead><tr><th>Минуты</th><th>Шаг и что происходит</th></tr></thead>
+<tbody>
+<tr><td>0–5</td><td><b>Очистить голову.</b> Записал ещё 6 мыслей: <q>купить фильтр для воды</q>, <q>ответить Ане про отпуск</q>…</td></tr>
+<tr><td>5–15</td><td><b>Inbox до нуля.</b> 20 записей: 9 — в Next, 3 — в Someday, 2 — в Reference, 6 удалил.</td></tr>
+<tr><td>15–20</td><td><b>Проекты.</b> У «Ремонт кухни» нет шага в Next — добавил <q>выбрать плитку #Ремонт_кухни @магазин</q>.</td></tr>
+<tr><td>20–23</td><td><b>Waiting.</b> Счёт от бухгалтера ждём уже 9 дней — написал ему.</td></tr>
+<tr><td>23–27</td><td><b>Напоминания.</b> На неделе 4 напоминания, одно перенёс на понедельник.</td></tr>
+<tr><td>27–30</td><td><b>Someday.</b> «Курсы испанского» — пора: перенёс в Next.</td></tr>
+</tbody>
+</table>
+<h2>Где взять шаблон еженедельного обзора?</h2>
+<p>Скопируй текст ниже в заметки или в календарь. Это те же шесть шагов с флажками и временем.</p>
+<pre id="tpl">{template}</pre>
+<p><button class="btn" type="button" data-copy="tpl" data-done="{copied}">{copy}</button></p>
+<h2>Как часто делать обзор?</h2>
+<p>Раз в неделю, в одно и то же время. Например, в пятницу после обеда: неделя ещё свежа в памяти, а в понедельник
+ты начинаешь с чистыми списками.</p>
+<h2>Что делать, если пропустил неделю?</h2>
+<p>Просто начни сейчас. Если времени мало, сделай хотя бы шаги 1 и 2: очисти голову и разбери Inbox. Остальные шаги
+сделай в следующий раз.</p>
+<h2>Как начать обзор в {site}?</h2>
+<p>Открой раздел 🔍 Weekly Review в меню приложения. Шаги уже там, со списками из твоих задач.</p>
+<p><a class="btn" href="{review}">Начать обзор в {site}</a></p>
+<p>Обзор можно провести и с Claude: у {site} есть MCP-сервер, и Claude соберёт сводку по тем же шагам.
+Как подключить — <a href="{bot}#claude">на странице бота</a>.</p>""",
+    "en": """<h1>GTD weekly review: a 30-minute checklist and template</h1>
+<p class="lead">The weekly review is half an hour once a week when you go over all your lists. Below are six steps
+that match the Weekly Review view in {site}, a minute-by-minute example and a template you can copy.</p>
+<p class="note">{updated}</p>
+<h2>Why do a weekly review?</h2>
+<p>So you can trust your lists again. During a week the Inbox fills up, projects lose their next step and waiting-fors
+get forgotten. Then your head starts to hold everything again. The review puts things back in place.</p>
+<h2>What are the steps of a weekly review?</h2>
+<p>Six steps, the same as in the Weekly Review view in {site}. At each step the app shows you what needs attention.</p>
+<ol class="steps">
+<li><b>1. Get clear</b>Write down everything on your mind: tasks, ideas, promises. Do not sort yet — just write.
+<span class="where">The capture field at the top, or a message to the <a href="{bot}">bot</a></span></li>
+<li><b>2. Inbox to zero</b>For each item, decide what it is and what the next step is. Move it to Next, Waiting,
+Someday or Reference, or delete it.
+<span class="where">How many items are in the Inbox, with a link to it</span></li>
+<li><b>3. Projects without a next action</b>Every active project needs at least one task in Next.
+<span class="where">Projects with no task in Next, marked ⚠</span></li>
+<li><b>4. Waiting for over a week</b>Go over what you are waiting for: who needs a nudge, and what you can stop waiting for.
+<span class="where">Tasks in Waiting that you added more than a week ago</span></li>
+<li><b>5. Upcoming reminders</b>Look at what is coming up and move what you will not get to.
+<span class="where">The eight nearest reminders, overdue ones included</span></li>
+<li><b>6. Someday/Maybe</b>Read through your ideas for later. Move what is ready to Next, or make it a project.
+<span class="where">How many ideas are in Someday, with a link to the list</span></li>
+</ol>
+<h2>How do I do a weekly review in 30 minutes?</h2>
+<p>Set a timer and go through the steps in order. Here is a typical week: 14 items in the Inbox and five projects.</p>
+<table>
+<thead><tr><th>Minutes</th><th>Step and what happens</th></tr></thead>
+<tbody>
+<tr><td>0–5</td><td><b>Get clear.</b> Wrote down 6 more thoughts: <q>buy a water filter</q>, <q>answer Anna about the holiday</q>…</td></tr>
+<tr><td>5–15</td><td><b>Inbox to zero.</b> 20 items: 9 to Next, 3 to Someday, 2 to Reference, 6 deleted.</td></tr>
+<tr><td>15–20</td><td><b>Projects.</b> “Kitchen renovation” has no step in Next — added <q>choose tiles #Kitchen_renovation @store</q>.</td></tr>
+<tr><td>20–23</td><td><b>Waiting.</b> The accountant's invoice is 9 days late — sent a reminder.</td></tr>
+<tr><td>23–27</td><td><b>Reminders.</b> 4 reminders this week; moved one to Monday.</td></tr>
+<tr><td>27–30</td><td><b>Someday.</b> “Spanish classes” — time to start: moved to Next.</td></tr>
+</tbody>
+</table>
+<h2>Where can I get a weekly review template?</h2>
+<p>Copy the text below into your notes or your calendar. It has the same six steps, with checkboxes and times.</p>
+<pre id="tpl">{template}</pre>
+<p><button class="btn" type="button" data-copy="tpl" data-done="{copied}">{copy}</button></p>
+<h2>How often should I do a weekly review?</h2>
+<p>Once a week, at the same time. For example, on Friday afternoon: the week is still fresh, and on Monday you start
+with clean lists.</p>
+<h2>What if I skip a week?</h2>
+<p>Just start now. If you are short on time, do at least steps 1 and 2: get clear and empty the Inbox. Do the other
+steps next time.</p>
+<h2>How do I start the review in {site}?</h2>
+<p>Open 🔍 Weekly Review in the app menu. The steps are already there, filled with your own tasks.</p>
+<p><a class="btn" href="{review}">Start the review in {site}</a></p>
+<p>You can also run the review with Claude: {site} has an MCP server, and Claude builds a summary along the same steps.
+See <a href="{bot}#claude">how to connect it</a>.</p>""",
+}
+# Копирование шаблона: без JS текст в <pre> просто выделяется, с JS — кнопка кладёт его в буфер обмена
+COPY_JS = """<script>
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]'); if(!b) return;
+  const el = document.getElementById(b.dataset.copy), label = b.textContent;
+  const done = () => { b.textContent = b.dataset.done; setTimeout(() => { b.textContent = label; }, 2000); };
+  const select = () => { const r = document.createRange(); r.selectNodeContents(el);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+  if(navigator.clipboard) navigator.clipboard.writeText(el.textContent).then(done, select); else select();
+});
+</script>"""
+
+
+def weekly(base: str, lang: str, ga: str) -> str:
+    """Чек-лист Weekly Review (SERBITO-446): шаги — как в разделе приложения, пример на 30 минут, шаблон и кнопка
+    «Начать обзор» — в раздел /review (гость сначала войдёт)."""
+    copy, copied = COPY[lang]
+    main = WEEKLY[lang].format(
+        bot=PATHS[(lang, "bot")], review="/review" if lang == "ru" else "/en/review",
+        template=html.escape(WEEKLY_TEMPLATE[lang], quote=False), copy=copy, copied=copied, site=SITE_NAME,
+        updated=f"{UPDATED[lang]} {human_date(GUIDES_DAY, lang)}")
+    return public_page(base, lang, "weekly", ga, main, COPY_JS + "\n" + page_view(lang, "weekly"))
+
+
 def robots(base: str) -> str:
     # /i/N не закрываем (SERBITO-448): адрес под Disallow робот не открывает и не видит его X-Robots-Tag: noindex —
     # а ссылку на него, найденную где-то ещё, Google оставляет в индексе без текста. Пусть читает и не индексирует
-    return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /changes", "Allow: /en/",
+    return "\n".join(["User-agent: *", "Allow: /", "Allow: /about", "Allow: /privacy", "Allow: /changes", "Allow: /bot",
+                      "Allow: /weekly-review", "Allow: /en/",
                       *(f"Disallow: {p}" for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/")),
                       "", f"Sitemap: {base}/sitemap.xml", ""])
 
@@ -881,7 +1255,11 @@ def llms(base: str) -> str:
         page("en", "about", "How it works (English)") + ": the 5 GTD steps and where each one lives in the app",
         page("ru", "about", "How it works (Russian)"),
         page("en", "changes", "What's new (English)") + ": release history, newest first",
-        page("ru", "changes", "What's new (Russian)"), "",
+        page("ru", "changes", "What's new (Russian)"),
+        page("en", "bot", "Telegram bot for tasks (English)") + ": capture syntax, reminders, commands, linking, MCP",
+        page("ru", "bot", "Telegram bot for tasks (Russian)"),
+        page("en", "weekly", "GTD weekly review (English)") + ": the 6-step checklist, a 30-minute example, a template",
+        page("ru", "weekly", "GTD weekly review (Russian)"), "",
         "## Elsewhere", "",
         f"- [Telegram bot @{BOT_NAME}]({BOT_URL}): send a task as a message, get reminders in the chat",
         f"- [Source code on GitHub]({REPO_URL}): MIT license, self-hosting guide", ""])

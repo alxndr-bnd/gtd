@@ -1,5 +1,5 @@
-"""Публичные страницы: лендинг, «Как это работает», политика конфиденциальности, «Что нового», SEO-теги, robots.txt,
-sitemap.xml, noindex для /i/N."""
+"""Публичные страницы: лендинг, «Как это работает», политика конфиденциальности, «Что нового», страница бота (/bot),
+чек-лист Weekly Review (/weekly-review), SEO-теги, robots.txt, sitemap.xml, noindex для /i/N."""
 import json
 import os
 import re
@@ -13,7 +13,11 @@ import pages as P
 
 BASE = "http://localhost:8000"
 PUBLIC = {"/": "ru", "/about": "ru", "/en/": "en", "/en/about": "en", "/privacy": "ru", "/en/privacy": "en",
-          "/changes": "ru", "/en/changes": "en"}
+          "/changes": "ru", "/en/changes": "en", "/bot": "ru", "/en/bot": "en",
+          "/weekly-review": "ru", "/en/weekly-review": "en"}
+# Страницы под поисковый запрос (SERBITO-441, SERBITO-446): запрос — в title и h1
+GUIDES = {"/bot": "Telegram бот для задач", "/en/bot": "Telegram bot for tasks",
+          "/weekly-review": "Еженедельный обзор GTD", "/en/weekly-review": "GTD weekly review"}
 TM = {"ru": "GTD® и Getting Things Done® — товарные знаки David Allen Company. Сервис независимый и не связан с автором метода",
       "en": "GTD® and Getting Things Done® are trademarks of the David Allen Company"}
 
@@ -35,16 +39,16 @@ def test_public_page_seo_tags(client, path, lang):
     h = r.text
     assert f'<html lang="{lang}">' in h and h.count("<title>") == 1
     title = re.search(r"<title>([^<]+)</title>", h).group(1)
-    assert title == meta(h, "og:title") and ("Getting Things Done" in title or "privacy" in path)
+    assert title == meta(h, "og:title") and ("Getting Things Done" in title or "privacy" in path or path in GUIDES)
+    assert len(meta(h, "description")) <= 155 or path not in GUIDES  # длиннее Google обрезает (SERBITO-441)
     assert meta(h, "description") and meta(h, "og:description") == meta(h, "description")
     assert f'<link rel="canonical" href="{BASE}{path}">' in h and meta(h, "og:url") == BASE + path
     assert meta(h, "og:site_name") and meta(h, "og:locale") == ("ru_RU" if lang == "ru" else "en_US")
     assert meta(h, "og:image") == BASE + ("/og.png" if lang == "ru" else "/og-en.png")
     assert meta(h, "twitter:card") == "summary_large_image"
     # hreflang — пары ru/en и x-default на русскую версию
-    pair = {"/": ("/", "/en/"), "/en/": ("/", "/en/"), "/about": ("/about", "/en/about"), "/en/about": ("/about", "/en/about"),
-            "/privacy": ("/privacy", "/en/privacy"), "/en/privacy": ("/privacy", "/en/privacy"),
-            "/changes": ("/changes", "/en/changes"), "/en/changes": ("/changes", "/en/changes")}[path]
+    ru = path.removeprefix("/en") or "/"
+    pair = (ru, "/en" + ru if ru != "/" else "/en/")
     for hl, p in (("ru", pair[0]), ("en", pair[1]), ("x-default", pair[0])):
         assert f'<link rel="alternate" hreflang="{hl}" href="{BASE}{p}">' in h
     ld = json.loads(re.search(r'<script type="application/ld\+json">(.+?)</script>', h).group(1))
@@ -57,7 +61,7 @@ def test_public_page_seo_tags(client, path, lang):
     assert nodes["Organization"]["@id"] == home + "#org" == app["author"]["@id"] == nodes["WebSite"]["publisher"]["@id"]
     assert page["url"] == BASE + path and page["inLanguage"] == lang and page["name"] == title
     assert page["isPartOf"]["@id"] == nodes["WebSite"]["@id"] and page["about"]["@id"] == app["@id"]
-    assert ("dateModified" in page) == (path.rstrip("/").split("/")[-1] in ("privacy", "changes"))
+    assert ("dateModified" in page) == (path.rstrip("/").split("/")[-1] in ("privacy", "changes", "bot", "weekly-review"))
     crumbs = nodes.get("BreadcrumbList")
     if path in ("/", "/en/"):
         assert crumbs is None
@@ -218,7 +222,7 @@ def test_robots(client):
     r = client.get("/robots.txt")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
     lines = r.text.splitlines()
-    for p in ("/", "/about", "/privacy", "/changes", "/en/"):
+    for p in ("/", "/about", "/privacy", "/changes", "/bot", "/weekly-review", "/en/"):
         assert f"Allow: {p}" in lines
     for p in ("/api/", "/auth", "/dev-login", "/tg/", "/tasks/"):
         assert f"Disallow: {p}" in lines
@@ -234,14 +238,16 @@ def test_llms_txt(client):
     r = client.get("/llms.txt")
     assert r.status_code == 200 and r.headers["content-type"] == "text/plain; charset=utf-8"
     assert r.text.startswith("# GTD\n\n> ") and "Getting Things Done" in r.text and "<" not in r.text
-    for path in ("/", "/en/", "/about", "/en/about", "/changes", "/en/changes"):
+    for path in ("/", "/en/", "/about", "/en/about", "/changes", "/en/changes", "/bot", "/en/bot", "/weekly-review",
+                 "/en/weekly-review"):
         assert f"({BASE}{path})" in r.text, path
     assert f"({P.REPO_URL})" in r.text and f"({P.BOT_URL})" in r.text
     assert "Sitemap" not in r.text and r.text.endswith("\n")
 
 
 @pytest.mark.parametrize("path, to", [("/en", "/en/"), ("/about/", "/about"), ("/en/about/", "/en/about"),
-                                      ("/changes/", "/changes")])
+                                      ("/changes/", "/changes"), ("/bot/", "/bot"),
+                                      ("/en/weekly-review/", "/en/weekly-review")])
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
 def test_trailing_slash_redirect_is_permanent(client, method, path, to):
     """SERBITO-448: /en → /en/ и /about/ → /about — постоянный редирект (308), а не временный 307: поисковик
@@ -272,6 +278,8 @@ def test_sitemap(client):
         assert lastmod[BASE + p] == P.RELEASES[0].date
     for p in ("/privacy", "/en/privacy"):
         assert lastmod[BASE + p] == P.PRIVACY_DAY
+    for p in ("/bot", "/en/bot", "/weekly-review", "/en/weekly-review"):  # дата редакции текста страницы
+        assert lastmod[BASE + p] == P.GUIDES_DAY
     for p in ("/", "/en/", "/about", "/en/about"):
         assert lastmod[BASE + p] is None
 
@@ -411,6 +419,128 @@ def test_app_menu_links_to_changes():
     здесь — только адреса для обоих языков."""
     page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
     assert '"changes_url": "/changes"' in page and '"changes_url": "/en/changes"' in page
+
+
+# ── Страница бота (SERBITO-441) и чек-лист Weekly Review (SERBITO-446) ──
+
+def main_of(h: str) -> str:
+    return h[h.index("<main>"):h.index("</main>")]
+
+
+@pytest.mark.parametrize("path", GUIDES)
+def test_guide_title_and_h1_carry_the_query(client, path):
+    h = client.get(path).text
+    query = GUIDES[path].lower()
+    title = re.search(r"<title>([^<]+)</title>", h).group(1)
+    h1 = re.search(r"<h1>([^<]+)</h1>", h).group(1)
+    assert query in title.lower().replace("-", " "), title
+    assert query in h1.lower().replace("-", " "), h1
+    assert P.SITE_NAME in title  # имя продукта — из одного места (pages.SITE_NAME)
+    assert "function loginScreen" not in h  # лёгкая страница, как /about
+
+
+@pytest.mark.parametrize("path, lang", [("/bot", "ru"), ("/en/bot", "en")])
+def test_bot_page_content(client, path, lang):
+    h = client.get(path).text
+    body = main_of(h)
+    cta = "Открыть @gtdsrbot" if lang == "ru" else "Open @gtdsrbot"
+    # Главная кнопка — сразу под вступлением, до первого h2, и ещё раз внизу
+    assert body.index(f'<a class="btn" href="{P.BOT_URL}">{cta}</a>') < body.index("<h2>")
+    assert body.count(f'<a class="btn" href="{P.BOT_URL}">{cta}</a>') == 2
+    words = {"ru": ["Start", "Inbox", "Next", "#Проект", "@контекст", "✅ Готово", "💤 +1ч", "⏭ Next", "/login", "/email",
+                    "/inbox", "/next", "/done 12", "«Привязать Telegram»", "Claude", "Add custom connector", "в 9:00"],
+             "en": ["Start", "Inbox", "Next", "#Project", "@context", "✅ Done", "💤 +1h", "⏭ Next", "/login", "/email",
+                    "/inbox", "/next", "/done 12", "Link Telegram", "Claude", "Add custom connector", "at 9:00"]}[lang]
+    for w in words:
+        assert w in body, w
+    assert f"{BASE}/mcp" in body and f'href="{P.REPO_URL}#connect-claude-mcp"' in body
+    assert f'href="{P.PATHS[(lang, "privacy")]}"' in body
+    for text, _ in P.BOT_CAPTURE[lang]:
+        assert f"<q>{text}</q>" in body, text
+
+
+# Что бот делает с примерами со страницы /bot — проверяем настоящим захватом: страница не обещает того, чего нет.
+# (заголовок, список, контексты, проект, есть ли напоминание)
+CAPTURED = {
+    "ru": {"позвонить маме завтра в 10:00": ("позвонить маме", "inbox", [], None, True),
+           "через 2 часа забрать посылку": ("забрать посылку", "inbox", [], None, True),
+           "в пятницу отчёт #Клиент_X @работа": ("отчёт", "next", ["работа"], "Клиент X", True),
+           "оплатить счёт @телефон @комп": ("оплатить счёт", "next", ["телефон", "комп"], None, False),
+           "24.10 12:00 стоматолог": ("стоматолог", "inbox", [], None, True),
+           "напомни купить хлеб в 18:30": ("купить хлеб", "inbox", [], None, True)},
+    "en": {"call mom tomorrow at 10am": ("call mom", "inbox", [], None, True),
+           "in 2 hours pick up the parcel": ("pick up the parcel", "inbox", [], None, True),
+           "report on friday #Client_X @work": ("report", "next", ["work"], "Client X", True),
+           "pay the bill @phone @computer": ("pay the bill", "next", ["phone", "computer"], None, False),
+           "dentist 24 oct 12:00": ("dentist", "inbox", [], None, True),
+           "remind me to buy bread at 6:30pm": ("buy bread", "inbox", [], None, True)},
+}
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_bot_page_capture_examples_work(client, lang):
+    uid = A.email_user("alice@example.com")
+    assert [t for t, _ in P.BOT_CAPTURE[lang]] == list(CAPTURED[lang])
+    for text, want in CAPTURED[lang].items():
+        it = A.capture(uid, text, "telegram")
+        got = (it["title"], it["status"], it["contexts"], it["project"], it["remind_at"] is not None)
+        assert got == want, text
+
+
+def app_review_steps() -> dict:
+    """Шаги раздела Weekly Review в приложении — из словаря интерфейса index.html (review.s1…s6), по языкам."""
+    page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+    steps = re.findall(r'"s\d": "\d\. ([^"]+)"', page)
+    assert len(steps) == 12  # шесть шагов, русский и английский словарь
+    return {"ru": steps[:6], "en": steps[6:]}
+
+
+@pytest.mark.parametrize("path, lang", [("/weekly-review", "ru"), ("/en/weekly-review", "en")])
+def test_weekly_review_page_matches_app(client, path, lang):
+    h = client.get(path).text
+    body = main_of(h)
+    steps = app_review_steps()[lang]
+    # Чек-лист — те же шесть шагов и в том же порядке, что в приложении
+    listed = re.findall(r"<li><b>\d\. ([^<]+)</b>", body)
+    assert listed == steps
+    # Шаблон — простым текстом, его можно скопировать: все шаги, флажки «[ ]», без HTML-разметки внутри
+    tpl = re.search(r'<pre id="tpl">([^<]+)</pre>', body).group(1)
+    for i, step in enumerate(steps, 1):
+        assert f"{i}. {step}" in tpl, step
+    assert tpl.count("[ ]") >= 6 and 'data-copy="tpl"' in body
+    # Пример на 30 минут и кнопка начать обзор в приложении
+    assert "30" in re.search(r"<h2>([^<]+30[^<]+)</h2>", body).group(1)
+    review = "/review" if lang == "ru" else "/en/review"
+    cta = ("Начать обзор в " if lang == "ru" else "Start the review in ") + P.SITE_NAME
+    assert f'<a class="btn" href="{review}">{cta}</a>' in body
+    # Заголовки разделов — вопросы, и сразу под каждым — короткий прямой ответ
+    for q, answer in re.findall(r"<h2>([^<]+)</h2>\s*<p>(.+?)</p>", body, re.S):
+        assert q.endswith("?"), q
+        first = re.sub(r"<[^>]+>", "", answer).split(". ")[0]
+        assert len(first.split()) <= 25, (q, first)
+    assert all(q.endswith("?") for q in re.findall(r"<h2>([^<]+)</h2>", body))
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_guides_linked_from_landing_about_and_footer(client, lang):
+    bot, weekly = P.PATHS[(lang, "bot")], P.PATHS[(lang, "weekly")]
+    land = client.get(P.PATHS[(lang, "home")]).text
+    root = land[land.index('<div id="root">'):land.index("<footer>")]
+    about = client.get(P.PATHS[(lang, "about")]).text
+    for page in (root, main_of(about)):
+        assert f'href="{bot}"' in page and f'href="{weekly}"' in page
+    for path in [p for p, lg in PUBLIC.items() if lg == lang]:
+        h = client.get(path).text
+        foot = h[h.index("<footer>"):h.index("</footer>")]
+        assert f'<a href="{bot}">' in foot and f'<a href="{weekly}">' in foot, path
+    assert "/weekly-review" not in A.APP_VIEWS and "bot" not in A.APP_VIEWS  # не путаем с разделами приложения
+
+
+def test_guides_ga_page_view_only_on_prod(client, monkeypatch):
+    monkeypatch.setattr(A, "GA_ID", "G-TEST123")
+    assert "googletagmanager" not in client.get("/bot").text
+    prod = client.get("/en/weekly-review", headers={"host": "gtd.serbito.rs"}).text
+    assert "gtag/js?id=G-TEST123" in prod and "location.origin + '/en/weekly-review'" in prod
 
 
 class Outline(HTMLParser):

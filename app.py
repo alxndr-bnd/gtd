@@ -2912,6 +2912,22 @@ def changes_en(request: Request):
     return HTMLResponse(pages.changes(BASE_URL, "en", ga_snippet(request)))
 
 
+@app.get("/bot")
+@app.get("/en/bot")
+def bot_page(request: Request):
+    """Страница Telegram-бота (SERBITO-441): время в примерах — по TZ сервиса, как в parse_when."""
+    lang = "en" if request.url.path.startswith("/en/") else "ru"
+    return HTMLResponse(pages.bot(BASE_URL, lang, ga_snippet(request), TZ.key))
+
+
+@app.get("/weekly-review")
+@app.get("/en/weekly-review")
+def weekly_review_page(request: Request):
+    """Чек-лист Weekly Review (SERBITO-446); сам обзор — раздел /review приложения."""
+    lang = "en" if request.url.path.startswith("/en/") else "ru"
+    return HTMLResponse(pages.weekly(BASE_URL, lang, ga_snippet(request)))
+
+
 @app.get("/robots.txt")
 def robots_txt():
     return PlainTextResponse(pages.robots(BASE_URL))

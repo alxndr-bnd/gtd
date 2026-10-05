@@ -1274,7 +1274,7 @@ WIDER = """() => { const W = document.documentElement.clientWidth;
     .map(e => e.tagName + '.' + e.className).slice(0, 10); }"""
 
 
-@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/privacy", "/changes"])
+@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/privacy", "/changes", "/bot", "/en/weekly-review"])
 def test_no_horizontal_scroll_at_320px(watch, monkeypatch, path):
     """WCAG 1.4.10 (SERBITO-349): при ширине 320 px (1280 px при 400 %) страница не прокручивается вбок — и лендинг
     со всеми кнопками входа: Google, почта, Telegram."""
@@ -2146,7 +2146,7 @@ def test_phone_landing_fold(watch, monkeypatch, lang):
     w.check("итог")
 
 
-@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/changes"])
+@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/changes", "/en/bot", "/weekly-review"])
 @pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_phone_public_pages_readable_and_tappable(watch, monkeypatch, path, scheme):
     """Телефон (SERBITO-448): ссылки шапки, подвала, строк под текстом, «Подробнее» и кнопки баннера — не меньше
