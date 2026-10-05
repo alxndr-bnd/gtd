@@ -1,4 +1,5 @@
 """Веб-API: задачи, проекты, контексты, счётчики, изоляция пользователей."""
+import re
 import time
 
 import app as A
@@ -418,6 +419,7 @@ def test_checklist_is_per_user(new_client, login):
 
 def test_index_has_checklist_and_empty_states(client):
     page = client.get("/").text
+    page = client.get(re.search(r'src="(/app\.[0-9a-f]+\.js)"', page).group(1)).text  # код SPA — в бандле (SERBITO-444)
     for s in ("onboarding_step", "Запиши 3 мысли", "Разбери Inbox", "Подключи Telegram-бота", "checklist_hidden"):
         assert s in page, s
 

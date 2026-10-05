@@ -18,6 +18,11 @@ TM = {"ru": "GTD® и Getting Things Done® — товарные знаки Davi
       "en": "GTD® and Getting Things Done® are trademarks of the David Allen Company"}
 
 
+def app_code(client, html: str) -> str:
+    """Код SPA — во внешнем бандле (SERBITO-444): страница ссылается на /app.<хеш>.js."""
+    return client.get(re.search(r'<script defer src="(/app\.[0-9a-f]{12}\.js)"></script>', html).group(1)).text
+
+
 def meta(html, prop):
     m = re.search(rf'<meta (?:property|name)="{re.escape(prop)}" content="([^"]*)">', html)
     return m and m.group(1)
@@ -92,14 +97,14 @@ def test_landing_text_is_server_rendered(client, path, words):
     root = h[h.index('<div id="root">'):h.index('<dialog id="dlg"')]
     for w in words:
         assert w in root, w
-    assert "<!--LANDING-->" not in h and "function loginScreen" in h
+    assert "<!--LANDING-->" not in h and "function loginScreen" in app_code(client, h)
 
 
 def test_signed_in_root_serves_app(client, login):
     login(client)
     for path in ("/", "/en/"):
         h = client.get(path).text
-        assert "<title>GTD</title>" in h and "function loginScreen" in h  # приложение, как раньше
+        assert "<title>GTD</title>" in h and "function loginScreen" in app_code(client, h)  # приложение, как раньше
         assert 'id="signin"' not in h and "Записал" not in h and 'rel="canonical"' not in h
 
 
@@ -288,7 +293,7 @@ def test_section_addresses_open_the_app(client, path):
     заново. Это то же приложение, что /i/N: личное, без лендинга, не для поисковиков."""
     r = client.get(path)
     assert r.status_code == 200 and r.headers["x-robots-tag"] == "noindex"
-    assert "function loginScreen" in r.text and 'id="signin"' not in r.text
+    assert "function loginScreen" in app_code(client, r.text) and 'id="signin"' not in r.text
     assert f'<html lang="{"en" if path.startswith("/en/") else "ru"}">' in r.text
 
 
