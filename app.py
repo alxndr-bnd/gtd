@@ -855,8 +855,9 @@ BOT_PROFILE = {
            "Allen's GTD (Getting Things Done) method. One account with the website gtd.serbito.rs. Free.",
            "GTD tasks and to-do list in Telegram: Inbox, reminders, projects. Website: gtd.serbito.rs"),
 }
-# Имя бота с поисковыми словами (SERBITO-422): поиск в Telegram ранжирует по имени и username
-BOT_NAMES = {"ru": "GTD — задачи и Inbox", "en": "GTD — Tasks & Todo Inbox"}
+# Имя бота с поисковыми словами (SERBITO-422): поиск в Telegram ранжирует по имени и username. Глобальный
+# поиск видит только имя по умолчанию (""), а это "en" — поэтому в нём и русские слова
+BOT_NAMES = {"ru": "GTD — задачи и Inbox", "en": "GTD — Tasks & Todo · задачи, список дел"}
 BOT_COMMANDS = {
     "ru": [{"command": "inbox", "description": "Что в Inbox"}, {"command": "next", "description": "Что в Next"},
            {"command": "done", "description": "Закрыть задачу: /done 12"},

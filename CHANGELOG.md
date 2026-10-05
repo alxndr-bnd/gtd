@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- Telegram search now finds the bot by Russian words too, such as "tasks" and "to-do list" in Russian.
+  - RU: Бота теперь находит и поиск Telegram по русским словам: «задачи», «список дел».
+
 ## [0.34.0] - 2026-10-05
 
 ### Security
