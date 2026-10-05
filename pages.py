@@ -282,18 +282,51 @@ def url(base: str, lang: str, page: str) -> str:
     return base + PATHS[(lang, page)]
 
 
+CRUMB = {"about": "how", "privacy": "privacy", "changes": "changes"}  # имя страницы в хлебных крошках — ключ T
+
+
+def structured_data(base: str, lang: str, page: str, img: str) -> dict:
+    """JSON-LD (SERBITO-445): один @graph — кто сделал (Organization), сайт, само приложение и эта страница.
+    @id у общих узлов — от русской главной на всех страницах обоих языков: для поисковика это одна сущность,
+    а не по копии на каждый язык. На внутренних страницах — ещё хлебные крошки"""
+    t, me, home = T[lang], url(base, lang, page), url(base, "ru", "home")
+    org, site, app = home + "#org", home + "#website", home + "#app"
+    application = {
+        "@type": "WebApplication", "@id": app, "name": SITE_NAME, "url": home, "description": t["home_desc"],
+        "applicationCategory": "ProductivityApplication", "operatingSystem": "Web, Telegram", "inLanguage": list(LANGS),
+        "isAccessibleForFree": True, "license": "https://opensource.org/licenses/MIT", "image": img,
+        "author": {"@id": org}, "publisher": {"@id": org},
+        "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR", "availability": "https://schema.org/InStock"},
+        "sameAs": [BOT_URL, REPO_URL]}
+    if VERSION:
+        application["softwareVersion"] = VERSION
+    webpage = {"@type": "WebPage", "@id": me + "#page", "url": me, "name": t[page + "_title"],
+               "description": t[page + "_desc"], "inLanguage": lang, "isPartOf": {"@id": site},
+               "about": {"@id": app}, "primaryImageOfPage": img}
+    if modified(page):
+        webpage["dateModified"] = modified(page)
+    graph = [
+        {"@type": "Organization", "@id": org, "name": "No Handoff", "url": NOHANDOFF_URL,
+         "sameAs": [NOHANDOFF_URL, REPO_URL.rsplit("/", 1)[0]]},
+        {"@type": "WebSite", "@id": site, "url": home, "name": SITE_NAME, "inLanguage": list(LANGS),
+         "publisher": {"@id": org}},
+        application, webpage]
+    if page != "home":
+        graph.append({"@type": "BreadcrumbList", "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": SITE_NAME, "item": url(base, lang, "home")},
+            {"@type": "ListItem", "position": 2, "name": t[CRUMB[page]], "item": me}]})
+    return {"@context": "https://schema.org", "@graph": graph}
+
+
 def head(base: str, lang: str, page: str) -> str:
-    """<title>, description, canonical, hreflang, OG, twitter:card и JSON-LD WebApplication."""
+    """<title>, description, canonical, hreflang, OG, twitter:card и JSON-LD."""
     t, me = T[lang], url(base, lang, page)
     title, desc = t[page + "_title"], t[page + "_desc"]
     alt = [f'<link rel="alternate" hreflang="{lg}" href="{url(base, lg, page)}">' for lg in LANGS]
     alt.append(f'<link rel="alternate" hreflang="x-default" href="{url(base, "ru", page)}">')
     other = T["en" if lang == "ru" else "ru"]["locale"]
-    ld = {"@context": "https://schema.org", "@type": "WebApplication", "name": SITE_NAME,
-          "url": url(base, lang, "home"), "description": t["home_desc"], "applicationCategory": "ProductivityApplication",
-          "operatingSystem": "Web, Telegram", "inLanguage": lang,
-          "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "sameAs": [BOT_URL]}
     img = f"{base}/og.png" if lang == "ru" else f"{base}/og-en.png"
+    ld = structured_data(base, lang, page, img)
     return "\n".join([
         f"<title>{title}</title>",
         f'<meta name="description" content="{desc}">',
@@ -545,7 +578,7 @@ def about(base: str, lang: str, ga: str) -> str:
 # Политика конфиденциальности (SERBITO-282). Каждое утверждение сверено с app.py и index.html — меняешь, что
 # хранится или куда уходит, правь и этот текст. Адрес для запросов о данных — только здесь, больше нигде
 PRIVACY_EMAIL = "alexander.bondarchuk@gmail.com"
-PRIVACY_DATE = {"ru": "29 сентября 2026", "en": "29 September 2026"}
+PRIVACY_DAY = "2026-09-29"  # редакция политики: дата в тексте, dateModified и lastmod в sitemap
 T["ru"].update(privacy="Конфиденциальность", privacy_title="Политика конфиденциальности — GTD онлайн",
                privacy_desc="Какие данные хранит GTD онлайн, что получает аналитика, как дать или отозвать "
                             "согласие на cookie, кто обрабатывает данные и как удалить аккаунт.")
@@ -695,7 +728,7 @@ Google or Telegram). We delete the account and all its data within 30 days of th
 def privacy(base: str, lang: str, ga: str) -> str:
     """Политика конфиденциальности — такая же лёгкая страница, как /about. ga — app.ga_snippet, как у /about."""
     path = PATHS[(lang, "privacy")]
-    body = PRIVACY[lang].format(date=PRIVACY_DATE[lang], email=PRIVACY_EMAIL)
+    body = PRIVACY[lang].format(date=human_date(PRIVACY_DAY, lang), email=PRIVACY_EMAIL)
     track = ("<script>if(typeof gtag === 'function') gtag('event', 'page_view', "
              f"{{page_location: location.origin + '{path}', page_title: 'GTD — {T[lang]['privacy']}'}});</script>")
     return f"""<!doctype html>
@@ -720,6 +753,13 @@ def privacy(base: str, lang: str, ga: str) -> str:
 # проверки — changelog.py и tests/test_changelog.py); [Unreleased] на сайт не попадает — только вышедшие версии
 RELEASES = changelog.released(changelog.load())
 CHANGELOG_URL = REPO_URL + "/blob/main/CHANGELOG.md"
+
+
+def modified(page: str) -> str | None:
+    """Когда страница по-настоящему менялась: для JSON-LD dateModified и lastmod в sitemap (SERBITO-445).
+    Только там, где дата известна: «Что нового» — последний релиз, политика — её редакция. Главной и /about
+    дату не ставим: дата деплоя — неправда, и Google перестаёт верить lastmod сайта"""
+    return {"changes": RELEASES[0].date if RELEASES else None, "privacy": PRIVACY_DAY}.get(page)
 SEEN_KEY = "gtd-seen-version"  # localStorage: версия, которую человек уже видел на /changes (точка в меню SPA)
 T["ru"].update(changes="Что нового", changes_title="Что нового в GTD — история версий приложения Getting Things Done",
                changes_desc="Что появилось и что исправлено в GTD онлайн: все версии приложения и Telegram-бота, "
@@ -797,12 +837,13 @@ def robots(base: str) -> str:
 
 
 def sitemap(base: str) -> str:
-    """Публичные адреса из PATHS, у каждого — альтернативы ru/en/x-default."""
+    """Публичные адреса из PATHS, у каждого — альтернативы ru/en/x-default и lastmod, где дата известна."""
     out = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">']
     for (lang, page) in PATHS:
         alts = [(lg, url(base, lg, page)) for lg in LANGS] + [("x-default", url(base, "ru", page))]
-        out.append(f"<url><loc>{url(base, lang, page)}</loc>"
+        day = modified(page)
+        out.append(f"<url><loc>{url(base, lang, page)}</loc>" + (f"<lastmod>{day}</lastmod>" if day else "")
                    + "".join(f'<xhtml:link rel="alternate" hreflang="{h}" href="{u}"/>' for h, u in alts) + "</url>")
     out.append("</urlset>")
     return "\n".join(out)

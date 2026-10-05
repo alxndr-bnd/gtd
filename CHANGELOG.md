@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- Search engines now get clearer data about the site: who makes it, where each page sits, and when a page last changed.
+  - RU: Поисковики теперь получают более точные данные о сайте: кто его делает, где находится каждая страница и когда она менялась.
+
 ## [0.36.0] - 2026-10-05
 
 ### Fixed
