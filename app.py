@@ -2221,6 +2221,12 @@ def admin_stats(uid: int = Depends(current_user)):
                                   today - timedelta(days=30)),
                    "telegram_30d": one("select count(distinct user_id) n from activity where day > %s "
                                        "and channel='telegram'", today - timedelta(days=30))},
+        # MCP (SERBITO-465): гипотеза плана OAuth (docs/plans/2026-10-03-mcp-oauth.md) — большинство приходит
+        # через claude.ai (OAuth), а не Claude Code (личный токен). Опровергнута, если подключений OAuth меньше токенов
+        "mcp": {"users_7d": one("select count(distinct user_id) n from activity where day > %s and channel='mcp'",
+                                today - timedelta(days=7)),
+                "oauth_connections": one("select count(*) n from oauth_grants"),
+                "api_tokens": one("select count(*) n from api_tokens")},
         "tasks": {"total": one("select count(*) n from items"),
                   "created_7d": one("select count(*) n from items where created >= %s", since(7)),
                   "created_30d": one("select count(*) n from items where created >= %s", since(30))},
