@@ -1,5 +1,7 @@
 # Test suite review (SERBITO-364, 2026-09-29)
 
+Jira: SERBITO-364 (Closed — gtd v0.21.0) · the "Unsure" list below: [SERBITO-484](https://serbito.atlassian.net/browse/SERBITO-484)
+
 The pytest gate (`tests/`, including the Playwright smoke `test_browser_smoke.py`) was reviewed for tests that repeat each other, check only source text, or cost time without adding coverage.
 
 ## Before / after

@@ -2,6 +2,8 @@
 
 For [SERBITO-297](https://serbito.atlassian.net/browse/SERBITO-297), planned for the weekend of 3–4 October 2026. The owner submits from his AlternativeTo account. AlternativeTo strips links from descriptions, so the text below has none.
 
+Jira: SERBITO-297 (Closed — gtd v0.14.0) · tracked by SERBITO-261 · listing approval check: [SERBITO-443](https://serbito.atlassian.net/browse/SERBITO-443)
+
 ## Fields
 
 | Field | Value |

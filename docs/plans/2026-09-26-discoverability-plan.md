@@ -2,6 +2,8 @@
 
 2026-09-26 · Alexander Bondarchuk · живой документ: [Claude Docs](https://claude.ai/code/artifact/551429aa-8bb7-48af-847e-7dbc2b4c4a58) · эпик [SERBITO-254](https://serbito.atlassian.net/browse/SERBITO-254)
 
+Jira: SERBITO-254 (эпик) · реализуют SERBITO-255…261, 263…267, 280…284, 291, 292, 297, 422 · осталось: SERBITO-262, SERBITO-469, SERBITO-484
+
 > Копия плана в репозитории — чтобы по истории коммитов было видно, что разрабатывалось, по каким
 > требованиям и задачам. Статусы в таблице ниже обновляются вместе с Jira.
 
@@ -42,6 +44,9 @@
 | Заголовок вкладки: раздел и число во Входящих | [SERBITO-284](https://serbito.atlassian.net/browse/SERBITO-284) | 6 | Closed — gtd v0.11.0 |
 | Открытый код на виду: ссылка на GitHub с сайта, README на английском, инструкция self-host, GitHub Release | [SERBITO-291](https://serbito.atlassian.net/browse/SERBITO-291) | 4 | Closed — gtd v0.12.0 |
 | Нативная кнопка «Войти через Telegram» (Login Widget) вместо своей, deep link — запасной путь | [SERBITO-292](https://serbito.atlassian.net/browse/SERBITO-292) | 2 | Closed — gtd v0.13.0 |
+| Подача в AlternativeTo: набор для заявки, иконка 280 px | [SERBITO-297](https://serbito.atlassian.net/browse/SERBITO-297) | 4 | Closed — gtd v0.14.0 |
+| Название бота на сайте, бот находится поиском в Telegram | [SERBITO-422](https://serbito.atlassian.net/browse/SERBITO-422) | 2 | Closed — gtd v0.33.0 |
+| Замер через 6 недель и решение по гипотезе | [SERBITO-262](https://serbito.atlassian.net/browse/SERBITO-262) | 6 | To Do |
 
 Замер через 6 недель — [SERBITO-262](https://serbito.atlassian.net/browse/SERBITO-262). Найденные по ходу недоработки заводятся в Jira багами с меткой `finding`: SERBITO-268…279 (268 и 269 — утечка названия чужого проекта и токен бота в логах — исправлены в gtd v0.7.0), 283. Этап 6 (280–284) — аудит стандартных мета-тегов и иконок от 2026-09-26: нет файла favicon, manifest, политики конфиденциальности, HTML-404.
 
@@ -164,10 +169,18 @@
 - [x] Подпись в общем блоке: «Сделано No Handoff» сразу, ссылка на LinkedIn — решено 2026-09-26.
 - [x] Блок на serbito.rs — да, одна строка в подвале — решено 2026-09-26.
 - [x] Языки gtd: `/en/` для публичных страниц, авто в приложении — решено 2026-09-26.
-- [ ] Платить ли $5 за быструю модерацию AlternativeTo (1–2 дня вместо нескольких месяцев)?
-- [ ] Какие каталоги Telegram-ботов и подборки GTD-инструментов брать — собрать список отдельным исследованием.
-- [ ] Баннер согласия на cookies для GA4: нужен, если в аудитории будут жители ЕС (GDPR); в poker его тоже нет.
-- [ ] Политика конфиденциальности gtd — каталоги и Google часто требуют её для сервиса со входом.
+- [ ] Платить ли $5 за быструю модерацию AlternativeTo (1–2 дня вместо нескольких месяцев)? Заявка подана (SERBITO-297); закрыть вопрос — SERBITO-484.
+- [x] Какие каталоги Telegram-ботов и подборки GTD-инструментов брать — решено 2026-09-26: `docs/research/2026-09-26-catalogs.md` (SERBITO-261); подача — SERBITO-469.
+- [x] Баннер согласия на cookies для GA4: нужен, если в аудитории будут жители ЕС (GDPR); в poker его тоже нет — решено 2026-09-27: SERBITO-319, gtd v0.15.0.
+- [x] Политика конфиденциальности gtd — каталоги и Google часто требуют её для сервиса со входом — решено 2026-09-26: SERBITO-282, gtd v0.12.0.
+
+## Что осталось (сверка 2026-10-05)
+
+Все задачи этапов 1–6 выпущены. Открыто:
+
+- Замер через 6 недель и решение по гипотезе — [SERBITO-262](https://serbito.atlassian.net/browse/SERBITO-262).
+- Подача в каталоги Telegram-ботов, vc.ru, SaaSHub, Show HN — [SERBITO-469](https://serbito.atlassian.net/browse/SERBITO-469); Habr, Product Hunt, Reddit и др. — [SERBITO-443](https://serbito.atlassian.net/browse/SERBITO-443).
+- Мелочи (вопрос про $5 за модерацию AlternativeTo) — [SERBITO-484](https://serbito.atlassian.net/browse/SERBITO-484).
 
 ## Источники
 
