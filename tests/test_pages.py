@@ -43,8 +43,22 @@ def test_public_page_seo_tags(client, path, lang):
     for hl, p in (("ru", pair[0]), ("en", pair[1]), ("x-default", pair[0])):
         assert f'<link rel="alternate" hreflang="{hl}" href="{BASE}{p}">' in h
     ld = json.loads(re.search(r'<script type="application/ld\+json">(.+?)</script>', h).group(1))
-    assert ld["@type"] == "WebApplication" and ld["applicationCategory"] == "ProductivityApplication"
-    assert ld["offers"]["price"] == "0" and ld["inLanguage"] == lang and ld["sameAs"] == ["https://t.me/gtdsrbot"]
+    nodes = {n["@type"]: n for n in ld["@graph"]}
+    app, page, home = nodes["WebApplication"], nodes["WebPage"], BASE + "/"
+    assert app["@id"] == home + "#app" and app["url"] == home  # одна сущность на всех страницах обоих языков
+    assert app["applicationCategory"] == "ProductivityApplication" and app["offers"]["price"] == "0"
+    assert app["isAccessibleForFree"] is True and app["license"] == "https://opensource.org/licenses/MIT"
+    assert app["sameAs"] == ["https://t.me/gtdsrbot", "https://github.com/alxndr-bnd/gtd"]
+    assert nodes["Organization"]["@id"] == home + "#org" == app["author"]["@id"] == nodes["WebSite"]["publisher"]["@id"]
+    assert page["url"] == BASE + path and page["inLanguage"] == lang and page["name"] == title
+    assert page["isPartOf"]["@id"] == nodes["WebSite"]["@id"] and page["about"]["@id"] == app["@id"]
+    assert ("dateModified" in page) == (path.rstrip("/").split("/")[-1] in ("privacy", "changes"))
+    crumbs = nodes.get("BreadcrumbList")
+    if path in ("/", "/en/"):
+        assert crumbs is None
+    else:
+        items = crumbs["itemListElement"]
+        assert [i["item"] for i in items] == [BASE + ("/" if lang == "ru" else "/en/"), BASE + path]
     # Подвал: оговорка о товарном знаке, другие проекты с UTM, подпись No Handoff
     assert TM[lang] in h and 'href="https://gettingthingsdone.com"' in h
     assert ("Другие проекты" if lang == "ru" else "Other projects") in h
@@ -216,6 +230,14 @@ def test_sitemap(client):
     for u in urls:
         alts = {a.get("hreflang"): a.get("href") for a in u.findall("x:link", ns)}
         assert set(alts) == {"ru", "en", "x-default"} and alts["x-default"] == alts["ru"]
+    # lastmod — только где дата настоящая (SERBITO-445): «Что нового» — последний релиз, политика — её редакция
+    lastmod = {u.find("s:loc", ns).text: getattr(u.find("s:lastmod", ns), "text", None) for u in urls}
+    for p in ("/changes", "/en/changes"):
+        assert lastmod[BASE + p] == P.RELEASES[0].date
+    for p in ("/privacy", "/en/privacy"):
+        assert lastmod[BASE + p] == P.PRIVACY_DAY
+    for p in ("/", "/en/", "/about", "/en/about"):
+        assert lastmod[BASE + p] is None
 
 
 def test_og_images(client):
