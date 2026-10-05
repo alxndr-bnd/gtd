@@ -99,6 +99,21 @@ def test_public_page_seo_tags(client, path, lang):
     assert f'<a href="{priv}">{"Конфиденциальность" if lang == "ru" else "Privacy"}</a>' in foot
 
 
+def test_structured_data_version_and_source(monkeypatch):
+    """GEO 5 (SERBITO-484): версия из APP_VERSION, лицензия и код. codeRepository по schema.org — свойство
+    SoftwareSourceCode, а не приложения: отдельный узел, связанный с приложением через targetProduct"""
+    monkeypatch.setattr(P, "VERSION", "0.41.0")
+    nodes = {n["@type"]: n for n in P.structured_data(BASE, "en", "home", BASE + "/og-en.png")["@graph"]}
+    app, code = nodes["WebApplication"], nodes["SoftwareSourceCode"]
+    assert app["softwareVersion"] == "0.41.0" and app["license"] == "https://opensource.org/licenses/MIT"
+    assert "codeRepository" not in app  # не в своём типе — валидатор schema.org ругается
+    assert code["codeRepository"] == P.REPO_URL and code["license"] == app["license"]
+    assert code["targetProduct"] == {"@id": app["@id"]} and code["author"] == {"@id": nodes["Organization"]["@id"]}
+    monkeypatch.setattr(P, "VERSION", "")  # локально версии нет — не выдумываем её
+    nodes = {n["@type"]: n for n in P.structured_data(BASE, "ru", "about", BASE + "/og.png")["@graph"]}
+    assert "softwareVersion" not in nodes["WebApplication"]
+
+
 def test_seo_search_words(client):
     ru, en = client.get("/").text, client.get("/en/").text
     for words in ("GTD онлайн бесплатно", "Getting Things Done приложение", "telegram бот"):

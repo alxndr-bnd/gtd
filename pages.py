@@ -345,7 +345,7 @@ CRUMB = {"about": "how", "privacy": "privacy", "changes": "changes", "bot": "bot
 
 
 def structured_data(base: str, lang: str, page: str, img: str) -> dict:
-    """JSON-LD (SERBITO-445): один @graph — кто сделал (Organization), сайт, само приложение и эта страница.
+    """JSON-LD (SERBITO-445): один @graph — кто сделал (Organization), сайт, само приложение, его код и эта страница.
     @id у общих узлов — от русской главной на всех страницах обоих языков: для поисковика это одна сущность,
     а не по копии на каждый язык. На внутренних страницах — ещё хлебные крошки"""
     t, me, home = T[lang], url(base, lang, page), url(base, "ru", "home")
@@ -359,6 +359,10 @@ def structured_data(base: str, lang: str, page: str, img: str) -> dict:
         "sameAs": [BOT_URL, REPO_URL]}
     if VERSION:
         application["softwareVersion"] = VERSION
+    # codeRepository по schema.org — у SoftwareSourceCode, не у приложения: код — свой узел (SERBITO-484)
+    source = {"@type": "SoftwareSourceCode", "@id": home + "#code", "name": SITE_NAME, "codeRepository": REPO_URL,
+              "license": application["license"], "programmingLanguage": ["Python", "JavaScript"],
+              "author": {"@id": org}, "targetProduct": {"@id": app}}
     webpage = {"@type": "WebPage", "@id": me + "#page", "url": me, "name": t[page + "_title"],
                "description": t[page + "_desc"], "inLanguage": lang, "isPartOf": {"@id": site},
                "about": {"@id": app}, "primaryImageOfPage": img}
@@ -369,7 +373,7 @@ def structured_data(base: str, lang: str, page: str, img: str) -> dict:
          "sameAs": [NOHANDOFF_URL, REPO_URL.rsplit("/", 1)[0]]},
         {"@type": "WebSite", "@id": site, "url": home, "name": SITE_NAME, "inLanguage": list(LANGS),
          "publisher": {"@id": org}},
-        application, webpage]
+        application, source, webpage]
     if page != "home":
         graph.append({"@type": "BreadcrumbList", "itemListElement": [
             {"@type": "ListItem", "position": 1, "name": SITE_NAME, "item": url(base, lang, "home")},

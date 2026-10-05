@@ -79,6 +79,6 @@ Coverage is identical line by line: no app line lost its only test.
   - `test_privacy_ga_only_on_prod` and `test_about_ga_event_only_on_prod` overlap the `test_consent` host tests;
   - `test_icons_and_name_on_every_page` and `test_install_404::test_manifest_and_ios_meta_on_every_page` walk the same page list.
 - `test_head::test_head_keeps_page_headers`: only the og.png cache-control assert is unique.
-- `test_changelog::test_real_changelog_notes_are_english` hardcodes "0.16.0".
+- `test_changelog::test_real_changelog_notes_are_english` hardcoded "0.16.0". Fixed in SERBITO-484: it now checks the notes of every released version.
 - `test_tg_widget::test_spa_uses_widget_with_fallback`: the widget script URL is only grepped.
 - Flaky: `test_keyboard_reorder` failed once, under coverage tracing on a loaded machine, with its 5 s save deadline. It passed 5 of 5 on rerun. Not changed.
