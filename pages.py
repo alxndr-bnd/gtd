@@ -114,33 +114,45 @@ PUBLIC_CSS = """<style>
 .pub h1{font-size:30px;line-height:1.2;margin:0 0 12px}
 .pub h2{font-size:20px;margin:36px 0 12px}
 .pub .lead{font-size:18px;color:var(--mut);margin:0 0 16px}
-.pub .note{color:var(--mut);font-size:13px}
+.pub .note{color:var(--mut);font-size:14px}
 .pub .intro{display:grid;grid-template-columns:1fr 380px;gap:28px;align-items:start}
 .pub .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 20px}
 .pub .signin{text-align:center} .pub .signin h2{margin:0 0 4px}
+/* Поля первой и последней кнопки входа не выходят за блок (SERBITO-448): пока виджет Telegram (он первый) не загружен,
+   поле «или» под ним иначе сдвигало весь блок на 14 px */
+.pub #signin{display:flow-root}
 .pub .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .pub .steps li{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px}
 .pub .steps b{display:block;font-size:17px;margin-bottom:4px}
-.pub .steps .where{display:block;color:var(--mut);font-size:13px;margin-top:6px}
+.pub .steps .where{display:block;color:var(--mut);font-size:14px;margin-top:6px}
 .pub button.btn{border:0;font-family:inherit;font-size:inherit;cursor:pointer}
 .pub .btn{display:inline-block;padding:10px 18px;border-radius:10px;background:var(--ac);color:var(--on-ac);text-decoration:none;font-weight:600}
 .pub .ex{list-style:none;padding:0} .pub .ex li{margin:6px 0}
 .pub q{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .pub q::before,.pub q::after{content:none}
-.pub kbd{font:12.5px ui-monospace,Menlo,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
-.pub footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--bd);color:var(--mut);font-size:13px}
+.pub kbd{font:14px ui-monospace,Menlo,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
+.pub footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--bd);color:var(--mut);font-size:14px}
 .pub footer ul{list-style:none;padding:0;margin:6px 0 14px} .pub footer li{margin:3px 0}
 .pub .rel h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap} .pub .rel h2 .note{font-weight:400}
-.pub .rel h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 4px}
+.pub .rel h3{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 4px}
 .pub .rel ul{margin:0;padding-left:20px} .pub .rel li{margin:4px 0}
 /* minmax(0,1fr), а не 1fr: колонка не шире экрана, даже если строка почты или кнопка входа шире (320 px, WCAG 1.4.10) */
 @media(max-width:700px){.pub .intro{grid-template-columns:minmax(0,1fr)}.pub h1{font-size:25px}}
+/* Читается и нажимается на телефоне (SERBITO-448). Текст — не мельче 14 px (подпись, «или» и сообщения блока входа
+   в приложении — 13 px), серый --mut — контраст от 7:1. Ссылки шапки, строк под текстом и подвала — зона нажатия
+   не меньше 44×44 px: поля внутри ссылки и такие же отрицательные снаружи, поэтому строки не раздвигаются */
+.pub .hint,.pub .or,.pub .msg{font-size:14px}
+@media(max-width:700px),(pointer:coarse){
+  .pub .top a{display:inline-flex;align-items:center;min-height:44px;min-width:44px}
+  .pub .note a,.pub .more a,.pub footer a{display:inline-block;padding:12px 4px;margin:-12px -4px}
+  .pub footer li a{padding:12px 10px;margin:-12px -10px}
+}
 </style>"""
 
 # /about — отдельная лёгкая страница без JS приложения: цвета те же, что в index.html
 BASE_CSS = """<style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#5f6a7a;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
-@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18}}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#4b5563;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#a1abb9;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
 </style>"""
@@ -166,8 +178,10 @@ CONSENT_DAYS = 365
 CONSENT = {
     "ru": {"text": "GTD использует cookie Google Analytics, чтобы понимать, какие разделы полезны, — "
                    "без текста задач.",
+           "short": "Cookie Google Analytics — без текста задач",
            "more": "Подробнее", "yes": "Принять", "no": "Отклонить", "label": "Cookie", "settings": "Настройки cookie"},
     "en": {"text": "GTD uses Google Analytics cookies to learn which sections are useful — never your task text.",
+           "short": "Google Analytics cookies, never your task text",
            "more": "Details", "yes": "Accept", "no": "Decline", "label": "Cookies", "settings": "Cookie settings"},
 }
 CONSENT_CSS = """<style>
@@ -176,10 +190,10 @@ CONSENT_CSS = """<style>
   border:1px solid var(--bd);border-radius:12px;padding:12px 14px;box-shadow:0 8px 30px #0003;
   font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 .cc[hidden]{display:none}
-.cc p{flex:1 1 280px;margin:0} .cc a{color:var(--ac)}
+.cc p{flex:1 1 280px;margin:0} .cc a{color:var(--ac)} .cc .ccs{display:none}
 /* «Принять» и «Отклонить» — одного веса (решение владельца, SERBITO-349): тот же вид и та же ширина */
 .cc .ccb{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-left:auto}
-.cc button{font:inherit;font-weight:600;min-height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--ac);
+.cc button{font:inherit;font-weight:600;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--ac);
   background:var(--card);color:var(--tx);cursor:pointer}
 .cc button:focus-visible,.cc a:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 body.cc-open .pub{padding-bottom:calc(var(--cc-h,0px) + 32px)}
@@ -189,7 +203,13 @@ body.cc-open .toast{bottom:calc(var(--cc-h,0px) + 24px)}
    и у страницы, и у выезжающего меню приложения (nav на телефоне прокручивается сам) */
 html.cc-open{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px)}
 @media(max-width:700px){html.cc-open nav{scroll-padding-bottom:calc(var(--cc-h,0px) + 16px);padding-bottom:calc(var(--cc-h,0px) + 16px)}}
-@media(max-width:700px){.cc{bottom:8px;padding:10px 12px}.cc .ccb{flex:1}.cc button{flex:1;min-height:44px}
+/* Телефон (SERBITO-448): баннер закрывал до 137 px первого экрана и строку о боте. Теперь — короткий текст в одну
+   строку, под ним «Подробнее» и кнопки (~86 px). <p> раскрыт в сетку (display:contents): короткий текст — на всю
+   ширину, ссылка — в одну строку с кнопками. Полный текст — на широком экране */
+@media(max-width:700px){.cc{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;bottom:8px;padding:8px 12px}
+  .cc p{display:contents} .cc .ccl{display:none} .cc .ccs{display:block;grid-column:1/-1}
+  .cc a{display:inline-flex;align-items:center;min-height:44px;padding:0 4px;margin:0 -4px}
+  .cc .ccb{margin:0} .cc button{padding:0 12px}
   body.cc-kb .cc{display:none}}
 </style>"""
 CONSENT_JS = """<script>
@@ -215,7 +235,8 @@ function gtag(){ dataLayer.push(arguments); }
     const lg = lang(); if(!el || drawn === lg) return;
     const t = TXT[drawn = lg];
     el.setAttribute('aria-label', t.label);
-    el.innerHTML = `<p>${t.text} <a href="${t.privacy}#cookies">${t.more}</a></p><div class="ccb">`
+    el.innerHTML = `<p><span class="ccl">${t.text}</span> <span class="ccs">${t.short}</span> `
+      + `<a href="${t.privacy}#cookies">${t.more}</a></p><div class="ccb">`
       + `<button type="button" data-cc="granted">${t.yes}</button>`
       + `<button type="button" data-cc="denied">${t.no}</button></div>`;
   }
@@ -395,7 +416,7 @@ LANDING_STEPS = {
 <li><b>3. Сделал</b>В Next — только конкретные шаги, по контексту: @комп, @телефон, @дом.
 Раз в неделю — Weekly Review, чтобы ничего не потерялось.</li>
 </ol>
-<p><a href="/about">Подробнее о методе и приложении →</a></p>
+<p class="more"><a href="/about">Подробнее о методе и приложении →</a></p>
 <h2>Telegram-бот @gtdsrbot</h2>
 <div class="card"><p style="margin-top:0">Пиши задачи боту обычными сообщениями — они попадут в Inbox.
 Напоминания приходят в Telegram с кнопками ✅ Готово и 💤 +1ч. Бот и сайт — один аккаунт:
@@ -409,7 +430,7 @@ LANDING_STEPS = {
 <li><b>3. Do</b>Next holds only concrete steps, filtered by context: @computer, @phone, @home.
 A weekly review keeps anything from slipping through.</li>
 </ol>
-<p><a href="/en/about">More about the method and the app →</a></p>
+<p class="more"><a href="/en/about">More about the method and the app →</a></p>
 <h2>Telegram bot @gtdsrbot</h2>
 <div class="card"><p style="margin-top:0">Send tasks to the bot as plain messages — they land in your Inbox.
 Reminders arrive in Telegram with ✅ Done and 💤 +1h buttons. The bot and the site share one account:
@@ -420,12 +441,13 @@ sign in on the site with Telegram or link the bot under “Account”.</p>
 
 # Место под кнопки входа (SERBITO-349): #signin в HTML пустой, JS заполняет его после /api/config — и лендинг
 # прыгал на ~260 px (CLS 0.13–0.17). Высоту резервируем заранее по включённым способам входа (порядок — как
-# в loginScreen: Google, почта, Telegram). Замер в Chromium, px: кнопка Google 44; строка почты 48, её нижний
-# отступ 16 больше соседнего (+2 перед «или», +6 перед сообщением); Telegram 46 — iframe виджета (запасная
-# кнопка ниже, 40); «или» 14+19+14; строка сообщения 10+13; «Нет способов входа» 50; «Dev login» 15+40.
+# в loginScreen и app.signin_methods: Telegram, Google, почта; SERBITO-448). #signin — flow-root: поля крайних
+# элементов внутри блока. Замер в Chromium, px: кнопка Google 44; строка почты 48, её нижний отступ 16 больше
+# соседнего (+2 перед «или», +6 перед сообщением); Telegram 46 — iframe виджета (запасная кнопка, 40); «или»
+# 14+20.3+14 (14 px); строка сообщения 10+14; «Нет способов входа» 15+21.75+15+14; «Dev login» 15+39.75+15.
 # Браузерный смоук сверяет резерв с реальной высотой.
 SIGNIN_PX = {"google": 44, "email": 48, "bot": 46}
-SIGNIN_OR, SIGNIN_MSG, SIGNIN_NONE, SIGNIN_DEV = 46.84, 23, 49.75, 54.75
+SIGNIN_OR, SIGNIN_MSG, SIGNIN_NONE, SIGNIN_DEV = 48.3, 24, 65.75, 69.75
 
 
 def signin_height(methods: list[str], dev: bool = False) -> int:
@@ -442,9 +464,9 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
     способы входа (для резерва высоты), dev — локальная кнопка «Dev login»."""
     h, hint = LANDING_SIGNIN[lang]
     oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
-    return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}</div>'
+    return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}{BOT_NOTE[lang]}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
-            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>{BOT_NOTE[lang]}'
+            f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>'
             f'{PRIVACY_NOTE[lang]}</div>'
             f'</div>{LANDING_STEPS[lang]}</main>{footer(lang, consent)}</div>')
 

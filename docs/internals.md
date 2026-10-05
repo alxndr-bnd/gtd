@@ -33,6 +33,17 @@ Sign-up is open: the first sign-in by any method creates an account.
     "Use default ignored sources" on, "Additional ignored sources" + `frontend-cdn.perplexity.ai`.
 - **Bot** answers only in private chats.
 
+**One primary sign-in button** (SERBITO-448). The landing and the sign-in screen show Telegram first, as the
+only filled button; Google and the email code follow with an outline. Why Telegram:
+- One step signs in and connects the bot, so reminders work from the first task. The bot is what sets GTD apart.
+- On gtd.serbito.rs desktop the Telegram Login Widget replaces our button. Telegram draws it filled, so the page
+  still has one filled action.
+- Google draws its own button (GSI iframe, outline theme): we cannot make it the primary one.
+- Email works for everyone, so it stays as the fallback. Without a bot (self-hosted copy) the email button is the
+  primary one.
+
+The order lives in `loginScreen` (index.html) and in `app.signin_methods` (the landing reserves height for it).
+
 Google and an email code for the same address are one account. Other methods are linked under
 “👤 Account” or in the bot: `/email you@example.com` → code by email → send the code to the bot.
 
@@ -176,7 +187,11 @@ The running version (`APP_VERSION` from the deploy tag, else `dev`) is in every 
 come from `scripts/og_image.py`. The logo is the “Inbox” mark (`pages.mark()`, color `#0F766E` — also the site
 accent); favicon and phone icons in `static/` are built by `scripts/icons.py`.
 Install to home screen — `/manifest.webmanifest` (`pages.manifest()`, description in the browser language), no
-service worker. Unknown address — 404 page (`pages.not_found()`), also for curl and link previews; only `/api/*`
+service worker. Phones (SERBITO-448): the cookie banner shows a one-line short text (`CONSENT[lang]["short"]`)
+with “Details” and the buttons in one row (~86 px instead of 137); the bot line sits above the sign-in card; links in
+the header, the notes and the footer have a 44×44 px tap area (padding plus the same negative margin, so lines do
+not move); public text is at least 14 px; grey `--mut` is `#4b5563` / `#a1abb9` (7:1 on the page background).
+Unknown address — 404 page (`pages.not_found()`), also for curl and link previews; only `/api/*`
 and clients that ask for `application/json` get JSON. `/ru/…` redirects (308) to the same page without the prefix.
 
 ## Analytics

@@ -155,14 +155,13 @@ def test_landing_links_privacy_near_signin(client, path, link):
     ("/en/about", ["takes tasks as plain messages", "sends reminders"]),
 ])
 def test_bot_name_and_link_on_site(client, path, words):
-    """SERBITO-422: имя бота — ссылкой t.me на лендинге (и в блоке входа) и на странице помощи, с одной строкой о том,
+    """SERBITO-422: имя бота — ссылкой t.me на лендинге (над блоком входа) и на странице помощи, с одной строкой о том,
     что бот делает."""
     assert P.BOT_URL == "https://t.me/gtdsrbot"
     h = client.get(path).text
     part = h
-    if "about" not in path:  # лендинг: в блоке входа — между кнопками (#signin) и ссылкой на политику
-        part = h[h.index('<div class="card signin">'):h.index("<footer>")]
-        part = part[part.index('id="signin"'):part.index('privacy"')]
+    if "about" not in path:  # лендинг: над блоком входа, под текстом (SERBITO-448: на телефоне её не закрывает баннер)
+        part = h[h.index('<div class="intro">'):h.index('<div class="card signin">')]
     assert f'<a href="{P.BOT_URL}">@{P.BOT_NAME}</a>' in part
     for w in words:
         assert w in part, w

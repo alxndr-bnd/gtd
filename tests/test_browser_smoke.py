@@ -2017,7 +2017,8 @@ def test_next_offers_context_chips(watch):
 @pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
 def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
     """G11: кнопки входа одной ширины (Google — шириной блока, строка почты, Telegram) и с одним глаголом
-    («Войти …» / «Sign in …»); кнопка Telegram не выглядит выключенной — тот же вид, что у «Войти по коду»."""
+    («Войти …» / «Sign in …»); кнопка Telegram не выглядит выключенной: она главная — залитая (SERBITO-448),
+    «Войти по коду» — в цвет логотипа, жирная, с рамкой."""
     monkeypatch.setattr(A, "TOKEN", "smoke-token")
     monkeypatch.setattr(A, "BOT_USERNAME", "gtd_smoke_bot")
     w = watch(lang, viewport=viewport)
@@ -2034,8 +2035,9 @@ def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
     assert w.page.inner_text('#signin [data-act="emailsend"]').startswith(verb)
     assert verb in w.page.inner_text("#signin .tgfb")
     look = """el => { const c = getComputedStyle(el); return [c.color, c.borderColor, c.backgroundColor, c.fontWeight]; }"""
-    assert w.page.eval_on_selector("#signin .tgfb", look) == w.page.eval_on_selector('#signin [data-act="emailsend"]', look)
-    assert int(w.page.eval_on_selector("#signin .tgfb", "el => getComputedStyle(el).fontWeight")) >= 600
+    tg, code = w.page.eval_on_selector("#signin .tgfb", look), w.page.eval_on_selector('#signin [data-act="emailsend"]', look)
+    assert tg[1] == code[1] == tg[2] != code[2] and code[0] == tg[2], (tg, code)  # одна рамка в цвет логотипа; залита — только tg
+    assert int(tg[3]) >= 600 and int(code[3]) >= 600
     w.check("итог")
 
 
@@ -2052,3 +2054,116 @@ def test_capture_button_has_visible_label_on_wide_screens(watch, lang, label):
         assert w.page.get_attribute(btn, "aria-label").startswith(label)
         w.check(f"{viewport}")
         w.close()
+
+
+# ── Лендинг на телефоне (SERBITO-448) ──
+# Залитая кнопка — фон в цвет логотипа (--ac). Считаем видимые кнопки и ссылки блока входа с таким фоном
+FILLED = """() => { const probe = document.createElement('i'); probe.style.background = 'var(--ac)';
+  document.body.append(probe); const ac = getComputedStyle(probe).backgroundColor; probe.remove();
+  return [...document.querySelectorAll('#signin button, #signin a')]
+    .filter(b => b.offsetParent && getComputedStyle(b).backgroundColor === ac)
+    .map(b => b.dataset.act || b.className); }"""
+
+
+@pytest.mark.parametrize("bot", [True, False])
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_landing_has_one_primary_signin(watch, monkeypatch, bot, viewport):
+    """Один главный способ входа — залитая кнопка, остальные — с рамкой (SERBITO-448). Главный — Telegram: он же сразу
+    подключает бота с напоминаниями; бота нет (self-hosted копия) — главный «Войти по коду». Главный — первым."""
+    if bot:
+        monkeypatch.setattr(A, "TOKEN", "test-token")
+        monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    w = watch(viewport=viewport, touch=viewport == PHONE)
+    w.goto("/")
+    w.wait('#signin a[href="/dev-login"]', "кнопки входа")
+    w.page.hover("#signin") if viewport != PHONE else w.page.tap("#signin h2, .signin h2")
+    w.page.wait_for_function("window.__gsi", timeout=WAIT_MS)
+    assert w.page.evaluate(FILLED) == (["tglogin"] if bot else ["emailsend"])
+    first = w.page.evaluate("document.querySelector('#signin').firstElementChild.className")
+    assert first == ("tgw" if bot else "gbtn"), first
+    w.check("итог")
+
+
+def test_landing_fetches_config_once(watch):
+    """/api/config на лендинге — один запрос (SERBITO-448): load() уже получил настройки и отдаёт их экрану входа."""
+    w = watch(viewport=PHONE)
+    asked = []
+    w.page.on("request", lambda r: urlsplit(r.url).path == "/api/config" and asked.append(r.url))
+    w.goto("/")
+    w.wait('#signin a[href="/dev-login"]', "кнопки входа")
+    w.page.wait_for_load_state("load")
+    w.page.wait_for_timeout(300)
+    assert len(asked) == 1, asked
+    w.check("итог")
+
+
+# Контраст текста с фоном под ним (первый непрозрачный фон предка), WCAG 2.x: [элемент, отношение] у каждого
+# видимого элемента со своим текстом
+CONTRAST = """els => els.filter(e => e.offsetParent && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()))
+    .map(e => {
+      const rgb = c => c.match(/[\\d.]+/g).map(Number);
+      const lum = ([r, g, b]) => [r, g, b].map(v => (v /= 255) <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+        .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
+      let n = e, bg;
+      for(; n; n = n.parentElement){ bg = getComputedStyle(n).backgroundColor; if(rgb(bg)[3] !== 0) break; }
+      if(!n) bg = getComputedStyle(document.body).backgroundColor;
+      const [a, b] = [lum(rgb(getComputedStyle(e).color)), lum(rgb(bg))].sort((x, y) => y - x);
+      return [e.tagName + '.' + e.className + ' ' + e.textContent.trim().slice(0, 20), +((a + .05) / (b + .05)).toFixed(2)];
+    })"""
+
+
+# Всё мелкое и серое на публичных страницах: подписи, подвал, строки о боте и политике, «или», баннер
+TEXT_NODES = """() => [...document.querySelectorAll('.pub *, #cc *')].filter(e => e.offsetParent &&
+  [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()))
+  .map(e => [e.tagName + '.' + e.className + ' ' + e.textContent.trim().slice(0, 20), parseFloat(getComputedStyle(e).fontSize)])"""
+# Ссылки и кнопки, которые ticket SERBITO-448 нашёл меньше 44 px: шапка, строки под текстом и в блоке входа, подвал,
+# баннер cookie
+TAPS = ".pub .top a, .pub .note a, .pub .more a, .pub footer a, #cc a, #cc button, #signin button[data-act]"
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_phone_landing_fold(watch, monkeypatch, lang):
+    """Телефон 390×844, первый визит (SERBITO-448): баннер cookie — одна строка текста и кнопки, не выше 96 px;
+    строка о боте и главная кнопка входа видны над ним."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    w = watch(lang, viewport=PHONE, touch=True)
+    w.goto(P.PATHS[(lang, "home")])
+    cc = banner(w, f"[{lang}] баннер")
+    w.wait("#signin .tgfb", "кнопки входа")
+    box = cc.bounding_box()
+    assert box["height"] <= 96, box
+    line = w.page.evaluate("[...document.querySelectorAll('#cc p > span')].filter(s => s.offsetParent)"
+                           ".map(s => s.getClientRects().length)")
+    assert line == [1], line  # видна одна короткая строка, и она не переносится
+    assert P.CONSENT[lang]["short"] in cc.inner_text() and P.CONSENT[lang]["text"] not in cc.inner_text()
+    for sel in ('.intro a[href="https://t.me/gtdsrbot"]', "#signin .tgfb"):
+        b = w.page.locator(sel).bounding_box()
+        assert b["y"] + b["height"] <= box["y"], (sel, b, box)
+    w.check("итог")
+
+
+@pytest.mark.parametrize("path", ["/", "/en/", "/about", "/changes"])
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_phone_public_pages_readable_and_tappable(watch, monkeypatch, path, scheme):
+    """Телефон (SERBITO-448): ссылки шапки, подвала, строк под текстом, «Подробнее» и кнопки баннера — не меньше
+    44×44 px; текст — не мельче 14 px; серый текст — контраст не меньше 4.5:1 (WCAG AA) в светлой и тёмной теме."""
+    monkeypatch.setattr(A, "GA_ID", "G-TEST")
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "BOT_USERNAME", "gtd_test_bot")
+    w = watch("en" if path.startswith("/en") else "ru", viewport=PHONE, touch=True)
+    w.page.emulate_media(color_scheme=scheme)
+    w.goto(path)
+    banner(w, "баннер")
+    if path in ("/", "/en/"):
+        w.wait("#signin .tgfb", "кнопки входа")
+    small = w.page.eval_on_selector_all(TAPS, """els => els.filter(e => e.offsetParent).map(e => {
+      const r = e.getBoundingClientRect(); return [e.textContent.trim().slice(0, 20), Math.round(r.width), Math.round(r.height)];
+    }).filter(([, wd, h]) => wd < 44 || h < 44)""")
+    assert small == [], small
+    tiny = [t for t in w.page.evaluate(TEXT_NODES) if t[1] < 14]
+    assert tiny == [], tiny
+    low = [c for c in w.page.eval_on_selector_all(".pub *, #cc *", CONTRAST) if c[1] < 4.5]
+    assert low == [], low
+    w.check("итог")

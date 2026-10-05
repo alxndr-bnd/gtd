@@ -2815,7 +2815,7 @@ def ga_snippet(request: Request) -> str:
 def signin_methods() -> list[str]:
     """Способы входа, которые покажет лендинг, — те же условия, что /api/config отдаёт SPA."""
     on = {"google": GOOGLE_CLIENT_ID, "email": SMTP_PASSWORD or DEV, "bot": BOT_USERNAME if TOKEN else ""}
-    return [m for m in ("google", "email", "bot") if on[m]]
+    return [m for m in ("bot", "google", "email") if on[m]]  # порядок — как в loginScreen (index.html)
 
 
 # SPA — внешним файлом (SERBITO-444). В static/index.html словарь #i18n и код приложения лежат прямо в странице

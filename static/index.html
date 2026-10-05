@@ -14,8 +14,8 @@ if(location.hostname==='gtd.serbito.rs'){
 }
 </script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#5f6a7a;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706;--bad:#c62828}
-@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#8b96a6;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18;--ok:#3ec97b;--warn:#f0a03c;--bad:#f07070}}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#4b5563;--bd:#e3e7ee;--ac:#0F766E;--on-ac:#fff;--ok:#1f9d55;--warn:#d97706;--bad:#c62828}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--tx:#e6eaf0;--mut:#a1abb9;--bd:#2a323e;--ac:#2BA597;--on-ac:#0b1a18;--ok:#3ec97b;--warn:#f0a03c;--bad:#f07070}}
 :focus-visible{outline:2px solid var(--ac);outline-offset:1px} input:focus,textarea:focus,select:focus{outline:2px solid var(--ac);outline-offset:-1px}  /* фокус — в цвет логотипа, а не синий браузерный */
 *{accent-color:var(--ac)}
 *{box-sizing:border-box}
@@ -102,9 +102,11 @@ dialog input,dialog select,dialog textarea{width:100%;padding:8px 10px;border:1p
 .login .cap{margin:0}
 .login .botline{margin:16px 0 0} .login .botline a{color:var(--ac)}
 .gbtn{display:flex;min-height:44px} .login .gbtn{justify-content:center}
-/* Кнопки входа (SERBITO-354, G11): все во всю ширину блока, «Войти по коду» и Telegram — один заметный вид */
+/* Кнопки входа (SERBITO-354, G11): все во всю ширину блока, в цвет логотипа. Главная — одна, залитая (.pri,
+   SERBITO-448): Telegram, без бота — «Войти по коду»; Google рисует свою кнопку сам */
 #signin .tgfb,.login .tgfb{width:100%;min-height:44px}
-#signin .cap button:not(.pri),#signin .tgfb,.login .cap button:not(.pri),.login .tgfb{border-color:var(--ac);color:var(--ac);font-weight:600}
+#signin .cap button,#signin .tgfb,.login .cap button,.login .tgfb{border-color:var(--ac);font-weight:600}
+#signin .cap button:not(.pri),#signin .tgfb:not(.pri),.login .cap button:not(.pri),.login .tgfb:not(.pri){color:var(--ac)}
 .or{color:var(--mut);font-size:13px;margin:14px 0;display:flex;align-items:center;gap:10px}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--bd)}
 .msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em} #npmsg{margin:-10px 0 12px} .msg .rv{color:var(--tx);font-size:14px}
@@ -520,7 +522,7 @@ async function load(){
     if(!S.cfgLoaded){
       S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
       devLiveReload();
-      if(!S.cfg.user) return loginScreen();
+      if(!S.cfg.user) return loginScreen(S.cfg);  // настройки уже есть — второй раз не спрашиваем (SERBITO-448)
     }
     S.counts = await api('/counts');
     const resume = oauthResume(); if(resume) return location.replace(resume);  // вошли ради подключения приложения
@@ -592,16 +594,19 @@ function devLiveReload(){
   }, 1000);
 }
 
-async function loginScreen(){
-  S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
+// cfg — свежий /api/config от load(); без него (сессия истекла посреди работы) спрашиваем заново
+async function loginScreen(cfg){
+  S.cfg = cfg || await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
   routeApply(routeOf()); S.onb = null; S.me = null; S.fromLogin = true;  // следующий вход может быть в другой аккаунт;
   // раздел — из адреса: вошёл со ссылки /next — после входа откроется Next
   setLang($('#signin') ? document.documentElement.lang : autoLang());
   devLiveReload();
+  // Главный способ входа — один, первым и залитой кнопкой (SERBITO-448): Telegram — он сразу подключает бота
+  // с напоминаниями; без бота — код на почту. Порядок — как app.signin_methods (резерв высоты на лендинге)
   const c = S.cfg, parts = [];
+  if(c.bot) parts.push(tgHtml(`✈️ ${t('tg_signin')}`, true));
   if(c.google) parts.push('<div class="gbtn"></div>');
-  if(c.email) parts.push(emailFormHtml(t('get_code')));
-  if(c.bot) parts.push(tgHtml(`✈️ ${t('tg_signin')}`));
+  if(c.email) parts.push(emailFormHtml(t('get_code'), !c.bot));
   const buttons = `${parts.join(`<div class="or">${t('or')}</div>`) || `<p>${t('no_methods')}</p>`}
     <div class="msg" id="authmsg"></div>
     ${c.dev?'<p><a href="/dev-login"><button>Dev login</button></a></p>':''}`;
@@ -653,8 +658,8 @@ function mergeOffer(d){
 async function mergeApply(token){
   try{ await authPost('merge', {token}); load(); }catch(err){ authMsg(err.message); }
 }
-const emailFormHtml = label => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="${t('email_ph')}">
-  <button data-act="emailsend">${label}</button></div><div id="emcode"></div>`;
+const emailFormHtml = (label, pri) => `<div class="cap"><input id="em" type="email" autocomplete="email" placeholder="${t('email_ph')}">
+  <button data-act="emailsend"${pri ? ' class="pri"' : ''}>${label}</button></div><div id="emcode"></div>`;
 
 function mountGoogle(){
   const el = $('.gbtn'); if(!el || !S.cfg.google) return;
@@ -694,7 +699,7 @@ async function emailVerify(){
 // открывает oauth.telegram.org во всплывающем окне и просит номер телефона вместо того, чтобы открыть приложение.
 const TG_WIDGET_WAIT = 5000;  // мс: столько ждём iframe виджета, потом показываем запасную кнопку
 const tgWidgetOk = () => location.hostname === 'gtd.serbito.rs' && !matchMedia('(pointer: coarse)').matches && !!tgwState();
-const tgHtml = label => `<div class="tgw"></div><button data-act="tglogin" class="tgfb">${label}</button>
+const tgHtml = (label, pri) => `<div class="tgw"></div><button data-act="tglogin" class="tgfb${pri ? ' pri' : ''}">${label}</button>
   <div id="tgst" class="hint" style="margin:10px 0 0"></div>`;
 
 // Ответ виджета — переходом по data-auth-url, а не колбэком data-onauth (SERBITO-316): колбэк виджет собирает
