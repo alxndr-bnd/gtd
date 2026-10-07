@@ -507,8 +507,8 @@ addEventListener('popstate', () => {
 
 // Accept-Language — выбранный язык интерфейса: на нём сервер пишет ошибки и письма
 const hdrs = json => ({'Accept-Language': LANG, ...(json ? {'Content-Type':'application/json'} : {})});
-async function api(path, method='GET', body){
-  const r = await fetch('/api'+path, {method, headers:hdrs(body), body:body?JSON.stringify(body):undefined});
+async function api(path, method='GET', body, signal){
+  const r = await fetch('/api'+path, {method, headers:hdrs(body), body:body?JSON.stringify(body):undefined, signal});
   if(r.status===401) throw new Error('auth');
   return r.json();
 }
@@ -519,10 +519,12 @@ const toLocalInput = ts => { if(!ts) return ''; const d=new Date(ts*1000); d.set
 
 // Ответы перечитки приходят не по порядку (SERBITO-562): load(), начатая до Alt+↓ или перетаскивания, вернула бы
 // старый порядок и перерисовала его поверх нового. Рисует только последняя начатая load() и только при пустой
-// очереди перестановок: dndSave() сдвигает счётчик, а когда очередь опустеет, свою load() запустит сама
+// очереди перестановок: dndSave() сдвигает счётчик, а когда очередь опустеет, свою load() запустит сама.
+// Исключение — человек ушёл в другой раздел или проект: переставленного списка на экране нет, ждать очередь незачем
 let loadSeq = 0;
+const viewKey = () => S.view + '/' + (S.pid || '');
 async function load(){
-  const seq = ++loadSeq, stale = () => seq !== loadSeq || moving > 0;
+  const seq = ++loadSeq, stale = () => seq !== loadSeq || (moving > 0 && viewKey() === movedIn);
   try{
     if(!S.cfgLoaded){
       S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
@@ -1044,9 +1046,10 @@ const DND_VIEWS = ['inbox', 'next', 'waiting', 'someday'];
 const GRIP = () => `<span class="grip" aria-hidden="true" title="${t('dnd_grip')}">⠿</span>`;
 const dndHtml = (list, scope = 'list') => list.length ? `<div class="dnd" data-scope="${scope}">${list.map(itemHtml).join('')}</div>` : '';
 const DND = {}, DRAG_PX = 6, HOLD_MS = 350, EDGE_PX = 70;
-let moveQ = Promise.resolve(), moving = 0;
+let moveQ = Promise.resolve(), moving = 0, movedIn = null, MOVE_MS = 10000;
 // Порядок уходит на сервер по одному (иначе быстрые Alt+↓ посчитались бы от устаревших соседей); экран уже
-// переставлен — перечитываем данные, когда очередь опустела. Перечитки, начатые раньше, не рисуют (load, SERBITO-562)
+// переставлен — перечитываем данные, когда очередь опустела. Перечитки, начатые раньше, не рисуют (load, SERBITO-562).
+// Зависший запрос (плохая сеть) обрываем через MOVE_MS: иначе очередь не опустеет и экран не перерисуется
 const dndId = el => +(el.dataset.id || el.dataset.pid);
 function dndSave(el){
   dndTipDone();
@@ -1054,8 +1057,9 @@ function dndSave(el){
   const body = {prev:nb(el.previousElementSibling), next:nb(el.nextElementSibling)};
   const url = scope==='projects' ? `/projects/${id}/move` : `/items/${id}/move`;
   if(scope!=='projects') body.scope = scope;
-  moving++; loadSeq++;
-  moveQ = moveQ.then(() => api(url, 'POST', body)).catch(() => {})
+  moving++; loadSeq++; movedIn = viewKey();
+  const limit = () => AbortSignal.timeout ? AbortSignal.timeout(MOVE_MS) : undefined;
+  moveQ = moveQ.then(() => api(url, 'POST', body, limit())).catch(() => {})
     .finally(() => { if(--moving===0) load(); });
 }
 // Разовая подсказка (SERBITO-354, SERBITO-390): над первым списком задач, где есть что переставлять, пока человек
