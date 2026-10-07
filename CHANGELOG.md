@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- The "What's new" page now shows the last 10 versions; older ones open with one click.
+  - RU: Страница «Что нового» теперь показывает последние 10 версий; более ранние открываются одним нажатием.
+
 ## [0.43.0] - 2026-10-08
 
 ### Fixed
