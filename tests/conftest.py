@@ -11,6 +11,7 @@ import atexit
 import os
 import re
 import signal
+import time
 import uuid
 
 import psycopg
@@ -195,6 +196,26 @@ def login(mail):
 def tg_from(tg_id, name, lang):
     """Отправитель апдейта; lang — language_code клиента Telegram (None — клиент его не прислал)."""
     return {"id": tg_id, "first_name": name, **({"language_code": lang} if lang else {})}
+
+
+def kill_pool_connections(fill=True) -> int:
+    """Обрыв всех соединений пула, как при рестарте Cloud SQL: pg_terminate_backend для каждого бэкенда базы.
+    fill: сначала поднимает пул до max_size, чтобы мёртвыми были все пять соединений (худший случай).
+    Возвращает, сколько соединений было в пуле."""
+    if fill:
+        held = [A._pool.getconn() for _ in range(A._pool.max_size)]
+        for c in held:
+            A._pool.putconn(c)
+    n = A._pool.get_stats()["pool_size"]
+    db = A._pool.conninfo.rsplit("/", 1)[1]
+    with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
+        assert admin.execute("select count(pg_terminate_backend(pid)) from pg_stat_activity where datname=%s",
+                             (db,)).fetchone()[0] >= 1
+        for _ in range(100):  # бэкенды завершаются асинхронно
+            if not admin.execute("select 1 from pg_stat_activity where datname=%s", (db,)).fetchone():
+                break
+            time.sleep(0.05)
+    return n
 
 
 def bot_message(text, tg_id=777, name="Tom", lang=None):

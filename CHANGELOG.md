@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- After a database restart or a network failure, GTD now answers at once, not after about 15 seconds.
+  - RU: После перезапуска базы или сбоя сети GTD теперь отвечает сразу, а не примерно через 15 секунд.
+
 ## [0.42.0] - 2026-10-06
 
 ### Fixed
