@@ -65,8 +65,9 @@ jobs:
       - name: Chromium for the browser smoke
         run: python -m playwright install --with-deps chromium
 
+      # Параллельно, как гейт релиза (SERBITO-553): у каждого воркера своя временная база на этом Postgres
       - name: pytest
-        run: python -m pytest
+        run: python -m pytest -n auto --dist worksteal
 
   lock:
     runs-on: ubuntu-24.04

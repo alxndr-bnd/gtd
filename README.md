@@ -138,11 +138,13 @@ Or with Docker: `DEV=1 docker compose up --build` — see [self-hosting](docs/se
 
 ```bash
 .venv/bin/playwright install chromium   # once: the browser for the SPA smoke test
-.venv/bin/python -m pytest
+.venv/bin/python -m pytest -n auto --dist worksteal   # in parallel, as the release gate and CI; without -n: one process
 ```
 
 A temporary database in the local Postgres (`brew services start postgresql@17`, or `TEST_PG_URL`) is created
-and dropped automatically; Telegram, Google and email are stubbed. `tests/test_browser_smoke.py` opens every
+and dropped automatically, one per pytest-xdist worker. It is also dropped on Ctrl-C and SIGTERM; a test run
+drops `gtd_test_*` databases that are older than 1 hour and have no connections (left by `kill -9`).
+Telegram, Google and email are stubbed. `tests/test_browser_smoke.py` opens every
 section of the app and the public pages in headless Chromium and fails on any JS error. The release script runs
 the tests before tagging.
 

@@ -1,9 +1,16 @@
 """Тесты гоняются на временной базе в локальном Postgres (brew postgresql@17): база создаётся
 при старте сессии и удаляется в конце. Сервер — TEST_PG_URL (по умолчанию localhost:5432).
-Telegram и почта заменены заглушками: наружу тесты не ходят."""
+Telegram и почта заменены заглушками: наружу тесты не ходят.
+
+Параллельно (pytest -n auto, SERBITO-553): у каждого воркера xdist своя база gtd_test_<воркер>_<uuid>,
+главный процесс базы не создаёт и приложение не импортирует. База удаляется в конце сессии, при Ctrl-C,
+SIGTERM и при выходе процесса (atexit); что осталось после kill -9 — убирает старт следующей сессии
+(_drop_orphans)."""
 import asyncio
+import atexit
 import os
 import re
+import signal
 import uuid
 
 import psycopg
@@ -11,28 +18,93 @@ import pytest
 from fastapi.testclient import TestClient
 
 ADMIN_URL = os.getenv("TEST_PG_URL", "postgresql://localhost:5432/postgres")
-DB = f"gtd_test_{uuid.uuid4().hex[:8]}"
+WORKER = os.getenv("PYTEST_XDIST_WORKER", "main")  # gw0, gw1… в воркерах xdist
+DB = f"gtd_test_{WORKER}_{uuid.uuid4().hex[:8]}"
+ORPHAN_AGE_S = 3600  # чужая сессия жива, пока держит соединение; база старше часа и без соединений — сирота
+
+A = None  # модуль app: импортируется в pytest_configure, после env — он создаёт пул и схему при импорте
 
 
-def _admin(sql):
+def _admin(sql, args=None):
     with psycopg.connect(ADMIN_URL, autocommit=True, connect_timeout=5) as c:
-        c.execute(sql)
+        cur = c.execute(sql, args)
+        return cur.fetchall() if cur.description else None
 
 
-try:
-    _admin(f'create database "{DB}"')
-except psycopg.OperationalError as e:
-    pytest.exit(f"Нужен локальный Postgres ({ADMIN_URL}): brew services start postgresql@17\n{e}", 2)
+def _drop_orphans(like=r"gtd\_test\_%", age_s=ORPHAN_AGE_S):
+    """Базы gtd_test_* старше часа без единого соединения: остатки сессий, убитых без sessionfinish и atexit.
+    Возраст — время создания файла базы PG_VERSION (pg_stat_file, нужен суперпользователь: локально и в CI он)."""
+    try:
+        old = _admin("""select datname from pg_database d
+                        where datname like %s
+                          and not exists (select 1 from pg_stat_activity a where a.datname = d.datname)
+                          and (pg_stat_file('base/' || d.oid || '/PG_VERSION')).modification
+                              < now() - make_interval(secs => %s)""", (like, age_s))
+    except psycopg.Error:  # нет прав на pg_stat_file (не суперпользователь) — без уборки
+        return
+    for (name,) in old:
+        try:
+            _admin(f'drop database if exists "{name}"')  # без force: кто-то подключился — значит, не сирота
+        except psycopg.Error:
+            pass
 
-os.environ.update(DATABASE_URL=f"{ADMIN_URL.rsplit('/', 1)[0]}/{DB}", DEV="1", TELEGRAM_BOT_TOKEN="",
-                  SMTP_PASSWORD="", GOOGLE_CLIENT_ID="test-client", BASE_URL="http://localhost:8000")
 
-import app as A  # noqa: E402 — модуль создаёт пул и схему при импорте, поэтому после env
+def _xdist_controller(config) -> bool:
+    """Главный процесс pytest -n N: тесты гоняют воркеры, своей базы ему не нужно."""
+    n = getattr(config.option, "numprocesses", None)
+    return not hasattr(config, "workerinput") and n not in (None, 0, "0")
+
+
+_dropped = False
+
+
+def _drop_db():
+    global _dropped
+    if _dropped:
+        return
+    _dropped = True
+    if A is not None:
+        A._pool.close()
+    try:
+        _admin(f'drop database if exists "{DB}" with (force)')
+    except psycopg.Error:
+        pass  # сервер уже недоступен; базу уберёт _drop_orphans следующей сессии
+
+
+def _interrupt(signum, frame):
+    raise KeyboardInterrupt
+
+
+def pytest_configure(config):
+    global A
+    # SIGTERM (kill, закрытое окно терминала) — как Ctrl-C, и в главном процессе xdist тоже: он гасит воркеров
+    # штатно, они завершают сессию и удаляют свои базы
+    try:
+        signal.signal(signal.SIGTERM, _interrupt)
+    except ValueError:
+        pass  # не главный поток: остаются atexit и _drop_orphans
+    if not hasattr(config, "workerinput"):
+        try:
+            _drop_orphans()
+        except psycopg.OperationalError:
+            pass  # нет сервера — ниже скажем понятно
+    if _xdist_controller(config):
+        return
+    try:
+        _admin(f'create database "{DB}"')
+    except psycopg.OperationalError as e:
+        pytest.exit(f"Нужен локальный Postgres ({ADMIN_URL}): brew services start postgresql@17\n{e}", 2)
+    atexit.register(_drop_db)  # Ctrl-C в воркере xdist или выход без sessionfinish
+    os.environ.update(DATABASE_URL=f"{ADMIN_URL.rsplit('/', 1)[0]}/{DB}", DEV="1", TELEGRAM_BOT_TOKEN="",
+                      SMTP_PASSWORD="", GOOGLE_CLIENT_ID="test-client", BASE_URL="http://localhost:8000")
+    import app
+
+    A = app
 
 
 def pytest_sessionfinish(session, exitstatus):
-    A._pool.close()
-    _admin(f'drop database if exists "{DB}" with (force)')
+    if not _xdist_controller(session.config):
+        _drop_db()
 
 
 TABLES = ("users, sessions, user_sessions, login_tokens, projects, items, email_codes, tg_logins, merge_offers, "
