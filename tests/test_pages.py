@@ -414,6 +414,20 @@ def test_changes_page_lists_releases_newest_first(client, lang):
     assert f"localStorage.setItem('{P.SEEN_KEY}', '{P.VERSION_LABEL}')" in h
 
 
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_changes_page_collapses_old_releases(client, lang):
+    """Последние OPEN_RELEASES версий видны сразу, остальные — в свёрнутом <details> (SERBITO-484), но в HTML"""
+    h = client.get(P.PATHS[(lang, "changes")]).text
+    assert len(P.RELEASES) > P.OPEN_RELEASES  # иначе тест ничего не проверяет
+    top, older = re.split(r'<details class="older"[^>]*>', h)
+    assert len(re.findall(r'<section class="rel"', top)) == P.OPEN_RELEASES
+    n = len(P.RELEASES) - P.OPEN_RELEASES
+    label = f"Более ранние версии ({n})" if lang == "ru" else f"Older versions ({n})"
+    assert re.match(rf"<summary[^>]*>{re.escape(label)}</summary>", older)
+    assert len(re.findall(r'<section class="rel"', older)) == n and 'id="v0.1.0"' in older
+    assert "details.older " in h and ".open = true" in h  # ссылка #vX.Y.Z раскрывает блок
+
+
 @pytest.mark.parametrize("path, lang", PUBLIC.items())
 def test_footer_links_changes_and_shows_version(client, monkeypatch, path, lang):
     monkeypatch.setattr(P, "VERSION", "0.16.0")

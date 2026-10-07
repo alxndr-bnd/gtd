@@ -877,7 +877,7 @@ CHANGES = {
     "ru": {"intro": "Здесь — всё, что менялось в GTD для пользователей: новые возможности и исправления на сайте "
                     "и в Telegram-боте. Новые версии выходят несколько раз в неделю.",
            "lead": "Изменения GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
-           "dev": "Это локальная сборка (dev).",
+           "dev": "Это локальная сборка (dev).", "older": "Более ранние версии ({n})",
            "src": f'Тот же список на английском — <a href="{CHANGELOG_URL}">CHANGELOG.md</a> на GitHub.',
            "sections": {"Added": "Новое", "Changed": "Изменено", "Fixed": "Исправлено", "Security": "Безопасность"},
            "months": ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
@@ -885,7 +885,7 @@ CHANGES = {
     "en": {"intro": "This page lists every change in GTD that users can see: new features and fixes on the site "
                     "and in the Telegram bot. New versions come out several times a week.",
            "lead": "What changed in GTD, version by version, newest first.", "now": "You are using {v}.",
-           "dev": "This is a local build (dev).",
+           "dev": "This is a local build (dev).", "older": "Older versions ({n})",
            "src": f'Also on GitHub: <a href="{CHANGELOG_URL}">CHANGELOG.md</a>.',
            "sections": {"Added": "Added", "Changed": "Changed", "Fixed": "Fixed", "Security": "Security"},
            "months": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
@@ -903,6 +903,11 @@ def entry_html(text: str) -> str:
     return re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(text, quote=False))
 
 
+# Сколько последних версий видно сразу; остальные — под «Более ранние версии» (SEO-аудит, находка 11; SERBITO-484):
+# страница короче, а старые версии остаются в HTML для поиска и ссылок #vX.Y.Z
+OPEN_RELEASES = 10
+
+
 def release_html(r: changelog.Release, lang: str) -> str:
     c, i = CHANGES[lang], 1 if lang == "ru" else 0
     secs = "".join(f'<h3>{c["sections"][name]}</h3><ul>'
@@ -916,10 +921,18 @@ def changes(base: str, lang: str, ga: str) -> str:
     """Страница «Что нового» — такая же лёгкая, как /about. Открыл её — текущая версия считается увиденной."""
     c, path = CHANGES[lang], PATHS[(lang, "changes")]
     now = c["now"].format(v=VERSION_LABEL) if VERSION else c["dev"]
+    new, old = RELEASES[:OPEN_RELEASES], RELEASES[OPEN_RELEASES:]
+    rest = (f'<details class="older" style="margin-top:28px"><summary style="cursor:pointer;font-weight:600;padding:8px 0">'
+            f'{c["older"].format(n=len(old))}</summary>'
+            + "".join(release_html(r, lang) for r in old) + "</details>") if old else ""
     body = (f'<h1>{T[lang]["changes"]}</h1><p class="lead">{c["intro"]}</p><p>{c["lead"]} {now}</p>'
-            + "".join(release_html(r, lang) for r in RELEASES) + f'<p class="note" style="margin-top:32px">{c["src"]}</p>')
+            + "".join(release_html(r, lang) for r in new) + rest
+            + f'<p class="note" style="margin-top:32px">{c["src"]}</p>')
     title = json.dumps(f'GTD — {T[lang]["changes"]}', ensure_ascii=False)
+    # Ссылка #v0.3.0 на свёрнутую версию раскрывает блок «Более ранние версии»
     track = (f"<script>try{{ localStorage.setItem('{SEEN_KEY}', '{VERSION_LABEL}'); }}catch(e){{}}\n"
+             "try{ var o = location.hash && document.querySelector('details.older #' + CSS.escape(location.hash.slice(1)));\n"
+             "if(o){ o.closest('details').open = true; o.scrollIntoView(); } }catch(e){}\n"
              "if(typeof gtag === 'function') gtag('event', 'page_view', "
              f"{{page_location: location.origin + '{path}', page_title: {title}}});</script>")
     return public_page(base, lang, "changes", ga, body, track)
