@@ -1066,6 +1066,43 @@ def test_keyboard_reorder(watch):
     w.check("итог")
 
 
+def test_stale_load_after_keyboard_reorder(watch):
+    """SERBITO-562: load(), начатая до Alt+↓, отвечает уже после перестановки и её перечитки — со старым порядком.
+    Её ответ не рисуем: на экране остаётся новый порядок. Медленный ответ делаем сами: держим ответ сервера
+    на список Next (снят до перестановки) и отдаём его, когда перестановка сохранена и перечитана."""
+    w = watch()
+    uid, (first, second, third) = order_user(w)
+    held, armed = [], [True]
+
+    def hold(route):
+        if not armed[0]:
+            return route.continue_()
+        armed[0] = False
+        held.append((route, route.fetch()))  # ответ со старым порядком; отдадим позже
+
+    w.page.route("**/api/items?status=next", hold)
+    w.page.evaluate("() => { load(); }")  # перечитка, как от любого действия, — без ожидания
+    deadline = time.monotonic() + WAIT_MS / 1000
+    while not held:
+        assert time.monotonic() < deadline, "load() не запросила список Next"
+        w.page.wait_for_timeout(20)
+    w.page.locator("#cap").press("ArrowDown")
+    with saves(w, "Alt+↓ при медленной load()", "POST", move(first)):
+        w.page.keyboard.press("Alt+ArrowDown")
+    want = [second, first, third]
+    assert db_order(uid, "next") == want, "порядок не сохранился на сервере"
+    # Перечитка после очереди нарисовала новый порядок; старая load() всё ещё ждёт ответа
+    w.page.wait_for_function("moving === 0 && window.__loads === 1", timeout=SAVE_MS)
+    assert screen_order(w) == want
+    route, resp = held[0]
+    route.fulfill(response=resp)
+    settled(w)
+    assert screen_order(w) == want, "устаревший ответ load() вернул старый порядок"
+    assert w.page.get_attribute("main .it.sel", "data-id") == str(first)  # выбор не сбросило
+    w.page.unroute("**/api/items?status=next", hold)
+    w.check("итог")
+
+
 # ── Клавиатура и доступность (SERBITO-349) ──
 PHONE = (390, 844)
 FOCUSED = """() => { const a = document.activeElement;

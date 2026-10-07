@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- After you move a task, the list no longer jumps back to the old order for a moment.
+  - RU: После перестановки задачи список больше не возвращается на миг к старому порядку.
+
 ## [0.42.0] - 2026-10-06
 
 ### Fixed
