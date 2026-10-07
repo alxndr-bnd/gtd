@@ -203,10 +203,25 @@ if not DATABASE_URL:
 # change result type» (Sentry GTD-1, деплой добавляет колонки, пока старая ревизия ещё обслуживает)
 # check: перед выдачей пул проверяет соединение и заменяет мёртвое. Cloud SQL (через сокет /cloudsql) закрывает
 # простаивающие соединения, а пул отдавал такое запросу — 500 у Cloud Scheduler на /tasks/reminders (Sentry GTD-3).
-# max_idle/max_lifetime: простоявшие 5 минут и прожившие 30 пул закрывает сам, не дожидаясь обрыва снаружи
+# max_idle/max_lifetime: простоявшие 5 минут и прожившие 30 пул закрывает сам, не дожидаясь обрыва снаружи.
+# На Cloud Run CPU выдаётся только на время запроса, и фоновые задачи пула между запросами стоят: старое
+# соединение всё равно может оказаться мёртвым — его ловит check.
+# _check_pooled (SERBITO-561): одно мёртвое соединение обычно значит, что мертвы все (рестарт Cloud SQL, сбой сети).
+# Пул проверяет выданные по одному и между проверками ждёт 1, 2, 4, 8 с — с пятью мёртвыми запрос ждал ~15 с.
+# Поэтому на первом мёртвом проверяем сразу весь пул (pool.check): мёртвые уходят, пул открывает новые,
+# запрос получает новое соединение без пауз.
+# connect_timeout: новое соединение не висит дольше 5 с, если сервер не отвечает
+def _check_pooled(conn):
+    try:
+        ConnectionPool.check_connection(conn)
+    except Exception:
+        _pool.check()
+        raise
+
+
 _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5,
-                       kwargs={"row_factory": dict_row, "prepare_threshold": None},
-                       check=ConnectionPool.check_connection, max_idle=300, max_lifetime=1800, open=True)
+                       kwargs={"row_factory": dict_row, "prepare_threshold": None, "connect_timeout": 5},
+                       check=_check_pooled, max_idle=300, max_lifetime=1800, open=True)
 
 # Схема и миграции: идемпотентны, выполняются при каждом старте
 SCHEMA = """

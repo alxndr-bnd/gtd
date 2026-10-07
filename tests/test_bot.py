@@ -4,11 +4,9 @@ import re
 import time
 
 import httpx
-import psycopg
-import psycopg_pool
 
 import app as A
-from conftest import ADMIN_URL, bot_callback, bot_message, last_code, texts
+from conftest import bot_callback, bot_message, kill_pool_connections, last_code, texts
 
 
 def test_anyone_gets_an_account(tg):
@@ -365,21 +363,13 @@ def test_cron_reminders(client, tg, monkeypatch):
 def test_cron_reminders_survive_dead_pooled_connection(client, tg, monkeypatch):
     """Sentry GTD-3: Cloud SQL закрыл простаивающее соединение, пул отдал его запросу — 500 у Cloud Scheduler.
     Пул проверяет соединение при выдаче и заменяет мёртвое; напоминание уходит ровно один раз."""
-    # Каждое следующее мёртвое соединение пул проверяет после паузы 1, 2, 4, 8 с (backoff psycopg_pool):
-    # пять мёртвых — 15 с теста. Пауза не то, что проверяем, — сокращаем её; проверка и замена те же (SERBITO-553)
-    monkeypatch.setattr(psycopg_pool.base.AttemptWithBackoff, "INITIAL_DELAY", 0.01)
+    # Пауз 1, 2, 4, 8 с между проверками мёртвых соединений больше нет: первое мёртвое запускает проверку всего
+    # пула (SERBITO-561, время — в test_db_pool.py). Здесь — что мёртвое соединение не доходит до запроса
     lost = A._pool.get_stats().get("connections_lost", 0)
     bot_message("полить цветы")
     A.run("update items set remind_at=%s", (int(time.time()) - 1,))
     monkeypatch.setattr(A, "CRON_SECRET", "s3cret")
-    db = A._pool.conninfo.rsplit("/", 1)[1]
-    with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
-        assert admin.execute("select count(pg_terminate_backend(pid)) from pg_stat_activity where datname=%s",
-                             (db,)).fetchone()[0] >= 1
-        for _ in range(100):  # бэкенды завершаются асинхронно
-            if not admin.execute("select 1 from pg_stat_activity where datname=%s", (db,)).fetchone():
-                break
-            time.sleep(0.05)
+    kill_pool_connections(fill=False)
     r = client.post("/tasks/reminders", headers={"X-Cron-Secret": "s3cret"})
     assert r.status_code == 200 and r.json() == {"sent": 1}
     assert A._pool.get_stats().get("connections_lost", 0) > lost  # пул выдал мёртвое, проверил и заменил
