@@ -507,8 +507,8 @@ addEventListener('popstate', () => {
 
 // Accept-Language — выбранный язык интерфейса: на нём сервер пишет ошибки и письма
 const hdrs = json => ({'Accept-Language': LANG, ...(json ? {'Content-Type':'application/json'} : {})});
-async function api(path, method='GET', body){
-  const r = await fetch('/api'+path, {method, headers:hdrs(body), body:body?JSON.stringify(body):undefined});
+async function api(path, method='GET', body, signal){
+  const r = await fetch('/api'+path, {method, headers:hdrs(body), body:body?JSON.stringify(body):undefined, signal});
   if(r.status===401) throw new Error('auth');
   return r.json();
 }
@@ -517,35 +517,45 @@ const fmtTs = ts => ts ? new Date(ts*1000).toLocaleString(LANG==='en' ? 'en-GB' 
   {day:LANG==='en' ? 'numeric' : '2-digit', month:LANG==='en' ? 'short' : '2-digit', hour:'2-digit', minute:'2-digit'}) : '';
 const toLocalInput = ts => { if(!ts) return ''; const d=new Date(ts*1000); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); };
 
+// Ответы перечитки приходят не по порядку (SERBITO-562): load(), начатая до Alt+↓ или перетаскивания, вернула бы
+// старый порядок и перерисовала его поверх нового. Рисует только последняя начатая load() и только при пустой
+// очереди перестановок: dndSave() сдвигает счётчик, а когда очередь опустеет, свою load() запустит сама.
+// Исключение — человек ушёл в другой раздел или проект: переставленного списка на экране нет, ждать очередь незачем
+let loadSeq = 0;
+const viewKey = () => S.view + '/' + (S.pid || '');
 async function load(){
+  const seq = ++loadSeq, stale = () => seq !== loadSeq || (moving > 0 && viewKey() === movedIn);
   try{
     if(!S.cfgLoaded){
       S.cfg = await fetch('/api/config').then(r=>r.json()); S.cfgLoaded = true;
       devLiveReload();
       if(!S.cfg.user) return loginScreen(S.cfg);  // настройки уже есть — второй раз не спрашиваем (SERBITO-448)
     }
-    S.counts = await api('/counts');
+    const counts = await api('/counts');
     const resume = oauthResume(); if(resume) return location.replace(resume);  // вошли ради подключения приложения
-    onbTrack(S.counts.onboarding);
+    onbTrack(counts.onboarding);
     if(!S.me){ S.me = await api('/me'); applyLang(); }  // имя для кнопки аккаунта и язык интерфейса
-    S.projects = await api('/projects');
-    S.contexts = await api('/contexts');
-    if(S.pid && !S.projects.some(p => p.id===S.pid)){  // чужой, удалённый или завершённый проект — список проектов
+    const projects = await api('/projects');
+    const contexts = await api('/contexts');
+    if(S.pid && !projects.some(p => p.id===S.pid)){  // чужой, удалённый или завершённый проект — список проектов
       S.pid = null; if(!location.pathname.startsWith('/i/')) history.replaceState(null, '', viewPath());
     }
     if(S.view!=='account') S.newToken = null;  // показанный токен не переживает уход из «Аккаунта»
-    if(S.view==='account'){ S.me = await api('/me'); [S.tokens, S.apps] = await Promise.all([api('/tokens'), api('/oauth/apps')]); }
-    else if(S.view==='stats') S.stats = await api('/admin/stats');
-    else if(S.view==='projects' && !S.pid) S.items=[];
+    const d = {};  // данные раздела: в S — только если эта перечитка не устарела
+    if(S.view==='account'){ d.me = await api('/me'); [d.tokens, d.apps] = await Promise.all([api('/tokens'), api('/oauth/apps')]); }
+    else if(S.view==='stats') d.stats = await api('/admin/stats');
+    else if(S.view==='projects' && !S.pid) d.items=[];
     else if(S.view==='projects'){  // выполненные сервер отдаёт, только если проект их показывает (SERBITO-327)
-      const pj = S.projects.find(p=>p.id===S.pid);
-      S.items = await api(`/items?status=all&project_id=${S.pid}${pj && doneMode(pj)!=='hide' ? '&done=1' : ''}`);
+      const pj = projects.find(p=>p.id===S.pid);
+      d.items = await api(`/items?status=all&project_id=${S.pid}${pj && doneMode(pj)!=='hide' ? '&done=1' : ''}`);
     }
-    else if(S.view!=='review') S.items = await api('/items?status='+S.view);
-    else S.items = await api('/items?status=all');
+    else if(S.view!=='review') d.items = await api('/items?status='+S.view);
+    else d.items = await api('/items?status=all');
     // Экран Inbox — что делать дальше (SERBITO-326): под входящими «Скоро срок» и Next
-    [S.dueItems, S.nextItems] = S.view==='inbox'
+    [d.dueItems, d.nextItems] = S.view==='inbox'
       ? await Promise.all([api('/items?status=due'), api('/items?status=next')]) : [[], []];
+    if(stale()) return;
+    Object.assign(S, {counts, projects, contexts}, d);
     render();
     await openDeepLink();
   }catch(e){ if(e.message==='auth') return loginScreen(); console.error(e); }
@@ -1036,9 +1046,10 @@ const DND_VIEWS = ['inbox', 'next', 'waiting', 'someday'];
 const GRIP = () => `<span class="grip" aria-hidden="true" title="${t('dnd_grip')}">⠿</span>`;
 const dndHtml = (list, scope = 'list') => list.length ? `<div class="dnd" data-scope="${scope}">${list.map(itemHtml).join('')}</div>` : '';
 const DND = {}, DRAG_PX = 6, HOLD_MS = 350, EDGE_PX = 70;
-let moveQ = Promise.resolve(), moving = 0;
+let moveQ = Promise.resolve(), moving = 0, movedIn = null, MOVE_MS = 10000;
 // Порядок уходит на сервер по одному (иначе быстрые Alt+↓ посчитались бы от устаревших соседей); экран уже
-// переставлен — перечитываем данные, когда очередь опустела
+// переставлен — перечитываем данные, когда очередь опустела. Перечитки, начатые раньше, не рисуют (load, SERBITO-562).
+// Зависший запрос (плохая сеть) обрываем через MOVE_MS: иначе очередь не опустеет и экран не перерисуется
 const dndId = el => +(el.dataset.id || el.dataset.pid);
 function dndSave(el){
   dndTipDone();
@@ -1046,8 +1057,9 @@ function dndSave(el){
   const body = {prev:nb(el.previousElementSibling), next:nb(el.nextElementSibling)};
   const url = scope==='projects' ? `/projects/${id}/move` : `/items/${id}/move`;
   if(scope!=='projects') body.scope = scope;
-  moving++;
-  moveQ = moveQ.then(() => api(url, 'POST', body)).catch(() => {})
+  moving++; loadSeq++; movedIn = viewKey();
+  const limit = () => AbortSignal.timeout ? AbortSignal.timeout(MOVE_MS) : undefined;
+  moveQ = moveQ.then(() => api(url, 'POST', body, limit())).catch(() => {})
     .finally(() => { if(--moving===0) load(); });
 }
 // Разовая подсказка (SERBITO-354, SERBITO-390): над первым списком задач, где есть что переставлять, пока человек

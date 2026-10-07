@@ -1066,6 +1066,99 @@ def test_keyboard_reorder(watch):
     w.check("итог")
 
 
+def test_stale_load_after_keyboard_reorder(watch):
+    """SERBITO-562: load(), начатая до Alt+↓, отвечает уже после перестановки и её перечитки — со старым порядком.
+    Её ответ не рисуем: на экране остаётся новый порядок. Медленный ответ делаем сами: держим ответ сервера
+    на список Next (снят до перестановки) и отдаём его, когда перестановка сохранена и перечитана."""
+    w = watch()
+    uid, (first, second, third) = order_user(w)
+    held, armed = [], [True]
+
+    def hold(route):
+        if not armed[0]:
+            return route.continue_()
+        armed[0] = False
+        held.append((route, route.fetch()))  # ответ со старым порядком; отдадим позже
+
+    w.page.route("**/api/items?status=next", hold)
+    w.page.evaluate("() => { load(); }")  # перечитка, как от любого действия, — без ожидания
+    deadline = time.monotonic() + WAIT_MS / 1000
+    while not held:
+        assert time.monotonic() < deadline, "load() не запросила список Next"
+        w.page.wait_for_timeout(20)
+    w.page.locator("#cap").press("ArrowDown")
+    with saves(w, "Alt+↓ при медленной load()", "POST", move(first)):
+        w.page.keyboard.press("Alt+ArrowDown")
+    want = [second, first, third]
+    assert db_order(uid, "next") == want, "порядок не сохранился на сервере"
+    # Перечитка после очереди нарисовала новый порядок; старая load() всё ещё ждёт ответа
+    w.page.wait_for_function("moving === 0 && window.__loads === 1", timeout=SAVE_MS)
+    assert screen_order(w) == want
+    route, resp = held[0]
+    route.fulfill(response=resp)
+    settled(w)
+    assert screen_order(w) == want, "устаревший ответ load() вернул старый порядок"
+    assert w.page.get_attribute("main .it.sel", "data-id") == str(first)  # выбор не сбросило
+    w.page.unroute("**/api/items?status=next", hold)
+    w.check("итог")
+
+
+
+def hold_move(w, iid):
+    """Держим POST перестановки без ответа — как зависший запрос на плохой сети. Возвращает список задержанных."""
+    held = []
+    w.page.route(f"**{move(iid)}", lambda route: held.append(route))
+    return held
+
+
+def release(w, iid, held):
+    w.page.unroute(f"**{move(iid)}")
+    for route in held:
+        try:
+            route.abort()  # страница уже оборвала запрос сама — Playwright может отказать
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def test_stalled_move_does_not_block_navigation(watch):
+    """SERBITO-562, ревью: пока перестановка ждёт ответа, load() того же списка не рисует. Переход в другой
+    раздел рисуется сразу: переставленного списка на экране уже нет."""
+    w = watch()
+    uid, (first, second, third) = order_user(w)
+    waiting = A.capture(uid, "Ждём ответа @дом")["id"]
+    A.run("update items set status='waiting' where id=%s", (waiting,))
+    held = hold_move(w, first)
+    w.page.locator("#cap").press("ArrowDown")
+    w.page.keyboard.press("Alt+ArrowDown")
+    w.page.wait_for_function("moving === 1", timeout=WAIT_MS)
+    assert held, "перестановка не ушла на сервер"
+    w.page.click('nav > a[data-view="waiting"]')
+    w.wait(f'main .it[data-id="{waiting}"]', "Waiting при зависшей перестановке")
+    assert w.page.evaluate("moving") == 1  # запрос всё ещё висит, а экран уже новый
+    release(w, first, held)
+    w.check("итог")
+
+
+def test_stalled_move_times_out_and_redraws(watch):
+    """SERBITO-562, ревью: зависший POST перестановки обрывается через MOVE_MS. Очередь пустеет, её load()
+    рисует свежие данные — экран не застывает до конца сетевого таймаута браузера."""
+    w = watch()
+    uid, (first, second, third) = order_user(w)
+    w.page.evaluate("() => { MOVE_MS = 500; }")
+    held = hold_move(w, first)
+    w.page.locator("#cap").press("ArrowDown")
+    w.page.keyboard.press("Alt+ArrowDown")
+    w.page.wait_for_function("moving === 1", timeout=WAIT_MS)
+    late = A.capture(uid, "Добавлена в обход экрана @дом")["id"]
+    w.page.evaluate("() => { load(); }")  # перечитка того же списка, пока очередь не пуста: не рисует
+    w.page.wait_for_function("window.__loads === 0", timeout=WAIT_MS)
+    assert late not in screen_order(w)
+    settled(w)  # очередь опустела по таймауту, её load() дорисована
+    assert late in screen_order(w), "после таймаута перестановки список не перерисовался"
+    assert db_order(uid, "next")[:3] == [first, second, third], "оборванная перестановка не должна сохраниться"
+    release(w, first, held)
+    w.check("итог")
+
 # ── Клавиатура и доступность (SERBITO-349) ──
 PHONE = (390, 844)
 FOCUSED = """() => { const a = document.activeElement;
