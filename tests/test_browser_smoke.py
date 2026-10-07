@@ -36,19 +36,16 @@ GSI_STUB = ("window.google={accounts:{id:{initialize(){},"
 SECTIONS = ["inbox", "next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review"]
 
 
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 @pytest.fixture(scope="module")
 def server():
     """Приложение в фоновом потоке. lifespan выключен: иначе на выходе он закроет общий пул базы,
-    а фоновые циклы (бот, напоминания) смоуку не нужны."""
-    port = _free_port()
+    а фоновые циклы (бот, напоминания) смоуку не нужны.
+    Сокет занят до старта uvicorn: при pytest -n соседний воркер не успеет взять тот же порт (SERBITO-553)."""
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
     srv = uvicorn.Server(uvicorn.Config(A.app, host="127.0.0.1", port=port, lifespan="off", log_level="warning"))
-    th = threading.Thread(target=srv.run, daemon=True)
+    th = threading.Thread(target=srv.run, kwargs={"sockets": [sock]}, daemon=True)
     th.start()
     deadline = time.monotonic() + 10
     while not srv.started:
@@ -57,6 +54,7 @@ def server():
     yield f"http://127.0.0.1:{port}"
     srv.should_exit = True
     th.join(5)
+    sock.close()
 
 
 @pytest.fixture(scope="module")
@@ -934,6 +932,23 @@ def move(iid):
     return f"/api/items/{iid}/move"
 
 
+def track_loads(w):
+    """window.__loads — сколько load() страницы ещё идёт. load() читает S.view и S.pid между запросами и рисует
+    в конце: перечитка, начатая до действия, может дорисовать старый порядок поверх нового (SERBITO-553,
+    test_keyboard_reorder под pytest -n). Перед действием и проверкой экрана ждём settled()."""
+    w.page.evaluate("""() => {
+        if (window.__loads !== undefined) return;
+        const orig = window.load;
+        window.__loads = 0;
+        window.load = async (...a) => { window.__loads++; try { return await orig(...a); } finally { window.__loads--; } };
+    }""")
+
+
+def settled(w):
+    """Очередь перестановок пуста и ни одна перечитка (load) не идёт."""
+    w.page.wait_for_function("moving === 0 && window.__loads === 0", timeout=SAVE_MS)
+
+
 def order_user(w, lang="ru"):
     # Подсказку о перестановке (SERBITO-390) уже закрыли: её проверяют свои тесты
     uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden,dnd_tip_seen) values(0,'Smoke',%s,%s,true,true) "
@@ -941,8 +956,10 @@ def order_user(w, lang="ru"):
     a, b, c = (A.capture(uid, f"{t} @дом")["id"] for t in ("Первая", "Вторая", "Третья"))
     w.goto("/dev-login")
     w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    track_loads(w)
     w.page.click('nav > a[data-view="next"]')
     w.wait('nav > a.on[data-view="next"]', f"[{lang}] Next")
+    settled(w)
     return uid, (a, b, c)  # на экране: Первая, Вторая, Третья — новые в конце
 
 
@@ -1026,7 +1043,7 @@ def test_keyboard_reorder(watch):
         w.page.keyboard.press("Alt+ArrowUp")
         assert screen_order(w) == [second, first, third]
     assert db_order(uid, "next") == [second, first, third], "порядок не сохранился на сервере"
-    w.page.wait_for_function("moving === 0", timeout=SAVE_MS)  # очередь пуста — дальше её перечитка списка
+    settled(w)  # очередь пуста и её перечитка списка дорисована
 
     # Проект: свой порядок, та же клавиша
     extra = A.capture(uid, "задача #Ремонт")
@@ -1036,6 +1053,7 @@ def test_keyboard_reorder(watch):
     w.page.click('nav > a[data-view="projects"]')
     w.page.click("main .it.pj .t")
     w.wait('main .dnd[data-scope="project"] > .it', "проект")
+    settled(w)  # переходы «Проекты» → проект: обе перечитки дорисованы, дальше экран меняет только Alt+↓
     proj = screen_order(w)
     w.page.locator("#cap").press("ArrowDown")
     with saves(w, "Alt+↓ в проекте", "POST", move(proj[0])):

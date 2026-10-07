@@ -147,6 +147,7 @@ def repo(tmp_path):
            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com"}
     env.pop("PYTEST_ADDOPTS", None)
+    env["PYTEST_XDIST_AUTO_NUM_WORKERS"] = "1"  # гейт идёт с -n auto; на одном тесте хватит одного воркера
     git("init", "-q", "--bare", str(remote), cwd=tmp_path, env=env)
     git("init", "-q", "-b", "main", cwd=work, env=env)
     for d in (work, remote):  # git пишет во временные репозитории, а не в настоящий
@@ -182,6 +183,7 @@ def test_release_script_dates_the_entry_and_uses_it_for_github_release(repo):
     git("commit", "-qam", "entry", cwd=work, env=env)
     r = release()
     assert r.returncode == 0, r.stdout + r.stderr
+    assert "1 worker [1 item]" in r.stdout  # гейт параллельный: pytest-xdist (SERBITO-553)
     top = C.parse(log.read_text())[1]
     assert (top.version, top.date, top.entries) == ("0.3.0", date.today().isoformat(), [("Three", "Три")])
     assert git("status", "--porcelain", "-uno", cwd=work, env=env) == ""  # переименование — в релизном коммите

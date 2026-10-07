@@ -40,9 +40,10 @@ fi
 notes="$("$PY" changelog.py notes "${next_tag#v}")"
 
 # --- гейт: тесты (локальный Postgres, временная база) и браузерный смоук SPA в Chromium.
-# Нет Chromium — тест падает с подсказкой: .venv/bin/playwright install chromium ---
+# Нет Chromium — тест падает с подсказкой: .venv/bin/playwright install chromium.
+# Параллельно, по воркеру на ядро; у каждого воркера своя временная база (SERBITO-553) ---
 echo "==> pytest"
-"$PY" -m pytest
+"$PY" -m pytest -n auto --dist worksteal
 
 git add -u
 if [[ $# -gt 0 ]]; then
