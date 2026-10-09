@@ -88,8 +88,8 @@ def test_public_page_seo_tags(client, path, lang):
     # Подвал: оговорка о товарном знаке, другие проекты с UTM, подпись No Handoff
     assert TM[lang] in h and 'href="https://gettingthingsdone.com"' in h
     assert ("Другие проекты" if lang == "ru" else "Other projects") in h
-    for _, url, ru, en in P.PRODUCTS:
-        assert f'href="{url}?utm_source=gtd&utm_medium=crosspromo&utm_campaign=footer"' in h
+    for name, url, ru, en in P.PRODUCTS:
+        assert f'href="{P.product_href(name, url)}"' in h
         assert (ru if lang == "ru" else en) in h
     assert 'href="https://www.linkedin.com/company/nohandoff/">No Handoff</a>' in h
     assert ("Сделано" if lang == "ru" else "Made by") in h
@@ -795,3 +795,11 @@ def test_free_gtd_apps_lists_five_apps_with_sources(client):
         assert f"<td>{P.APPS[app]['name']}</td>" in body, app
         for u, _ in P.APPS[app]["src"]:
             assert f'href="{u}"' in body, u
+
+
+def test_footer_javi_link_has_its_own_campaign():
+    """SERBITO-598: Javi — своя кампания crosslink/javi, остальные проекты — общее кросс-промо."""
+    assert P.product_href("Javi", "https://javi.serbito.rs/") == (
+        "https://javi.serbito.rs/?utm_source=gtd&utm_medium=crosslink&utm_campaign=javi&utm_content=footer")
+    assert P.product_href("Serbito", "https://serbito.rs/") == (
+        "https://serbito.rs/?utm_source=gtd&utm_medium=crosspromo&utm_campaign=footer")
