@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-10-10
+
 ### Changed
 
 - The footer now says what Javi does: Viber and SMS delivery updates for shops in Serbia.
@@ -471,7 +473,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.46.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.47.0...HEAD
+[0.47.0]: https://github.com/alxndr-bnd/gtd/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/alxndr-bnd/gtd/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/alxndr-bnd/gtd/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/alxndr-bnd/gtd/compare/v0.43.0...v0.44.0
