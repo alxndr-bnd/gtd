@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- On the Inbox page, your unsorted tasks now have their own heading, like "Due soon" and "Next", with more space under the quick-capture field.
+  - RU: На странице Inbox у неразобранных задач теперь свой заголовок, как у «Скоро срок» и Next, и больше места под полем быстрой записи.
+
 ## [0.44.0] - 2026-10-08
 
 ### Changed

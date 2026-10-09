@@ -164,7 +164,7 @@ nav a.ccl{color:var(--mut);font-size:13px}
 nav small.ver{color:var(--mut);margin-left:4px} nav .newdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ac);margin-left:6px;vertical-align:middle}  /* «Настройки cookie»: снова открывает баннер согласия (SERBITO-319, pages.CONSENT) */
 @media(max-width:700px){nav .keys{display:none}}
 .below{margin-top:56px} .below h3{font-size:17px;margin:0 0 4px} .below .hint{margin:0 0 12px}
-.dnd + .below,.below + .below{margin-top:32px}  /* под задачами Inbox — ближе: это продолжение того же экрана */
+.hero + .inbox-sec,.below + .below{margin-top:32px}  /* задачи Inbox и разделы под ними — один шаг между разделами (SERBITO-581) */
 .hero .inbox-empty{font-weight:600;margin:0 0 4px}
 @media(max-width:700px){.hero.solo{padding-top:calc(50vh - 150px)}}
 .aco{padding:8px 14px;cursor:pointer} .aco.on{background:var(--ac);color:var(--on-ac)}
@@ -221,6 +221,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "project": ["В проекте пока нет задач — добавь первую в поле выше", ""]},
   "empty_default": "Пусто 🎉",
   "inbox_empty": "Inbox пуст 🎉",
+  "inbox_sec": "🗂 Не разобрано",
   "due_soon": "⏰ Скоро срок", "due_hint": "Просроченные и на ближайшие 3 дня — из всех списков", "overdue": "просрочено",
   "ex": "Например: «{ex}»",
   "onb": [["capture", "Запиши 3 мысли", "в поле ниже, не разбирая"],
@@ -336,6 +337,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "project": ["No tasks in this project yet — add the first one in the field above", ""]},
   "empty_default": "Empty 🎉",
   "inbox_empty": "Inbox is empty 🎉",
+  "inbox_sec": "🗂 Not sorted yet",
   "due_soon": "⏰ Due soon", "due_hint": "Overdue or due in the next 3 days, from all lists", "overdue": "overdue",
   "ex": "For example: “{ex}”",
   "onb": [["capture", "Capture 3 thoughts", "in the field below, no sorting yet"],
@@ -993,10 +995,11 @@ function render(){
       const next = S.nextItems.filter(i => !dueIds.has(i.id));
       const sec = (cls, title, hint, list, cards = list.map(itemHtml).join('')) => list.length
         ? `<section class="below ${cls}"><h3>${title}</h3><div class="hint">${hint}</div>${cards}</section>` : '';
+      // Задачи Inbox — свой раздел с заголовком, как «Скоро срок» и Next (SERBITO-581); пустой Inbox — сообщение под полем
       hero = `${onb}<section class="hero ${onb||items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
-        ${items.length?`<div class="hint">${HELP.inbox}</div>`
-          :`<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
-      body = dndHtml(items) + sec('due-soon', t('due_soon'), t('due_hint'), due)  // «Скоро срок» — по дате, не переставляется
+        ${items.length ? '' : `<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
+      body = sec('inbox-sec', t('inbox_sec'), HELP.inbox, items, dndHtml(items))
+        + sec('due-soon', t('due_soon'), t('due_hint'), due)  // «Скоро срок» — по дате, не переставляется
         + sec('next-sec', VIEWS[1][1], HELP.next, next, dndHtml(next));
     } else if(pj){ body = projectHtml(pj, items); topCap = false; }  // поле захвата — своё, под заголовком проекта
     else body = `<h2>${VIEWS.find(v=>v[0]===S.view)[1]}</h2>${items.length?`<div class="hint">${HELP[S.view]||''}</div>`:''}

@@ -767,8 +767,10 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
 
 
 # ── Экран Inbox: что делать дальше (SERBITO-326) ──
-INBOX_TEXT = {"ru": {"empty": "Inbox пуст", "due": "Скоро срок", "next": "Next", "over": "просрочено"},
-              "en": {"empty": "Inbox is empty", "due": "Due soon", "next": "Next", "over": "overdue"}}
+INBOX_TEXT = {"ru": {"empty": "Inbox пуст", "due": "Скоро срок", "next": "Next", "over": "просрочено",
+                     "sec": "Не разобрано", "hint": "Всё, что ещё не осмыслено"},
+              "en": {"empty": "Inbox is empty", "due": "Due soon", "next": "Next", "over": "overdue",
+                     "sec": "Not sorted yet", "hint": "Everything not yet clarified"}}
 
 
 def section_ids(w, cls):
@@ -810,17 +812,27 @@ def test_inbox_what_to_do_next(watch, lang):
     assert sorted(section_ids(w, "next-sec")) == sorted([plain, later])  # просроченный next не повторяется
     assert tx["over"] in w.page.inner_text(f'main .due-soon .it[data-id="{over}"] .due.over')
     assert not w.page.locator(f'main .it[data-id="{wait}"] .due.over').count()
-    assert not w.page.locator("main .hero ~ .dnd").count()  # во Inbox пусто
+    assert not w.page.locator("main .inbox-sec").count()  # во Inbox пусто — нет и его раздела
 
     # 3. Во Inbox есть задачи, одна из них со сроком — она во Inbox, а не в «Скоро срок»
     inb = A.capture(uid, "Во входящих со сроком")["id"]
     A.run("update items set remind_at=%s where id=%s", (now + 600, inb))
     w.page.reload()
-    w.wait(f'main > .dnd > .it[data-id="{inb}"]', f"[{lang}] задача во Inbox")
+    w.wait(f'main .inbox-sec > .dnd > .it[data-id="{inb}"]', f"[{lang}] задача во Inbox")
     assert not w.page.locator("main .inbox-empty").count()
     assert inb not in section_ids(w, "due-soon") and section_ids(w, "due-soon") == [over, wait]
     order = w.page.eval_on_selector_all("main > .dnd, main > .below", "els => els.map(e => e.className)")
-    assert order[0] == "dnd" and "due-soon" in order[1] and "next-sec" in order[2]
+    assert len(order) == 3 and "inbox-sec" in order[0] and "due-soon" in order[1] and "next-sec" in order[2]
+    # У задач Inbox — свой заголовок с подсказкой, как у других разделов (SERBITO-581); под полем подсказки нет
+    assert tx["sec"] in w.page.inner_text("main .inbox-sec > h3")
+    assert tx["hint"] in w.page.inner_text("main .inbox-sec > h3 + .hint")
+    assert not w.page.locator("main .hero .hint").count()
+    # Поле → раздел Inbox — тот же шаг, что между разделами
+    gaps = w.page.evaluate("""() => {
+      const r = s => document.querySelector(s).getBoundingClientRect();
+      return [r('main .inbox-sec').top - r('main .hero .cap').bottom, r('main .next-sec').top - r('main .due-soon').bottom];
+    }""")
+    assert abs(gaps[0] - gaps[1]) < 1 and gaps[0] >= 24, gaps
 
     # Карточки — обычные: клик открывает, кнопки работают
     w.page.click(f'main .due-soon .it[data-id="{over}"]', position={"x": 4, "y": 4})
@@ -1814,12 +1826,12 @@ def test_touch_drag_grip_and_tip(watch):
     # Во Inbox у карточек ряд кнопок списков — ручка всё равно видна и под палец
     A.capture(uid, "Во входящих")
     w.goto("/")
-    grip = "main > .dnd > .it .grip"  # список самого Inbox (Next ниже — свой)
+    grip = "main .inbox-sec .dnd > .it .grip"  # список самого Inbox (Next ниже — свой)
     w.wait(grip, "Inbox")
     box = w.page.locator(grip).bounding_box()
     assert w.page.is_visible(grip) and box["width"] >= 44 and box["height"] >= 44, box
-    card = w.page.locator("main > .dnd > .it").bounding_box()
-    for sel in (grip, "main > .dnd > .it a.num", "main > .dnd > .it .act button.del"):  # ничего не вылезает за карточку
+    card = w.page.locator("main .inbox-sec .dnd > .it").bounding_box()
+    for sel in (grip, "main .inbox-sec .dnd > .it a.num", "main .inbox-sec .dnd > .it .act button.del"):  # ничего не вылезает за карточку
         b = w.page.locator(sel).bounding_box()
         assert b["x"] + b["width"] <= card["x"] + card["width"] + 0.5, (sel, b, card)
     assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0]
