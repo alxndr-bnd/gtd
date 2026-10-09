@@ -74,10 +74,18 @@ PRODUCTS = [
     ("Planning Poker", "https://poker.serbito.rs/",
      "Бесплатный planning poker для скрам-команд, без регистрации", "Free planning poker for scrum teams, no sign-up"),
     ("Javi", "https://javi.serbito.rs/",
-     "Уведомления о доставке для малого бизнеса в Сербии", "Delivery notifications for small businesses in Serbia"),
+     "Viber и SMS о доставке для магазинов в Сербии", "Viber and SMS delivery updates for shops in Serbia"),
     ("Serbito", "https://serbito.rs/", "Объявления в Сербии", "Classifieds in Serbia"),
 ]
 FOOTER_UTM = "?utm_source=gtd&utm_medium=crosspromo&utm_campaign=footer"
+# Javi набирает первые магазины пассивной воронкой (SERBITO-598): у его ссылок своя кампания, чтобы GA
+# видел переходы из gtd отдельно от общего кросс-промо
+PRODUCT_UTM = {"Javi": "?utm_source=gtd&utm_medium=crosslink&utm_campaign=javi&utm_content=footer"}
+
+
+def product_href(name: str, url: str) -> str:
+    """Ссылка на другой проект No Handoff из подвала — с UTM этого проекта."""
+    return url + PRODUCT_UTM.get(name, FOOTER_UTM)
 
 T = {
     "ru": {
@@ -431,7 +439,7 @@ def footer(lang: str, consent: bool = False) -> str:
     """Другие проекты No Handoff, открытый код, подпись и оговорка о товарном знаке — на всех публичных страницах.
     consent — задан GA: тогда и ссылка «Настройки cookie»."""
     t, i = T[lang], 2 if lang == "ru" else 3
-    items = "".join(f'<li><a href="{p[1]}{FOOTER_UTM}">{p[0]}</a> — {p[i]}</li>' for p in PRODUCTS)
+    items = "".join(f'<li><a href="{product_href(p[0], p[1])}">{p[0]}</a> — {p[i]}</li>' for p in PRODUCTS)
     contact = f' · <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>' if CONTACT_EMAIL else ""
     # Снова открыть баннер согласия (SERBITO-319); без JS — ссылка на раздел политики о cookie
     cookie = (f' · <a href="{PATHS[(lang, "privacy")]}#cookies" data-cc-open>{CONSENT[lang]["settings"]}</a>'

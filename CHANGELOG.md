@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- The footer now says what Javi does: Viber and SMS delivery updates for shops in Serbia.
+  - RU: Подвал теперь объясняет, что делает Javi: Viber и SMS о доставке для магазинов в Сербии.
+
 ## [0.44.0] - 2026-10-08
 
 ### Changed
