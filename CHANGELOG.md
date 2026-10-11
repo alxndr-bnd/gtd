@@ -16,6 +16,15 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- Archive a finished project. Choose to archive its open tasks with it or to keep them active without a project. The archive is under Projects, and "Restore" brings a project back with its tasks.
+  - RU: Законченный проект можно убрать в архив: вместе с открытыми задачами или только сам проект, а задачи останутся в работе. Архив — в Projects, «Вернуть» возвращает проект вместе с его задачами.
+- When you complete the last task of a project, the app and the bot ask if you want to archive it. Weekly Review lists projects with no tasks.
+  - RU: Когда закрыта последняя задача проекта, приложение и бот спрашивают, убрать ли его в архив. Weekly Review показывает проекты без задач.
+- AI assistants can archive and restore projects too.
+  - RU: AI-ассистенты тоже могут убирать проекты в архив и возвращать их.
+
 ## [0.48.0] - 2026-10-11
 
 ### Fixed

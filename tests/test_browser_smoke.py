@@ -2321,3 +2321,98 @@ def test_phone_public_pages_readable_and_tappable(watch, monkeypatch, path, sche
     low = [c for c in w.page.eval_on_selector_all(".pub *, #cc *", CONTRAST) if c[1] < 4.5]
     assert low == [], low
     w.check("итог")
+
+
+def archive_user(lang="en"):
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) "
+                "returning id", (int(time.time()), lang))
+    kitchen = [A.capture(uid, t)["id"] for t in ("Buy tiles #Kitchen", "Call Marko #Kitchen")]
+    trip = A.capture(uid, "Pack bags #Trip")["id"]
+    A.project_by_title(uid, "Empty")
+    return uid, kitchen, trip
+
+
+def proj_status(uid, title):
+    return A.row("select status, archive_mode from projects where user_id=%s and title=%s", (uid, title))
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_archive_project_both_modes_and_restore(watch, lang):
+    """SERBITO-602: «В архив» в списке проектов спрашивает, что делать с открытыми задачами; архив — свой экран
+    /archive с задачами и «Вернуть»; на странице проекта — «только проект», задачи остаются в Next без него."""
+    uid, kitchen, _ = archive_user(lang)
+    pid = A.row("select id from projects where user_id=%s and title='Kitchen'", (uid,))["id"]
+    w = watch(lang)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    w.page.click('nav > a[data-view="projects"]')
+    w.wait('main .it.pj [data-act="archproj"]', f"[{lang}] проекты")
+    w.page.click('main .it.pj:has-text("Kitchen") [data-act="archproj"]')
+    w.wait('#dlg[open] [data-arch="project"]', f"[{lang}] диалог архива")
+    with saves(w, f"[{lang}] архив с задачами", "POST", f"/api/projects/{pid}/archive"):
+        w.page.click('#dlg [data-arch="all"]')
+    assert proj_status(uid, "Kitchen") == {"status": "archived", "archive_mode": "all"}
+    assert {A.row("select status from items where id=%s", (i,))["status"] for i in kitchen} == {"archived"}
+    w.wait('main a[data-view="archive"]', f"[{lang}] ссылка на архив")
+    assert not w.page.locator('main .it.pj:has-text("Kitchen")').count()
+
+    w.page.click('main a[data-view="archive"]')
+    w.wait('main [data-act="restoreproj"]', f"[{lang}] экран архива")
+    assert w.page.url.endswith("/archive")
+    assert w.page.locator('nav > a.on[data-view="projects"]').count()  # архив — часть Projects
+    w.page.click("main details summary")
+    assert w.page.locator("main .ai").count() == 2
+    w.page.click('main .ai a[data-act="opennum"] >> nth=0')  # номер открывает карточку задачи из архива
+    w.wait("#dlg[open] #ef", f"[{lang}] карточка из архива")
+    with saves(w, f"[{lang}] сохранить карточку из архива", "PATCH", f"/api/items/{kitchen[0]}"):
+        w.page.click('#ef button[value="ok"]')
+    assert A.row("select status, project_id from items where id=%s", (kitchen[0],)) == {"status": "archived",
+                                                                                     "project_id": pid}
+    w.wait('main [data-act="restoreproj"]', f"[{lang}] снова архив")
+    with saves(w, f"[{lang}] вернуть", "POST", f"/api/projects/{pid}/restore"):
+        w.page.click('main [data-act="restoreproj"]')
+    w.wait("main .empty", f"[{lang}] архив пуст")
+    assert proj_status(uid, "Kitchen")["status"] == "active"
+    assert {A.row("select status from items where id=%s", (i,))["status"] for i in kitchen} == {"next"}
+
+    # Страница проекта: «только проект» — задачи остаются в Next, без проекта; экран — список проектов
+    w.page.click('main [data-act="back"]')
+    w.page.click('main .it.pj:has-text("Kitchen") .t')
+    w.wait('main h2.pjh [data-act="archproj"]', f"[{lang}] страница проекта")
+    w.page.click('main h2.pjh [data-act="archproj"]')
+    w.wait('#dlg[open] [data-arch="project"]', f"[{lang}] диалог на странице проекта")
+    w.page.click('#dlg [data-arch="project"]')
+    w.wait("#toast:not([hidden])", f"[{lang}] тост архива")
+    assert w.page.url.endswith("/projects")
+    assert proj_status(uid, "Kitchen") == {"status": "archived", "archive_mode": "project"}
+    assert [A.row("select status, project_id from items where id=%s", (i,)) for i in kitchen] == \
+        [{"status": "next", "project_id": None}] * 2
+    w.check(f"[{lang}] итог")
+
+
+def test_archive_offer_after_last_task_and_in_review(watch):
+    """SERBITO-602: галочка на последней задаче проекта — вопрос «Убрать в архив?» (не молча); пустые проекты —
+    в Weekly Review с кнопкой «В архив»."""
+    uid, _, trip = archive_user()
+    w = watch("en")
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    w.page.click('nav > a[data-view="next"]')
+    w.wait(f'main .it[data-id="{trip}"]', "Next")
+    w.page.click(f'main .it[data-id="{trip}"] input[data-act="toggle"]')
+    w.wait('#dlg[open] [data-ao="1"]', "вопрос об архиве")
+    assert "Trip" in w.page.inner_text("#dlg h3")
+    assert proj_status(uid, "Trip")["status"] == "active"
+    w.page.click('#dlg [data-ao=""]')  # «Не сейчас»
+    assert proj_status(uid, "Trip")["status"] == "active"
+
+    w.page.click('nav > a[data-view="review"]')
+    w.wait('main .rv [data-act="archproj"]', "пустые проекты в Review")
+    names = w.page.eval_on_selector_all('main .rv .ar a', "els => els.map(e => e.textContent)")
+    assert names == ["Trip", "Empty"]
+    w.page.click('main .rv .ar:has-text("Empty") [data-act="archproj"]')
+    w.wait('#dlg[open] [data-arch="all"]', "диалог архива из Review")
+    w.page.click('#dlg [data-arch="all"]')
+    w.page.wait_for_function("document.querySelectorAll('main .rv .ar').length === 1", timeout=SAVE_MS)
+    assert proj_status(uid, "Empty")["status"] == "archived"
+    w.check("итог")

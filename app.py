@@ -339,6 +339,16 @@ create index if not exists api_tokens_user on api_tokens(user_id);
 -- при выкатке может работать прежняя ревизия: что она запишет, переедет при следующем старте
 alter table items add column if not exists contexts text[] not null default '{}';
 update items set contexts = array[context], context = null where context is not null;
+-- Архив проектов (SERBITO-602): projects.status — active или archived; archive_mode — как убрали: all (открытые
+-- задачи ушли в архив вместе с проектом) или project (задачи остались в работе без проекта). Задача в архиве —
+-- status archived, а список, из которого она ушла, — в archived_from: туда она вернётся при восстановлении.
+-- Прежняя кнопка «Завершить» ставила проекту status done и задачи не трогала — это архив в режиме project.
+-- Прежняя ревизия при выкатке может ещё поставить done — переедет при следующем старте
+alter table projects add column if not exists archived_at bigint;
+alter table projects add column if not exists archive_mode text;
+alter table items add column if not exists archived_from text;
+update projects set status='archived', archive_mode='project', archived_at=coalesce(archived_at, created)
+where status='done';
 """
 
 with _pool.connection() as _c:
@@ -436,6 +446,10 @@ TEXTS = {
         "not_found_task": "Не нашёл такую задачу",
         "login_link": "Вход (10 минут, одноразовая):\n{url}",
         "cb_done": "✅ Готово", "cb_snooze": "💤 Напомню через час", "cb_next": "⏭ В Next", "cb_missing": "Не найдено",
+        "archive_offer": "В проекте #{p} больше нет задач. Убрать его в архив?",
+        "btn_archive": "🗄 В архив", "btn_archive_no": "Не сейчас",
+        "archive_ok": "🗄 Проект #{p} в архиве. Вернуть его можно на сайте: Projects → Архив",
+        "archive_later": "Хорошо, проект #{p} остаётся в Projects",
         "tg_link_stale": "Ссылка устарела — нажми кнопку на сайте ещё раз",
         "tg_confirm_link": "привязать этот Telegram к аккаунту GTD {who}",
         "tg_confirm_login": "войти в GTD в браузере",
@@ -524,6 +538,10 @@ TEXTS = {
         "login_link": "Sign-in link (one-time, valid for 10 minutes):\n{url}",
         "cb_done": "✅ Done", "cb_snooze": "💤 I'll remind you in an hour", "cb_next": "⏭ Moved to Next",
         "cb_missing": "Not found",
+        "archive_offer": "Project #{p} has no tasks left. Archive it?",
+        "btn_archive": "🗄 Archive", "btn_archive_no": "Not now",
+        "archive_ok": "🗄 Project #{p} is archived. To restore it, open Projects → Archive on the website",
+        "archive_later": "OK, project #{p} stays in Projects",
         "tg_link_stale": "This link has expired — press the button on the website again",
         "tg_confirm_link": "link this Telegram to the GTD account {who}",
         "tg_confirm_login": "sign in to GTD in your browser",
@@ -836,8 +854,12 @@ def capture(uid: int, raw: str, source: str = "web", project_id: int | None = No
 def project_by_title(uid: int, title: str) -> int:
     # Регистр сравниваем в Python: lower() в Postgres для кириллицы зависит от локали базы
     key = title.casefold()
-    for r in rows("select id, title from projects where user_id=%s", (uid,)):
+    for r in rows("select id, title, status from projects where user_id=%s", (uid,)):
         if r["title"].casefold() == key:
+            # Проект из архива назвали явно (#Проект в тексте, MCP move_task) — к нему вернулись: восстанавливаем
+            # (SERBITO-602). Иначе задача ушла бы в невидимый проект, а второго проекта с тем же именем не бывает
+            if r["status"] == "archived":
+                project_restore(uid, r["id"])
             return r["id"]
     # Новый проект — в конец списка проектов (SERBITO-391)
     return run(f"insert into projects(user_id,title,created,position) values(%s,%s,%s,{END_PROJ}) returning id",
@@ -1197,6 +1219,7 @@ async def handle_message(msg):
         if it:
             await tg("sendMessage", chat_id=chat, text=tr(lang, "done_ok", ref=item_ref(it), title=html.escape(it["title"])),
                      **HTML_MSG)
+            await tg_archive_offer(chat, u["id"], it, lang)
         else:
             await tg("sendMessage", chat_id=chat, text=tr(lang, "not_found_task"))
     elif text.startswith("/"):
@@ -1212,6 +1235,33 @@ async def handle_message(msg):
         # а у кого задачи уже были (с сайта или раньше в боте), подсказки нет
         if it["num"] == 1:
             await tg("sendMessage", chat_id=chat, text=tr(lang, "first_task", url=BASE_URL), **NO_PREVIEW)
+
+
+async def tg_archive_offer(chat, uid: int, it: dict, lang: str):
+    """Закрыли последнюю задачу проекта — спросить, убрать ли его в архив (SERBITO-602). Молча не убираем."""
+    offer = it["status"] not in ("done", "trash") and archive_offer(uid, it["project_id"])
+    if offer:
+        await tg("sendMessage", chat_id=chat, text=tr(lang, "archive_offer", p=offer["title"]), reply_markup={
+            "inline_keyboard": [[{"text": tr(lang, "btn_archive"), "callback_data": f"arch:{offer['id']}"},
+                                 {"text": tr(lang, "btn_archive_no"), "callback_data": f"noarch:{offer['id']}"}]]})
+
+
+async def tg_archive_answer(cb, sid: str, yes: bool):
+    """Кнопки под вопросом об архиве. Проект — только свой и ещё не в архиве; иначе «Не найдено»."""
+    u, lang = tg_known(cb["from"])
+    p = u and sid.isdigit() and row("select id, title from projects where id=%s and user_id=%s and status='active'",
+                                    (int(sid), u["id"]))
+    if not p:
+        await tg("answerCallbackQuery", callback_query_id=cb["id"], text=tr(lang, "cb_missing"))
+        return
+    track(u["id"], "telegram")
+    if yes:
+        project_archive(u["id"], p["id"], "all")
+    note = tr(lang, "archive_ok" if yes else "archive_later", p=p["title"])
+    await tg("answerCallbackQuery", callback_query_id=cb["id"])
+    msg = cb.get("message") or {}
+    if msg:
+        await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"], text=note)
 
 
 def mark_done(uid, iid=None, num=None):
@@ -1239,6 +1289,9 @@ async def handle_callback(cb):
     if act in ("merge", "nomerge"):
         await tg_merge_answer(cb, sid, act == "merge")
         return
+    if act in ("arch", "noarch"):
+        await tg_archive_answer(cb, sid, act == "arch")
+        return
     frm = cb["from"]
     if act in ("about", "help", "addemail"):  # кнопки под приветствием («help» — у приветствий прежних версий)
         chat = (cb.get("message") or {}).get("chat", {}).get("id", frm["id"])
@@ -1259,9 +1312,11 @@ async def handle_callback(cb):
     track(u["id"], "telegram")
     iid = it["id"]
     msg = cb.get("message", {})
+    offer = False
     if act == "done":
         mark_done(u["id"], iid)
         note = tr(lang, "cb_done")
+        offer = True
     elif act == "snz":
         run("update items set remind_at=%s, reminded=0 where id=%s", (int(time.time()) + 3600, iid))
         note = tr(lang, "cb_snooze")
@@ -1272,6 +1327,8 @@ async def handle_callback(cb):
     if msg:
         await tg("editMessageText", chat_id=msg["chat"]["id"], message_id=msg["message_id"],
                  text=f"{note}: {it['title']}")
+    if offer:
+        await tg_archive_offer((msg.get("chat") or {}).get("id", frm["id"]), u["id"], it, lang)
 
 
 async def dispatch(up: dict):
@@ -1350,7 +1407,7 @@ async def poll_loop():
 async def send_due_reminders():
     due = rows("select i.*, u.tg_id, u.lang, u.tg_lang from items i join users u on u.id=i.user_id "
                "where i.remind_at is not null and i.reminded=0 and i.remind_at<=%s "
-               "and i.status not in ('done','trash')", (int(time.time()),))
+               "and i.status not in ('done','trash','archived')", (int(time.time()),))
     sent = 0
     for it in due:
         # Атомарно «забираем» напоминание: два параллельных запуска не пришлют его дважды
@@ -2489,8 +2546,8 @@ def list_contexts(uid: int = Depends(current_user)):
     """Контексты пользователя для подсказок @ — самые частые первыми. Задача с несколькими контекстами
     считается в каждом из них (SERBITO-423)."""
     return [r["c"] for r in rows(
-        "select c, count(*) n from items i, unnest(i.contexts) c where i.user_id=%s and i.status<>'trash' "
-        "group by c order by n desc, c", (uid,))]
+        "select c, count(*) n from items i, unnest(i.contexts) c where i.user_id=%s "
+        "and i.status not in ('trash','archived') group by c order by n desc, c", (uid,))]
 
 
 @app.post("/api/logout")
@@ -2571,8 +2628,9 @@ def counts(uid: int = Depends(current_user)):
         "select status, count(*) n from items where user_id=%s group by status", (uid,))}
     checklist = onboarding(uid, c)
     c["scheduled"] = row("select count(*) n from items where user_id=%s and remind_at is not null "
-                         "and status not in ('done','trash')", (uid,))["n"]
+                         "and status not in ('done','trash','archived')", (uid,))["n"]
     c["projects"] = row("select count(*) n from projects where user_id=%s and status='active'", (uid,))["n"]
+    c["archived_projects"] = row("select count(*) n from projects where user_id=%s and status='archived'", (uid,))["n"]
     c["onboarding"] = checklist
     return c
 
@@ -2606,11 +2664,11 @@ def list_items(status: str = "inbox", project_id: int | None = None, done: bool 
                uid: int = Depends(current_user)):
     where, args = "i.user_id=%s", [uid]
     if status == "scheduled":
-        where += " and i.remind_at is not null and i.status not in ('done','trash')"
+        where += " and i.remind_at is not null and i.status not in ('done','trash','archived')"
         order = "i.remind_at"
     elif status == "due":
         # remind_at — срок задачи. Сначала просроченные (самые давние выше), потом ближайшие
-        where += " and i.remind_at is not null and i.remind_at < %s and i.status not in ('done','trash')"
+        where += " and i.remind_at is not null and i.remind_at < %s and i.status not in ('done','trash','archived')"
         args.append(due_cutoff())
         order = "i.remind_at, i.id"
     else:
@@ -2668,6 +2726,8 @@ def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
         if k not in body:
             continue
         v = body[k]
+        if k == "status" and v == cur["status"] == "archived":
+            continue  # карточку задачи из архива сохранили как есть: список у неё прежний
         if k == "status":
             if v not in STATUSES:
                 raise HTTPException(400, "bad status")
@@ -2693,7 +2753,13 @@ def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
         args.append(v or None if k in ("project_id", "remind_at") else v)
     if sets:
         run(f"update items set {', '.join(sets)} where id=%s and user_id=%s", (*args, iid, uid))
-    return item_get(uid, iid)
+    it = item_get(uid, iid)
+    # Последняя задача проекта ушла в Готово или корзину — предложить убрать проект в архив (SERBITO-602)
+    if body.get("status") in ("done", "trash") and cur["status"] not in ("done", "trash"):
+        offer = archive_offer(uid, cur["project_id"])
+        if offer:
+            it["archive_offer"] = offer
+    return it
 
 
 MOVE_SCOPES = {"list": ("position", "status"), "project": ("ppos", "project_id")}
@@ -2761,8 +2827,9 @@ def move_item(iid: int, body: dict, uid: int = Depends(current_user)):
 @app.delete("/api/items/{iid}")
 def delete_item(iid: int, uid: int = Depends(current_user)):
     track(uid, "web")
-    run("delete from items where id=%s and user_id=%s", (iid, uid))
-    return {"ok": True}
+    gone = row("delete from items where id=%s and user_id=%s returning project_id, status", (iid, uid))
+    offer = gone and gone["status"] not in ("done", "trash") and archive_offer(uid, gone["project_id"])
+    return {"ok": True, **({"archive_offer": offer} if offer else {})}
 
 
 @app.get("/api/projects")
@@ -2771,6 +2838,7 @@ def list_projects(uid: int = Depends(current_user)):
         "select p.*, "
         "(select count(*) from items i where i.project_id=p.id and i.status in ('inbox','next','waiting')) open_count, "
         "(select count(*) from items i where i.project_id=p.id and i.status='next') next_count, "
+        f"(select count(*) from items i where i.project_id=p.id and i.status not in {CLOSED}) active_count, "
         "(select count(*) from items i where i.project_id=p.id) total_count "
         "from projects p where p.user_id=%s and p.status='active' order by p.position nulls last, p.id", (uid,))
 
@@ -2838,11 +2906,103 @@ def patch_project(pid: int, body: dict, request: Request, uid: int = Depends(cur
         if body["done_mode"] not in DONE_MODES:
             raise HTTPException(400, "bad done_mode")
         run("update projects set done_mode=%s where id=%s and user_id=%s", (body["done_mode"], pid, uid))
-    if "status" in body:
-        if body["status"] not in ("active", "done"):
+    if "status" in body:  # прежний способ: done — «Завершить» до архива (SERBITO-602), задачи остаются как есть
+        if body["status"] not in ("active", "done", "archived"):
             raise HTTPException(400, "bad status")
-        run("update projects set status=%s where id=%s and user_id=%s", (body["status"], pid, uid))
+        if body["status"] == "active":
+            project_restore(uid, pid)
+        else:
+            project_archive(uid, pid, "project", unlink=False)
     return project_get(uid, pid)
+
+
+# ── Архив проектов (SERBITO-602). Проект в архиве не виден в Projects, в выборе проекта и в счётчиках, но хранит
+# историю: выполненные задачи остаются в нём. Два режима: all — открытые задачи уходят в архив вместе с проектом
+# (status archived, прежний список — в archived_from) и пропадают из Next, Inbox и напоминаний; project — открытые
+# задачи остаются в своих списках, только без проекта. Восстановление возвращает проект и задачи, ушедшие с ним;
+# их прошедшие напоминания снимаются (иначе после восстановления пришла бы пачка старых), будущие снова работают
+CLOSED = "('done','trash','archived')"  # задача не в работе
+ARCHIVE_MODES = ("all", "project")
+
+
+def archive_offer(uid: int, pid: int | None) -> dict | None:
+    """Проект, в котором не осталось задач в работе, — {id, title} для вопроса «Убрать в архив?»; иначе None."""
+    if not pid:
+        return None
+    p = row("select id, title from projects where id=%s and user_id=%s and status='active'", (pid, uid))
+    if not p or row(f"select 1 from items where user_id=%s and project_id=%s and status not in {CLOSED} limit 1",
+                    (uid, pid)):
+        return None
+    return {"id": p["id"], "title": p["title"]}
+
+
+def project_archive(uid: int, pid: int, mode: str, unlink: bool = True) -> list[int]:
+    """Убирает проект в архив; возвращает id задач, которых это коснулось (для «Отменить» на сайте).
+    unlink=False — прежний PATCH status=done: задачи не трогаем."""
+    with _pool.connection() as c, c.transaction():
+        if mode == "all":
+            ids = c.execute("update items set archived_from=status, status='archived' where user_id=%s and "
+                            f"project_id=%s and status not in {CLOSED} returning id", (uid, pid)).fetchall()
+        elif unlink:
+            ids = c.execute(f"update items set project_id=null where user_id=%s and project_id=%s and status not in "
+                            f"{CLOSED} returning id", (uid, pid)).fetchall()
+        else:
+            ids = []
+        c.execute("update projects set status='archived', archive_mode=%s, archived_at=%s where id=%s and user_id=%s",
+                  (mode, int(time.time()), pid, uid))
+    return sorted(r["id"] for r in ids)
+
+
+def project_restore(uid: int, pid: int) -> dict:
+    """Возвращает проект из архива и его задачи — каждую в конец её прежнего списка. Прошедшие напоминания
+    снимаются, будущие остаются. {restored: сколько задач вернулось, dropped_reminders: сколько напоминаний снято}."""
+    now = int(time.time())
+    with _pool.connection() as c, c.transaction():
+        dropped = c.execute("update items set remind_at=null, reminded=0 where user_id=%s and project_id=%s "
+                            "and status='archived' and remind_at < %s", (uid, pid, now)).rowcount
+        restored = c.execute(
+            "update items i set status=x.st, archived_from=null, position=x.base + 1024 * x.rn from ("
+            "  select id, st, row_number() over (partition by st order by position nulls last, id) rn,"
+            "    (select coalesce(max(position), 0) from items m where m.user_id=%s and m.status=st) base"
+            "  from (select id, position, coalesce(archived_from, 'next') st from items"
+            "        where user_id=%s and project_id=%s and status='archived') t) x "
+            "where i.id=x.id", (uid, uid, pid)).rowcount
+        c.execute("update projects set status='active', archive_mode=null, archived_at=null where id=%s and user_id=%s",
+                  (pid, uid))
+    return {"restored": restored, "dropped_reminders": dropped}
+
+
+@app.post("/api/projects/{pid}/archive")
+def archive_project(pid: int, body: dict, uid: int = Depends(current_user)):
+    """mode=all — с открытыми задачами, mode=project — только проект, задачи остаются в работе без него."""
+    mode = body.get("mode", "all")
+    if mode not in ARCHIVE_MODES:
+        raise HTTPException(400, "bad mode")
+    if project_get(uid, pid)["status"] == "archived":
+        raise HTTPException(409, "already archived")
+    track(uid, "web")
+    ids = project_archive(uid, pid, mode)
+    return {"ok": True, "mode": mode, "items": ids}
+
+
+@app.post("/api/projects/{pid}/restore")
+def restore_project(pid: int, uid: int = Depends(current_user)):
+    if project_get(uid, pid)["status"] != "archived":
+        raise HTTPException(409, "not archived")
+    track(uid, "web")
+    return {"ok": True, **project_restore(uid, pid)}
+
+
+@app.get("/api/archive")
+def list_archive(uid: int = Depends(current_user)):
+    """Экран «Архив»: проекты в архиве, свежие сверху, и их задачи (кроме корзины)."""
+    ps = rows("select * from projects where user_id=%s and status='archived' order by archived_at desc nulls last, id",
+              (uid,))
+    its = rows(ITEM_SQL + "where i.user_id=%s and i.project_id = any(%s) and i.status<>'trash' "
+               "order by i.ppos nulls last, i.id", (uid, [p["id"] for p in ps])) if ps else []
+    for p in ps:
+        p["items"] = [i for i in its if i["project_id"] == p["id"]]
+    return ps
 
 
 @app.delete("/api/projects/{pid}")
@@ -3120,7 +3280,8 @@ def item_page(num: int, request: Request):
 # Адреса разделов и проектов (SERBITO-354): переход в приложении — запись в истории браузера, и Back (кнопка,
 # жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Сервер отдаёт на них то же приложение, что
 # на /i/N: раздел выбирает фронт по адресу. Inbox — это / (и /en/). Список — тот же, что ROUTE_VIEWS в index.html
-APP_VIEWS = ("next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review", "account", "stats")
+APP_VIEWS = ("next", "waiting", "scheduled", "projects", "archive", "someday", "reference", "done", "review", "account",
+             "stats")
 
 
 def section_page(request: Request):
