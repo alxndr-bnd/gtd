@@ -595,18 +595,66 @@ MONTHS_EN = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct
 MON_RE = (r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|"
           r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?")
 ON = r"(?:\bon\s+)?"  # «pay rent on 24 oct», «on 2026-10-24»: предлог уходит вместе с датой
+# Месяц словом по-русски и по-сербски (латиница и кириллица), после числа: «22 октября», «15 окт.», «22. oktobra»,
+# «3 mart 2027». Группа i — месяц i (SERBITO-582)
+MON_LOCAL = ("янв(?:ар[ья])?|јан(?:уара?)?|januara?",
+             "фев(?:р(?:ал[ья])?)?|феб(?:руара?)?|februara?",
+             "мар(?:та?)?|marta?",
+             "апр(?:ел[ья]|ила?)?|aprila?",
+             "ма[йя]|маја?|maja?",
+             "июн[ья]?|јуна?|juna?",
+             "июл[ья]?|јула?|jula?",
+             "авг(?:уста?)?|avg(?:usta?)?",
+             "сен(?:т(?:ябр[ья])?)?|сеп(?:т(?:емба?ра?)?)?|sep(?:t(?:emba?ra?)?)?",
+             "окт(?:ябр[ья]|оба?ра?)?|okt(?:oba?ra?)?",
+             "ноя(?:б(?:р[ья])?)?|нов(?:емба?ра?)?|nov(?:emba?ra?)?",
+             "дек(?:абр[ья])?|дец(?:емба?ра?)?|dec(?:emba?ra?)?")
+DAY_MON_LOCAL = (r"\b(\d{1,2})\.?\s+(?:" + "|".join(f"({m})" for m in MON_LOCAL)
+                 + r")\.?(?!\w)(?:,?\s+(\d{4})\b(?:\s*г\.|\s+года\b)?)?")
+# Срок, через который напомнить: «через 2 часа», «in 3 days»
+DUR_UNITS = (r"(мин\w*|min\w*|час\w*|ч|сат\w*|sat\w*|hour\w*|hr\w*|h|дн\w*|день|дан\w*|day\w*|dan\w*|"
+             r"недел\w*|недељ\w*|week\w*|nedel\w*)")
+# Срок перед датой: «за 2 дня до 15 октября», «2 days before oct 15», «2 dana pre 15. oktobra» — раньше даты
+BEFORE_RE = r"(?:\bза\s+)?\b(\d+)\s*" + DUR_UNITS + r"\s+(до|before|pre|пре)\s+$"
+
+
+def _duration(n: int, unit: str) -> timedelta:
+    u = unit.lower()
+    if u.startswith(("мин", "min")):
+        return timedelta(minutes=n)
+    if u.startswith(("ч", "h", "сат", "sat")):
+        return timedelta(hours=n)
+    if u.startswith(("д", "d")):
+        return timedelta(days=n)
+    return timedelta(weeks=n)
 
 
 def parse_when(text: str, now: datetime):
     """Возвращает (очищенный_текст, epoch|None). Понимает рус/англ: «через 2 часа» / «in 2 hours»,
     «завтра в 10:00» / «tomorrow 10am», «в пятницу» / «on friday», «next monday», «24.10 12:00» / «24 oct 12:00»,
-    «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow».
+    «22 октября 10:00» / «22. oktobra u 10:00», «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow»,
+    «за 2 дня до 15 октября» / «2 days before oct 15».
+
+    Явная дата (ISO, «24.10», день и месяц словом) важнее срока «через N …» / «in N …»: срок тогда остаётся
+    в тексте (SERBITO-582). Без явной даты срок, как и раньше, важнее «завтра» и дня недели.
 
     Дата через точку — всегда с месяцем из двух цифр. С двузначным днём («24.10», «01.09») или годом
     («5.10.2026») — всегда дата. С однозначным днём («1.10») — только если рядом признак даты: начало
     текста («1.02 оплата»), предлог перед ней («к», «до», «на», «в», «с», «по», «by», «on», «until»,
     «till») или время сразу после («1.10 12:00», «1.10 в 12:00»). Иначе это число: «версия 1.05»,
     «курс 1.10» напоминаний не ставят."""
+    m = re.search(r"\b(?:через|in)\s+(\d+)\s*" + DUR_UNITS + r"\b", text, re.I)
+    if m:
+        rest, ts, calendar = _parse_at(text, now)
+        if calendar:
+            return rest, ts
+        text = text[: m.start()] + " " + text[m.end():]
+        return _clean(text), int((now + _duration(int(m.group(1)), m.group(2))).timestamp())
+    return _parse_at(text, now)[:2]
+
+
+def _parse_at(text: str, now: datetime):
+    """parse_when без срока «через N …»: (очищенный_текст, epoch|None, есть ли явная дата)."""
     found = False
 
     def cut(m):
@@ -614,27 +662,22 @@ def parse_when(text: str, now: datetime):
         text = text[: m.start()] + " " + text[m.end():]
         found = True
 
-    m = re.search(r"\b(?:через|in)\s+(\d+)\s*(мин\w*|min\w*|час\w*|ч|hour\w*|hr\w*|h|дн\w*|день|day\w*|недел\w*|week\w*)\b",
-                  text, re.I)
-    if m:
-        n, u = int(m.group(1)), m.group(2).lower()
-        if u.startswith(("мин", "min")):
-            d = timedelta(minutes=n)
-        elif u.startswith(("ч", "h")):
-            d = timedelta(hours=n)
-        elif u.startswith(("дн", "ден", "d")):
-            d = timedelta(days=n)
-        else:
-            d = timedelta(weeks=n)
+    before = None  # срок «за 2 дня до …» перед явной датой: напомнить раньше на него
+
+    def cut_date(m):
+        nonlocal text, before
+        b = re.search(BEFORE_RE, text[: m.start()], re.I)
         cut(m)
-        return _clean(text), int((now + d).timestamp())
+        if b and (b.group(3).lower() != "до" or b.group(0).lower().startswith("за")):
+            before = _duration(int(b.group(1)), b.group(2))
+            cut(b)  # b стоит раньше m: его позиции после cut(m) те же
 
     hm = tm = None
     # 12-часовое время: «10am», «at 3 pm», «9:30pm»; 12am — полночь, 12pm — полдень
     m = re.search(r"(?:\bat\s+)?\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?", text, re.I)
     if m and 1 <= int(m.group(1)) <= 12 and int(m.group(2) or 0) < 60:
         hm, tm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0)), m
-    m = None if hm else re.search(r"(?:\b(?:в|at|к)\s+)?\b(\d{1,2}):(\d{2})\b", text, re.I)
+    m = None if hm else re.search(r"(?:\b(?:в|at|к|u|у)\s+)?\b(\d{1,2}):(\d{2})\b", text, re.I)
     if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
         hm, tm = (int(m.group(1)), int(m.group(2))), m
     timed_dm = None  # позиция «1.10» прямо перед временем: текст до вырезанного времени не сдвигается
@@ -648,7 +691,7 @@ def parse_when(text: str, now: datetime):
     if m:
         try:
             base = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-            cut(m)
+            cut_date(m)
         except ValueError:
             pass
     if base is None:
@@ -662,7 +705,7 @@ def parse_when(text: str, now: datetime):
                 y = int(m.group(3)) if m.group(3) else now.year
                 base = date(y, int(m.group(2)), int(m.group(1)))
                 explicit_dm = not m.group(3)
-                cut(m)
+                cut_date(m)
             except ValueError:
                 pass
     if base is None:
@@ -675,9 +718,22 @@ def parse_when(text: str, now: datetime):
             try:
                 base = date(int(g[2]) if g[2] else now.year, MONTHS_EN.index(mon[:3].lower()) + 1, int(day))
                 explicit_dm = not g[2]
-                cut(m)
+                cut_date(m)
             except ValueError:
                 pass
+    if base is None:
+        # Русский и сербский месяц словом: «22 октября», «15 окт.», «22. oktobra», «3 марта 2027 г.»
+        m = re.search(DAY_MON_LOCAL, text, re.I)
+        if m:
+            g = m.groups()
+            try:
+                base = date(int(g[-1]) if g[-1] else now.year,
+                            next(i for i, v in enumerate(g[1:-1], 1) if v), int(g[0]))
+                explicit_dm = not g[-1]
+                cut_date(m)
+            except ValueError:
+                pass
+    calendar = base is not None
     if base is None:
         m = re.search(r"\b(послезавтра|завтра|сегодня|today|day after tomorrow|tomorrow)\b", text, re.I)
         if m:
@@ -698,11 +754,13 @@ def parse_when(text: str, now: datetime):
         if datetime.combine(base, dtime(*hm), TZ) <= now:
             base += timedelta(days=1)
     if base is None:
-        return _clean(text), None
+        return _clean(text), None, False
     dt = datetime.combine(base, dtime(*(hm or (9, 0))), TZ)
     if explicit_dm and dt < now:
         dt = dt.replace(year=dt.year + 1)
-    return _clean(text), int(dt.timestamp())
+    if before:
+        dt -= before
+    return _clean(text), int(dt.timestamp()), calendar
 
 
 def _clean(t: str) -> str:

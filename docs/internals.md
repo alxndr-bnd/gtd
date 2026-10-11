@@ -127,7 +127,11 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
 - `in 2 hours check the deploy`, `on friday`, `24.10 12:00`, `2026-10-24`
 - English: `call mom tomorrow at 10:00`, `tomorrow 10am`, `at 3pm`, `on friday`, `next monday`,
   `24 oct 12:00` / `oct 24`, `in 2 hours`, `day after tomorrow`, `remind me to …`;
-  Russian: `Позвонить в банк завтра в 10:00`, `через 2 часа`, `в пятницу` (the site parses the same way)
+  Russian: `Позвонить в банк завтра в 10:00`, `через 2 часа`, `в пятницу`, `22 октября 10:00`;
+  Serbian month names: `22. oktobra u 10:00`, `22. октобра`. The site parses the same way.
+- An explicit date (`2026-10-24`, `24.10`, day + month name) wins over `in N …` / `через N …`; the period stays
+  in the title. `за 2 дня до 15 октября` / `2 days before Oct 15` / `2 dana pre 15. oktobra` → 2 days earlier
+  (SERBITO-582)
 - `report #Client_X @work` → straight to Next, with project and context
 - Buttons under a message: ✅ Done / 💤 +1h / ⏭ Next
 - `/start` — greeting with examples and buttons “How it works”, “Add email”, “Open the website” (the last one only with an https `BASE_URL`)

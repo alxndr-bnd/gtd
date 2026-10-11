@@ -151,3 +151,79 @@ def test_decimal_is_not_date(text):
 ])
 def test_date_with_marker(text, title, when):
     assert A.parse_when(text, NOW) == (title, when)
+
+
+# ── SERBITO-582: срок рядом с датой. Явная дата (день + месяц) важнее «через N …» и «за N …»;
+# «за N дней до <даты>» / «N days before <date>» — напоминание раньше даты на этот срок ──
+@pytest.mark.parametrize("text, title, when", [
+    # Пример из тикета: «сейчас» — четверг 2026-10-08 15:00, раньше давал завтра 10:00
+    ("SERBITO-578: сравнить результат рекламы за 2 недели, затем включить Google tag gateway 22 октября 10:00",
+     "SERBITO-578: сравнить результат рекламы за 2 недели, затем включить Google tag gateway",
+     at(2026, 10, 22, 10, 0)),
+])
+def test_ticket_example(text, title, when):
+    assert A.parse_when(text, datetime(2026, 10, 8, 15, 0, tzinfo=A.TZ)) == (title, when)
+
+
+@pytest.mark.parametrize("text, title, when", [
+    # Русский месяц словом
+    ("сдать отчёт 5 ноября", "сдать отчёт", at(2026, 11, 5, 9, 0)),
+    ("22 октября в 10:00 включить тег", "включить тег", at(2026, 10, 22, 10, 0)),
+    ("1 января праздник", "праздник", at(2027, 1, 1, 9, 0)),  # прошло → следующий год
+    ("отпуск 3 марта 2027", "отпуск", at(2027, 3, 3, 9, 0)),
+    ("отпуск 3 марта 2027 г.", "отпуск", at(2027, 3, 3, 9, 0)),
+    ("встреча 15 окт. 12:00", "встреча", at(2026, 10, 15, 12, 0)),
+    ("Встреча 9 Мая", "Встреча", at(2027, 5, 9, 9, 0)),
+    # Срок до даты
+    ("сравнить рекламу за 2 недели, 22 октября 10:00", "сравнить рекламу за 2 недели", at(2026, 10, 22, 10, 0)),
+    ("22 октября 10:00 сравнить итоги за 2 недели", "сравнить итоги за 2 недели", at(2026, 10, 22, 10, 0)),
+    ("итоги за 3 дня 24.10 12:00", "итоги за 3 дня", at(2026, 10, 24, 12, 0)),
+    ("проверить через 2 недели, а лучше 22 октября", "проверить через 2 недели, а лучше",
+     at(2026, 10, 22, 9, 0)),
+    ("через 3 дня созвон 2026-10-24 10:30", "через 3 дня созвон", at(2026, 10, 24, 10, 30)),
+    # «за N … до <даты>»
+    ("за 2 дня до 15 октября купить подарок", "купить подарок", at(2026, 10, 13, 9, 0)),
+    ("за 2 дня до 15 октября в 10:00 купить подарок", "купить подарок", at(2026, 10, 13, 10, 0)),
+    ("за 1 неделю до 24.10 забронировать отель", "забронировать отель", at(2026, 10, 17, 9, 0)),
+    ("за 2 часа до 15 октября 10:00 выехать", "выехать", at(2026, 10, 15, 8, 0)),
+    # Относительные слова и срок без даты — как раньше
+    ("завтра в 10:00 сравнить за 2 недели", "сравнить за 2 недели", at(2026, 9, 26, 10, 0)),
+    ("в пятницу итоги за 3 дня", "итоги за 3 дня", at(2026, 10, 2, 9, 0)),
+    ("через 2 часа завтра", "завтра", at(2026, 9, 25, 16, 0)),
+    # Не месяц
+    ("купить 5 марок", "купить 5 марок", None),
+    ("3 майских дня", "3 майских дня", None),
+    ("2 мартышки", "2 мартышки", None),
+    ("за 2 недели", "за 2 недели", None),
+])
+def test_duration_with_date_russian(text, title, when):
+    assert A.parse_when(text, NOW) == (title, when)
+
+
+@pytest.mark.parametrize("text, title, when", [
+    ("compare ads for 2 weeks, then enable the tag Oct 22 10:00", "compare ads for 2 weeks, then enable the tag",
+     at(2026, 10, 22, 10, 0)),
+    ("Oct 22 10:00 review the last 2 weeks", "review the last 2 weeks", at(2026, 10, 22, 10, 0)),
+    ("check in 2 weeks report due Oct 22", "check in 2 weeks report due", at(2026, 10, 22, 9, 0)),
+    ("in 3 days call, 2026-10-24 at 10am", "in 3 days call", at(2026, 10, 24, 10, 0)),
+    ("2 days before Oct 15 buy a gift", "buy a gift", at(2026, 10, 13, 9, 0)),
+    ("1 week before 2026-10-24 book a hotel", "book a hotel", at(2026, 10, 17, 9, 0)),
+    ("3 hours before 24 October 12:00 leave", "leave", at(2026, 10, 24, 9, 0)),
+    ("tomorrow at 10:00 review the last 2 weeks", "review the last 2 weeks", at(2026, 9, 26, 10, 0)),
+    ("in 2 hours check, tomorrow is late", "check, tomorrow is late", at(2026, 9, 25, 16, 0)),
+])
+def test_duration_with_date_english(text, title, when):
+    assert A.parse_when(text, NOW) == (title, when)
+
+
+@pytest.mark.parametrize("text, title, when", [
+    ("sastanak 22. oktobra u 10:00", "sastanak", at(2026, 10, 22, 10, 0)),
+    ("platiti račun 15 novembra", "platiti račun", at(2026, 11, 15, 9, 0)),
+    ("1. januara proslava", "proslava", at(2027, 1, 1, 9, 0)),
+    ("uporediti oglase za 2 nedelje, 22. oktobra 10:00", "uporediti oglase za 2 nedelje", at(2026, 10, 22, 10, 0)),
+    ("2 dana pre 15. oktobra kupiti poklon", "kupiti poklon", at(2026, 10, 13, 9, 0)),
+    ("састанак 22. октобра у 10:00", "састанак", at(2026, 10, 22, 10, 0)),
+    ("odmor 3. mart 2027", "odmor", at(2027, 3, 3, 9, 0)),
+])
+def test_duration_with_date_serbian(text, title, when):
+    assert A.parse_when(text, NOW) == (title, when)
