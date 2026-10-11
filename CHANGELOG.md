@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- A reminder now gets the date you wrote, such as "22 October 10:00", even when the text also has a period like "for 2 weeks" or "in 3 days". "2 days before 15 October" sets the reminder 2 days before that date.
+  - RU: Напоминание теперь ставится на дату из текста, например «22 октября 10:00», даже если в тексте есть срок вроде «за 2 недели» или «через 3 дня». «За 2 дня до 15 октября» ставит напоминание за 2 дня до этой даты.
+
 ## [0.47.0] - 2026-10-10
 
 ### Changed
