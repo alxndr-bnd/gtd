@@ -51,7 +51,8 @@ server = MCPServer(
         "reference, done, trash. A task belongs to at most one project and can have several @contexts. Refer to tasks "
         "by their "
         "number (#N), which the user also sees in the app. Capture new thoughts with `capture`; it understands "
-        "dates (\"tomorrow 10am\", \"завтра в 10:00\"), #Project and one or more @contexts in the text."),
+        "dates (\"tomorrow 10am\", \"завтра в 10:00\"), #Project and one or more @contexts in the text. "
+        "A finished project can be archived (`archive_project`) and restored (`restore_project`)."),
     website_url=A.BASE_URL,
 )
 # Защита от DNS rebinding — для серверов на localhost, которые доверяют сети. Здесь каждый запрос несёт Bearer-токен,
@@ -140,8 +141,17 @@ def task_by_number(uid: int, number: int) -> dict:
 
 def project_named(uid: int, name: str) -> dict | None:
     key = name.strip().lstrip("#").replace("_", " ").casefold()
-    return next((p for p in A.rows("select id, title from projects where user_id=%s", (uid,))
+    return next((p for p in A.rows("select id, title, status from projects where user_id=%s", (uid,))
                  if p["title"].casefold() == key), None)
+
+
+def with_offer(out: dict, it: dict) -> dict:
+    """Последняя задача проекта закрыта (SERBITO-602): подсказать модели спросить человека об архиве."""
+    if it.get("archive_offer"):
+        out["project_now_empty"] = it["archive_offer"]["title"]
+        out["hint"] = ("The project has no open tasks left. Ask the user whether to archive it with archive_project; "
+                       "do not archive it without asking.")
+    return out
 
 
 def context_names(value: str | list[str]) -> list[str]:
@@ -165,9 +175,10 @@ WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint
 @server.tool(annotations=READ)
 def list_tasks(
     ctx: Context,
-    list: Annotated[Literal["inbox", "next", "waiting", "scheduled", "someday", "reference", "done", "all"],
-                    Field(description="Which list. scheduled — open tasks with a date; all — every list "
-                                      "except trash")] = "inbox",
+    list: Annotated[Literal["inbox", "next", "waiting", "scheduled", "someday", "reference", "done", "archived", "all"],
+                    Field(description="Which list. scheduled — open tasks with a date; archived — open tasks that "
+                                      "went to the archive with their project; all — every list except trash and "
+                                      "archived")] = "inbox",
     project: Annotated[str | None, Field(description="Only this project (name, case-insensitive)")] = None,
     context: Annotated[str | None, Field(description="Only this context, e.g. \"@phone\" or \"phone\"; several "
                                                      "(\"@phone @computer\") — tasks with any of them")] = None,
@@ -180,10 +191,10 @@ def list_tasks(
     where, args = ["i.user_id=%s"], [uid]
     order = "i.position nulls last, i.id"
     if list == "scheduled":
-        where.append("i.remind_at is not null and i.status not in ('done','trash')")
+        where.append("i.remind_at is not null and i.status not in ('done','trash','archived')")
         order = "i.remind_at, i.id"
     elif list == "all":
-        where.append("i.status<>'trash'")
+        where.append("i.status not in ('trash','archived')")
         order = "i.created desc, i.id desc"
     else:
         where.append("i.status=%s")
@@ -207,18 +218,31 @@ def list_tasks(
 
 
 @server.tool(annotations=READ)
-def list_projects(ctx: Context) -> dict[str, Any]:
+def list_projects(
+    ctx: Context,
+    include_archived: Annotated[bool, Field(description="Also list archived projects, after the active ones "
+                                                        "(archived: true)")] = False,
+) -> dict[str, Any]:
     """The user's active projects with counts of open tasks. In GTD every project needs a next action:
     needs_next_action marks projects without one."""
     uid = owner(ctx)
     ps = A.rows(
-        "select p.title, "
+        "select p.title, p.status, p.archived_at, "
         "(select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id "
         " and i.status in ('inbox','next','waiting')) open, "
-        "(select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id and i.status='next') next "
-        "from projects p where p.user_id=%s and p.status='active' order by p.position nulls last, p.id", (uid,))
-    return {"projects": [{"name": p["title"], "open_tasks": p["open"], "next_actions": p["next"],
-                          "needs_next_action": p["next"] == 0} for p in ps]}
+        "(select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id and i.status='next') next, "
+        "(select count(*) from items i where i.project_id=p.id and i.user_id=p.user_id and i.status='archived') arch "
+        "from projects p where p.user_id=%s and (p.status='active' or %s) "
+        "order by p.status='archived', p.position nulls last, p.id", (uid, include_archived))
+    out = []
+    for p in ps:
+        if p["status"] == "archived":
+            out.append({"name": p["title"], "archived": True, "archived_at": iso(p["archived_at"]),
+                        "archived_tasks": p["arch"]})
+            continue
+        out.append({"name": p["title"], "open_tasks": p["open"], "next_actions": p["next"],
+                    "needs_next_action": p["next"] == 0, **({"archived": False} if include_archived else {})})
+    return {"projects": out}
 
 
 @server.tool(annotations=READ)
@@ -227,7 +251,7 @@ def list_contexts(ctx: Context) -> dict[str, Any]:
     A task with several contexts counts once in each of them."""
     uid = owner(ctx)
     cs = A.rows("select c, count(*) n from items i, unnest(i.contexts) c where i.user_id=%s "
-                "and i.status not in ('done','trash') group by c order by n desc, c", (uid,))
+                "and i.status not in ('done','trash','archived') group by c order by n desc, c", (uid,))
     return {"contexts": [{"context": "@" + c["c"], "open_tasks": c["n"]} for c in cs]}
 
 
@@ -253,7 +277,10 @@ def complete_task(ctx: Context, number: Annotated[int, Field(description="Task n
     """Mark a task as done."""
     uid = owner(ctx)
     it = task_by_number(uid, number)
-    return task_out(it if it["status"] == "done" else patch(uid, it, {"status": "done"}))
+    if it["status"] == "done":
+        return task_out(it)
+    it = patch(uid, it, {"status": "done"})
+    return with_offer(task_out(it), it)
 
 
 @server.tool(annotations=WRITE)
@@ -262,8 +289,8 @@ def move_task(
     number: Annotated[int, Field(description="Task number, #N")],
     list: Annotated[Literal["inbox", "next", "waiting", "someday", "reference", "trash"] | None,
                     Field(description="Move to this list")] = None,
-    project: Annotated[str | None, Field(description="Put into this project (created if missing); "
-                                                     "\"\" — remove from its project")] = None,
+    project: Annotated[str | None, Field(description="Put into this project (created if missing, restored if "
+                                                     "archived); \"\" — remove from its project")] = None,
     context: Annotated[str | None, Field(description="Set this @context (or several: \"@phone @computer\"), "
                                                      "replacing the old ones; \"\" — remove all contexts")] = None,
     contexts: Annotated[list[str] | None, Field(description="Set exactly these @contexts, e.g. [\"phone\", "
@@ -287,7 +314,52 @@ def move_task(
         raise ToolError("Nothing to change: give list, project or contexts")
     if list is None and it["status"] == "inbox" and (body.get("project_id") or body.get("contexts")):
         body["status"] = "next"
-    return task_out(patch(uid, it, body))
+    it = patch(uid, it, body)
+    return with_offer(task_out(it), it)
+
+
+def archived_or_active(uid: int, name: str, want: str) -> dict:
+    p = project_named(uid, name)
+    if not p:
+        raise ToolError(f"No project named {name!r}. Call list_projects(include_archived=true) to see them")
+    if p["status"] != want:
+        raise ToolError(f"Project {p['title']!r} is " + ("already archived" if want == "active" else "not archived"))
+    return p
+
+
+@server.tool(annotations=WRITE)
+def archive_project(
+    ctx: Context,
+    name: Annotated[str, Field(description="Project name, case-insensitive")],
+    tasks: Annotated[Literal["archive", "keep"],
+                     Field(description="archive — the project's open tasks go to the archive with it and leave Next, "
+                                       "Inbox and reminders; keep — the open tasks stay in their lists, without a "
+                                       "project")] = "archive",
+) -> dict[str, Any]:
+    """Archive a finished or abandoned project: it leaves the project list and the project picker, and keeps its
+    history (done tasks). restore_project brings it back. Ask the user which tasks mode they want if the project
+    still has open tasks."""
+    uid = owner(ctx)
+    p = archived_or_active(uid, name, "active")
+    ids = A.project_archive(uid, p["id"], "all" if tasks == "archive" else "project")
+    A.track(uid, "mcp")
+    return {"name": p["title"], "archived": True, "tasks": tasks,
+            ("tasks_archived" if tasks == "archive" else "tasks_kept_without_project"): len(ids)}
+
+
+@server.tool(annotations=WRITE)
+def restore_project(
+    ctx: Context,
+    name: Annotated[str, Field(description="Archived project name, case-insensitive")],
+) -> dict[str, Any]:
+    """Bring an archived project back to the project list, with the tasks that were archived with it. Their past
+    reminders are dropped; future reminders work again."""
+    uid = owner(ctx)
+    p = archived_or_active(uid, name, "archived")
+    r = A.project_restore(uid, p["id"])
+    A.track(uid, "mcp")
+    return {"name": p["title"], "archived": False, "restored_tasks": r["restored"],
+            "dropped_reminders": r["dropped_reminders"]}
 
 
 def parse_due(value: str) -> int:
@@ -365,8 +437,9 @@ def update_task(
 
 @server.tool(annotations=READ)
 def weekly_review(ctx: Context) -> dict[str, Any]:
-    """GTD Weekly Review in one call: Inbox count, projects without a next action, overdue tasks, everything in
-    Waiting (waiting_over_a_week marks the old ones), reminders for the next 7 days and the Someday count.
+    """GTD Weekly Review in one call: Inbox count, projects without a next action, empty projects (no open tasks
+    — offer to archive them), overdue tasks, everything in Waiting (waiting_over_a_week marks the old ones),
+    reminders for the next 7 days and the Someday count.
     Read-only: suggest changes to the user, then make them with the other tools."""
     uid = owner(ctx)
     now = int(time.time())
@@ -377,7 +450,10 @@ def weekly_review(ctx: Context) -> dict[str, Any]:
         " and i.status in ('inbox','waiting')) open from projects p where p.user_id=%s and p.status='active' "
         "and not exists (select 1 from items i where i.project_id=p.id and i.user_id=p.user_id and i.status='next') "
         "order by p.position nulls last, p.id", (uid,))
-    open_sql = f"{A.ITEM_SQL} where i.user_id=%s and i.status not in ('done','trash') and i.remind_at is not null "
+    empty = A.rows(f"select p.title from projects p where p.user_id=%s and p.status='active' and not exists (select 1 "
+                   f"from items i where i.project_id=p.id and i.user_id=p.user_id and i.status not in {A.CLOSED}) "
+                   "order by p.position nulls last, p.id", (uid,))
+    open_sql = f"{A.ITEM_SQL} where i.user_id=%s and i.status not in {A.CLOSED} and i.remind_at is not null "
     overdue = A.rows(open_sql + "and i.remind_at<%s order by i.remind_at, i.id limit %s", (uid, now, LIST_LIMIT))
     soon = A.rows(open_sql + "and i.remind_at>=%s and i.remind_at<%s order by i.remind_at, i.id limit %s",
                   (uid, now, now + WEEK, LIST_LIMIT))
@@ -386,6 +462,7 @@ def weekly_review(ctx: Context) -> dict[str, Any]:
     return {
         "inbox_count": counts.get("inbox", 0),
         "projects_without_next_action": [{"name": p["title"], "open_tasks": p["open"]} for p in stalled],
+        "empty_projects": [p["title"] for p in empty],
         "overdue": [task_out(it) for it in overdue],
         "waiting": [{**task_out(it), "waiting_over_a_week": (it["created"] or now) < now - WEEK} for it in waiting],
         "upcoming_7_days": [task_out(it) for it in soon],

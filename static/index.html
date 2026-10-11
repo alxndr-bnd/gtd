@@ -293,17 +293,28 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "dnd_tip_mouse": "Задачи можно переставлять: потяни карточку мышью или за ⠿. С клавиатуры — выбери задачу стрелками и нажми Alt+↑↓",
   "dnd_grip": "Потяни, чтобы переставить. С клавиатуры — Alt+↑↓",
   "new_project_ph": "Например, Ремонт кухни", "project_created": "Проект #{p} создан", "project_exists": "Проект #{p} уже есть", "open_n": "{n} открыто", "no_next": "⚠ нет следующего действия",
-  "complete": "Завершить",
+  "archive": "🗄 В архив", "archive_title": "🗄 Архив проектов", "archive_link": "🗄 Архив: {n}",
+  "archive_hint": "Законченные и брошенные проекты. Выполненные задачи и история сохранены. «Вернуть» возвращает проект в Projects.",
+  "archive_empty": "В архиве пусто. Убери туда проект, когда он закончен или больше не нужен.",
+  "archive_q": "Убрать проект «{title}» в архив?", "archive_open_n": "Задач в работе: {n}. Что с ними сделать?",
+  "archive_no_open": "Задач в работе нет. Выполненные останутся в проекте.",
+  "archive_all": "В архив вместе с задачами ({n})", "archive_only": "Только проект: задачи остаются в работе, без проекта",
+  "archive_do": "В архив", "not_now": "Не сейчас",
+  "archive_offer": "В проекте #{p} больше нет задач. Убрать его в архив?",
+  "archived_toast": "Проект #{p} в архиве", "restored_toast": "Проект #{p} снова в Projects",
+  "archived_meta": "в архиве с {d}", "archived_all": "задачи ушли в архив вместе с ним", "archived_only": "задачи остались в работе",
+  "archived_tasks": "Задачи ({n})", "archived_none": "Задач нет",
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
     "s2": "2. Разобрать Inbox до нуля", "s2_text": "В Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">разобрать</a>",
     "s3": "3. Проекты без следующего действия", "s3_ok": "Все проекты движутся ✅",
+    "empty": "Без задач. Проект закончен? Убери его в архив:",
     "s4": "4. В Waiting дольше недели", "s4_ok": "Ничего не зависло ✅",
     "s5": "5. Ближайшие напоминания", "s5_none": "Нет",
     "s6": "6. Someday/Maybe", "s6_text": "Идей: <b>{n}</b> — <a href=\"#someday\" data-view=\"someday\">просмотреть</a>. Что-то пора активировать?"},
   "moved_to": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
     "done": "Готово", "trash": "Корзину"},
   "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
-    "done": "Готово", "trash": "Корзина"},
+    "done": "Готово", "trash": "Корзина", "archived": "Архив"},
   "moved": "«{title}» → {to}", "deleted": "«{title}» удалена", "undo": "Отменить",
   "f_title": "Название", "f_notes": "Заметки", "f_list": "Список", "f_project": "Проект", "f_context": "Контексты (@)",
   "f_context_ph": "добавить: работа, дом, телефон…", "ctx_remove": "Убрать @{c}", "f_remind": "Напомнить",
@@ -409,17 +420,28 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "dnd_tip_mouse": "You can reorder tasks: drag a card with the mouse or by ⠿. With the keyboard, select a task with the arrows and press Alt+↑↓",
   "dnd_grip": "Drag to reorder. Keyboard: Alt+↑↓",
   "new_project_ph": "For example, Kitchen remodel", "project_created": "Project #{p} created", "project_exists": "Project #{p} already exists", "open_n": "{n} open", "no_next": "⚠ no next action",
-  "complete": "Complete",
+  "archive": "🗄 Archive", "archive_title": "🗄 Project archive", "archive_link": "🗄 Archive: {n}",
+  "archive_hint": "Finished and abandoned projects. Their done tasks and history stay here. “Restore” brings a project back to Projects.",
+  "archive_empty": "The archive is empty. Archive a project when it is finished or no longer needed.",
+  "archive_q": "Archive project “{title}”?", "archive_open_n": "Open tasks: {n}. What should happen to them?",
+  "archive_no_open": "There are no open tasks. Done tasks stay in the project.",
+  "archive_all": "Archive with its tasks ({n})", "archive_only": "Only the project: the tasks stay active, without a project",
+  "archive_do": "Archive", "not_now": "Not now",
+  "archive_offer": "Project #{p} has no tasks left. Archive it?",
+  "archived_toast": "Project #{p} archived", "restored_toast": "Project #{p} is back in Projects",
+  "archived_meta": "archived {d}", "archived_all": "its tasks were archived with it", "archived_only": "its tasks stayed active",
+  "archived_tasks": "Tasks ({n})", "archived_none": "No tasks",
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
     "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">process it</a>",
     "s3": "3. Projects without a next action", "s3_ok": "All projects are moving ✅",
+    "empty": "No tasks left. Is the project finished? Archive it:",
     "s4": "4. Waiting for over a week", "s4_ok": "Nothing is stuck ✅",
     "s5": "5. Upcoming reminders", "s5_none": "None",
     "s6": "6. Someday/Maybe", "s6_text": "Ideas: <b>{n}</b> — <a href=\"#someday\" data-view=\"someday\">look through</a>. Time to activate any?"},
   "moved_to": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
     "done": "Done", "trash": "Trash"},
   "status": {"inbox": "Inbox", "next": "Next", "waiting": "Waiting", "someday": "Someday", "reference": "Reference",
-    "done": "Done", "trash": "Trash"},
+    "done": "Done", "trash": "Trash", "archived": "Archive"},
   "moved": "“{title}” → {to}", "deleted": "“{title}” deleted", "undo": "Undo",
   "f_title": "Title", "f_notes": "Notes", "f_list": "List", "f_project": "Project", "f_context": "Contexts (@)",
   "f_context_ph": "add: work, home, phone…", "ctx_remove": "Remove @{c}", "f_remind": "Remind me",
@@ -475,7 +497,7 @@ let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, 
 // ── Адреса разделов (SERBITO-354): /next, /projects, /p/<id>… (на /en/ — /en/next). Переход — запись в истории
 // браузера, и Back (кнопка, жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Inbox — это /.
 // Карточка задачи — /i/<номер>: открыли из списка — своя запись, Back её закрывает. Список — app.APP_VIEWS
-const ROUTE_VIEWS = ['next','waiting','scheduled','projects','someday','reference','done','review','account','stats'];
+const ROUTE_VIEWS = ['next','waiting','scheduled','projects','archive','someday','reference','done','review','account','stats'];
 function routeOf(path = location.pathname){
   const p = path.replace(/^\/en(?=\/|$)/, '') || '/';
   let m;
@@ -547,6 +569,7 @@ async function load(){
     if(S.view==='account'){ d.me = await api('/me'); [d.tokens, d.apps] = await Promise.all([api('/tokens'), api('/oauth/apps')]); }
     else if(S.view==='stats') d.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) d.items=[];
+    else if(S.view==='archive'){ d.items = []; d.archive = await api('/archive'); }  // архив проектов (SERBITO-602)
     else if(S.view==='projects'){  // выполненные сервер отдаёт, только если проект их показывает (SERBITO-327)
       const pj = projects.find(p=>p.id===S.pid);
       d.items = await api(`/items?status=all&project_id=${S.pid}${pj && doneMode(pj)!=='hide' ? '&done=1' : ''}`);
@@ -884,7 +907,7 @@ function statsHtml(){
 }
 
 const viewLabel = () => S.view==='account' ? t('account') : S.view==='stats' ? t('stats')
-  : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
+  : S.view==='archive' ? t('archive_title') : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
 // Вкладка: «(3) Next — GTD» — число во Входящих видно, не переключаясь на вкладку (задачи из бота). Текст задач
 // сюда не попадает никогда, и на /i/N тоже: заголовок остаётся в истории браузера и на скриншотах
 function docTitle(){
@@ -912,7 +935,8 @@ function navHtml(){
   const cur = viewLabel();
   // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается».
   // Разделы — ссылки с href (SERBITO-349): без него <a> не получает фокус с клавиатуры и не читается как ссылка
-  const item = (k, l, n) => `<a href="${viewPath(k, null)}" class="${S.view===k?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
+  const on = k => S.view===k || (k==='projects' && S.view==='archive');  // архив — часть раздела Projects
+  const item = (k, l, n) => `<a href="${viewPath(k, null)}" class="${on(k)?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
   return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <span class="tb-title">${cur}</span>${user}</div>
@@ -978,6 +1002,7 @@ function render(){
   else if(S.view==='account') body = accountHtml();
   else if(S.view==='stats') body = statsHtml();
   else if(S.view==='projects' && !S.pid){ body = projectsHtml(); topCap = false; }
+  else if(S.view==='archive'){ body = archiveHtml(); topCap = false; }
   else{
     let items = S.items;
     let chips='';
@@ -1032,6 +1057,7 @@ function projectHtml(pj, items){
     <summary>${t('done_section', {n:done.length})}</summary>${done.map(itemHtml).join('')}</details>` : '';
   return `<p><a href="${viewPath('projects', null)}" data-act="back">${t('back_projects')}</a></p><h2 class="pjh">#${esc(pj.title)}
       <button class="sm" data-act="renameproj" data-pid="${pj.id}">✏️ ${t('rename')}</button>
+      <button class="sm" data-act="archproj" data-pid="${pj.id}">${t('archive')}</button>
       <button class="sm" data-act="delproj" data-pid="${pj.id}">🗑 ${t('delete')}</button>${dmode}</h2>
     ${capHtml(pj)}${dndHtml(shown, 'project') || (sec ? '' : emptyHtml('project', pj.title))}${sec}`;
 }
@@ -1185,7 +1211,31 @@ function projectsHtml(){
     <div class="meta"><span>${t('open_n', {n:p.open_count})}</span>${p.next_count?'':`<span class="warn">${t('no_next')}</span>`}</div></div>
     <button class="sm" data-act="renameproj" data-pid="${p.id}" title="${t('rename')}">✏️</button>
     <button class="sm" data-act="delproj" data-pid="${p.id}" title="${t('delete')}">🗑</button>
-    <button class="sm" data-act="closeproj" data-pid="${p.id}">${t('complete')}</button>${GRIP()}</div>`).join('')}</div>` : emptyHtml('projects')}`;
+    <button class="sm" data-act="archproj" data-pid="${p.id}">${t('archive')}</button>${GRIP()}</div>`).join('')}</div>` : emptyHtml('projects')}
+  ${S.counts.archived_projects ? `<p style="margin-top:4px"><a class="archl" href="${viewPath('archive', null)}" data-view="archive">${t('archive_link', {n:S.counts.archived_projects})}</a></p>` : ''}`;
+}
+
+// Стили архива (SERBITO-602) — в бандле, а не в <head>: лендинг гостя держим меньше 45 КБ (test_spa_bundle),
+// а эти правила нужны только вошедшему
+document.head.insertAdjacentHTML('beforeend', `<style>
+.ar{display:flex;gap:10px;align-items:center;justify-content:space-between} .ar>:first-child{flex:1;min-width:0;word-break:break-word}
+.ai{font-size:14px;padding:3px 0} .ai.done>:first-child{text-decoration:line-through;color:var(--mut)}
+.ai .num,a.archl{color:var(--mut);text-decoration:none} .ai .num:hover,a.archl:hover{color:var(--ac)} a.archl{display:inline-block;padding:10px 0}
+@media(pointer:coarse){.ar button.sm{min-height:44px}}</style>`);
+// Архив проектов (SERBITO-602): законченные и брошенные проекты, свежие сверху, с задачами под «Задачи (N)».
+// Карточек задач здесь нет — только название и номер: номер открывает карточку, «Вернуть» — проект в Projects
+const fmtDay = ts => ts ? new Date(ts*1000).toLocaleDateString(LANG==='en' ? 'en-GB' : 'ru-RU', {day:'numeric', month:'short', year:'numeric'}) : '';
+function archiveHtml(){
+  const list = S.archive || [];
+  const task = i => `<div class="ar ai ${i.status==='done'?'done':''}"><span>${i.status==='done'?'✅':'🗄'} ${esc(i.title)}</span>
+    <a class="num" href="/i/${i.num}" data-act="opennum" data-n="${i.num}" title="${t('task_n', {n:i.num})}">#${i.num}</a></div>`;
+  return `<p><a href="${viewPath('projects', null)}" data-act="back">${t('back_projects')}</a></p><h2>${t('archive_title')}</h2>
+  ${list.length ? `<div class="hint">${t('archive_hint')}</div>` + list.map(p => `<section class="rv">
+    <div class="ar"><div><h3 style="margin:0">#${esc(p.title)}</h3>
+      <div class="meta"><span>${t('archived_meta', {d:fmtDay(p.archived_at)})}</span><span>${t(p.archive_mode==='all' ? 'archived_all' : 'archived_only')}</span></div></div>
+      <button class="sm" data-act="restoreproj" data-pid="${p.id}" data-title="${esc(p.title)}">${t('restore')}</button></div>
+    ${p.items.length ? `<details style="margin-top:6px"><summary>${t('archived_tasks', {n:p.items.length})}</summary>${p.items.map(task).join('')}</details>`
+      : `<div class="meta">${t('archived_none')}</div>`}</section>`).join('') : `<div class="empty"><div>${t('archive_empty')}</div></div>`}`;
 }
 
 // p — название проекта для примера: пробелы → «_», как их разбирает захват
@@ -1214,14 +1264,17 @@ function onbTrack(o){
 
 function reviewHtml(){
   const wk = Date.now()/1000 - 7*86400;
-  const stalled = S.projects.filter(p=>!p.next_count);
+  const empty = S.projects.filter(p=>!p.active_count);  // пустые — отдельно, с «В архив» (SERBITO-602)
+  const stalled = S.projects.filter(p=>!p.next_count && p.active_count);
   const oldWait = S.items.filter(i=>i.status==='waiting' && i.created<wk);
   const soon = S.items.filter(i=>i.remind_at && !['done','trash'].includes(i.status)).sort((a,b)=>a.remind_at-b.remind_at).slice(0,8);
   const c=S.counts;
   return `<h2>${L.views.review}</h2>
   <div class="rv"><h3>${t('review.s1')}</h3>${t('review.s1_text')}</div>
   <div class="rv"><h3>${t('review.s2')}</h3>${t('review.s2_text', {n:c.inbox||0})}</div>
-  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="${viewPath('projects', p.id)}" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):t('review.s3_ok')}</div>
+  <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="${viewPath('projects', p.id)}" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):empty.length?'':t('review.s3_ok')}
+    ${empty.length ? `<p class="hint" style="margin:8px 0 4px">${t('review.empty')}</p>${empty.map(p=>`<div class="ar"><a href="${viewPath('projects', p.id)}" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a>
+      <button class="sm" data-act="archproj" data-pid="${p.id}">${t('archive')}</button></div>`).join('')}` : ''}</div>
   <div class="rv"><h3>${t('review.s4')}</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):t('review.s4_ok')}</div>
   <div class="rv"><h3>${t('review.s5')}</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):t('review.s5_none')}</div>
   <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
@@ -1238,7 +1291,7 @@ function gaPage(){
   S.gaPage = page;
   const ru = I18N.ru;  // заголовок — всегда русский: отчёты GA не делятся по языку интерфейса, язык — в language
   const label = page==='login' ? ru.login_page : page==='account' ? ru.account_short : page==='stats' ? ru.stats
-    : (ru.views[page] || page);
+    : page==='archive' ? ru.archive_title : (ru.views[page] || page);
   gtag('event', 'page_view', {page_location: location.origin + '/' + page, page_title: 'GTD — ' + label.replace(/^\S+\s/, ''),
     language: LANG});
 }
@@ -1274,8 +1327,9 @@ const findItem = id => S.items.concat(S.dueItems||[], S.nextItems||[]).find(i =>
 async function moveItem(id, status){
   const it = findItem(id); if(!it) return;
   const prev = it.status;
-  await api('/items/'+id, 'PATCH', {status});
+  const r = await api('/items/'+id, 'PATCH', {status});
   load();
+  if(r?.archive_offer) setTimeout(() => offerArchive(r.archive_offer));  // после тоста: «Отменить» видно под вопросом
   const chips = status==='next' && prev==='inbox' && !it.contexts?.length ? S.contexts.slice(0, 3) : [];
   toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev}), chips,
     pick: async c => { await api('/items/'+id, 'PATCH', {contexts:[c]}); load();
@@ -1287,7 +1341,8 @@ function deleteItem(id){
   S.pendingDel.add(id); render();
   toast(t('deleted', {title:it.title}), {
     undo: () => { S.pendingDel.delete(id); },
-    commit: () => { fetch('/api/items/'+id, {method:'DELETE', keepalive:true}); S.pendingDel.delete(id); }});
+    commit: () => { S.pendingDel.delete(id);
+      fetch('/api/items/'+id, {method:'DELETE', keepalive:true}).then(r => r.json()).then(d => offerArchive(d.archive_offer)).catch(() => {}); }});
 }
 
 // ── Черновики: введённый, но не сохранённый текст живёт в localStorage этого браузера —
@@ -1332,8 +1387,9 @@ function openEdit(id, found){
     <label for="ef-title">${t('f_title')}</label><div class="capw"><input id="ef-title" name="title" value="${esc(it.title)}" required autofocus autocomplete="off" data-ac-src>
       <div class="ac" role="listbox" hidden></div></div>
     <label for="ef-notes">${t('f_notes')}</label><textarea id="ef-notes" name="notes" rows="3">${esc(it.notes)}</textarea>
-    <label for="ef-status">${t('f_list')}</label><select id="ef-status" name="status">${['inbox','next','waiting','someday','reference','done','trash'].map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
+    <label for="ef-status">${t('f_list')}</label><select id="ef-status" name="status">${['inbox','next','waiting','someday','reference','done','trash'].concat(it.status==='archived' ? ['archived'] : []).map(s=>`<option value="${s}" ${s===it.status?'selected':''}>${L.status[s]}</option>`).join('')}</select>
     <label for="ef-project">${t('f_project')}</label><select id="ef-project" name="project_id"><option value="">—</option>${S.projects.map(p=>`<option value="${p.id}" ${p.id===it.project_id?'selected':''}>${esc(p.title)}</option>`).join('')}
+      ${it.project_id && !S.projects.some(p => p.id===it.project_id) ? `<option value="${it.project_id}" selected>🗄 ${esc(it.project)}</option>` : ''}
       <option value="new">${t('new_project_opt')}</option></select>
     <div class="newproj" hidden><label for="ef-newproj">${t('new_project_name')}</label><input id="ef-newproj" name="newproj" autocomplete="off"></div>
     <label for="ef-context">${t('f_context')}</label><div class="cxl" role="list"></div>
@@ -1392,10 +1448,10 @@ function openEdit(id, found){
     const f = new FormData(e.target);
     let pid = f.get('project_id');
     if(pid === 'new') pid = (await api('/projects','POST',{title:f.get('newproj').trim()})).id;
-    await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
+    const r = await api('/items/'+id,'PATCH',{title:f.get('title'),notes:f.get('notes'),status:f.get('status'),
       project_id:pid?+pid:null, contexts:cxList(),
       remind_at:f.get('remind')?Math.floor(new Date(f.get('remind')).getTime()/1000):null});
-    await load(); back();
+    await load(); back(); offerArchive(r?.archive_offer);
   };
   d.querySelector('[data-act=cancel]').onclick = () => { draft.del(key); d.close(); };  // «Отмена» — осознанно выбросить
   d.querySelector('[data-act=copylink]').onclick = async e => {
@@ -1479,6 +1535,52 @@ function openDeleteProject(pid){
       if(S.pid===pid){ S.pid = null; history.replaceState(null, '', viewPath()); } load(); }
     catch(err){ $('#pdmsg').textContent = err.message; }
   });
+}
+
+// ── Архив проектов (SERBITO-602). С открытыми задачами — два варианта: вместе с ними (уходят из Next, Inbox и
+// напоминаний) или только проект (задачи остаются в работе без проекта). Без открытых задач — одна кнопка.
+// После — тост с «Отменить»: проект возвращается, а в режиме «только проект» задачи снова получают его
+async function archiveProject(pid, mode, title){
+  const r = await projApi(pid, 'POST', {mode}, '/archive');
+  if(S.pid===pid){ S.pid = null; history.replaceState(null, '', viewPath()); }
+  await load();
+  toast(t('archived_toast', {p:title}), {undo: async () => {
+    await projApi(pid, 'POST', {}, '/restore');
+    if(mode==='project') for(const id of r.items) await api('/items/'+id, 'PATCH', {project_id:pid});
+  }});
+}
+function openArchiveProject(pid){
+  const p = S.projects.find(x=>x.id===pid); if(!p) return;
+  const n = p.active_count, d = $('#dlg');
+  d.innerHTML = `<h3 id="dlg-h" style="margin:0 0 6px">${t('archive_q', {title:esc(p.title)})}</h3>
+    <p class="hint" style="margin:0">${n ? t('archive_open_n', {n}) : t('archive_no_open')}</p>
+    <div class="msg" id="pamsg"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+      ${n ? `<button class="pri" data-arch="all">${t('archive_all', {n})}</button><button data-arch="project">${t('archive_only')}</button>`
+          : `<button class="pri" data-arch="all">${t('archive_do')}</button>`}
+      <button data-arch="">${t('cancel')}</button></div>`;
+  dlgShow(`[data-act=archproj][data-pid="${pid}"]`);
+  d.querySelectorAll('[data-arch]').forEach(b => b.onclick = async () => {
+    if(!b.dataset.arch) return d.close();
+    try{ await archiveProject(pid, b.dataset.arch, p.title); d.close(); }
+    catch(err){ $('#pamsg').textContent = err.message; }
+  });
+}
+// Последняя задача проекта ушла в Готово или корзину — спросить, убрать ли проект в архив. Молча не убираем.
+// Открыт другой диалог — не перебиваем его: проект предложит и Weekly Review
+function offerArchive(o){
+  const d = $('#dlg'); if(!o || d.open) return;
+  d.innerHTML = `<h3 id="dlg-h" style="margin:0 0 14px">${t('archive_offer', {p:esc(o.title)})}</h3>
+    <div class="row"><span></span><span><button type="button" data-ao="">${t('not_now')}</button> <button type="button" class="pri" data-ao="1">${t('archive_do')}</button></span></div>`;
+  dlgShow();
+  d.querySelectorAll('[data-ao]').forEach(b => b.onclick = async () => {
+    d.close(); if(b.dataset.ao) await archiveProject(o.id, 'all', o.title);
+  });
+}
+async function restoreProject(pid, title){
+  await projApi(pid, 'POST', {}, '/restore');
+  await load();
+  toast(t('restored_toast', {p:title}));
 }
 
 // Куда ушла задача, видно не всегда: на странице проекта она в нём, в Waiting или Done — в Inbox. Кроме Inbox
@@ -1589,7 +1691,9 @@ document.addEventListener('click', async e => {
   if(act==='disconnectapp') return disconnectApp(+el.dataset.id);
   if(act==='renameproj'){ e.stopPropagation(); return openRenameProject(+el.dataset.pid); }
   if(act==='delproj'){ e.stopPropagation(); return openDeleteProject(+el.dataset.pid); }
-  if(act==='closeproj'){ e.stopPropagation(); await api('/projects/'+el.dataset.pid,'PATCH',{status:'done'}); return load(); }
+  if(act==='archproj'){ e.stopPropagation(); return openArchiveProject(+el.dataset.pid); }
+  if(act==='restoreproj') return restoreProject(+el.dataset.pid, el.dataset.title);
+  if(act==='opennum'){ if(e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); return openByNum(+el.dataset.n); }
   if(act==='back') return go('projects');
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
   if(el.dataset.view){

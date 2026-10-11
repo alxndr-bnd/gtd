@@ -179,7 +179,8 @@ def test_mcp_wrong_tokens_limited_per_ip(client, monkeypatch):
 def test_tools_listed(alice):
     tools = rpc(alice["mcp"], alice["tok"], "tools/list").json()["result"]["tools"]
     assert {t["name"] for t in tools} == {"list_tasks", "list_projects", "list_contexts", "capture",
-                                         "complete_task", "move_task", "update_task", "weekly_review"}
+                                         "complete_task", "move_task", "update_task", "weekly_review",
+                                         "archive_project", "restore_project"}
     by_name = {t["name"]: t for t in tools}
     assert by_name["list_tasks"]["annotations"]["readOnlyHint"] is True
     assert "ctx" not in by_name["capture"]["inputSchema"]["properties"]  # контекст MCP — не аргумент

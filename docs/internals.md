@@ -108,7 +108,7 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
   in 10 minutes → 429 with `Retry-After`.
 - **Isolation** — tools take `uid` from the token, never from arguments; tasks are addressed by the user's own
   number `#N`. Tools: `capture`, `list_tasks`, `list_projects`, `list_contexts`, `complete_task`, `move_task`,
-  `update_task`, `weekly_review`.
+  `update_task`, `weekly_review`, `archive_project`, `restore_project`.
 - **Contexts** (SERBITO-423) — a task has a list of contexts (`items.contexts text[]`). `move_task` takes `contexts`
   (a list) or the old `context` (a string, may hold several: `"@phone @computer"`); both replace the whole list.
   The `list_tasks` context filter matches any of the task's contexts.
@@ -119,6 +119,10 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
 - **`weekly_review`** — read-only: Inbox count, projects without a next action, overdue (open tasks with a past
   date), Waiting (oldest first, `waiting_over_a_week` by creation date — there is no “moved to Waiting” time),
   next 7 days, Someday count.
+- **Project archive** (SERBITO-602) — `list_projects(include_archived)`, `archive_project(name, tasks="archive"|"keep")`,
+  `restore_project(name)`, `list_tasks(list="archived")`. `complete_task` and `move_task` return `project_now_empty`
+  and a `hint` when the last open task of a project is closed: the model asks the user, it does not archive by itself.
+  `weekly_review` has `empty_projects`. `move_task` to an archived project restores it.
 - **Logs** — no token values, codes or task text; SDK loggers (`mcp.*`) log warnings only.
 
 ## Telegram capture
@@ -165,6 +169,21 @@ action) · Someday · Reference · Done · Weekly Review.
 Every section has its own address — `/` (Inbox), `/next`, `/projects`, `/p/<id>` (a project), `/account`… and the
 same under `/en/` — so Back (button or phone gesture) returns to the previous section instead of leaving the site.
 A task card opened from a list is its own history entry `/i/<N>`: Back closes it. Server: `app.APP_VIEWS`.
+
+Project archive (SERBITO-602): `projects.status` is `active` or `archived`, with `archived_at` and `archive_mode`.
+- `all` — the open tasks (not done or trash) get `status='archived'`; `items.archived_from` keeps their list. They
+  leave Next, Inbox, Calendar, contexts and reminders.
+- `project` — the open tasks stay in their lists and lose the project. Done tasks stay in the project in both modes.
+- Restore (`POST /api/projects/{id}/restore`) puts archived tasks at the end of their old lists. Reminders in the
+  past are dropped (`remind_at = null`); future ones work again.
+- The old "Complete" button set `status='done'`; the schema moves those projects to the archive, mode `project`.
+  `PATCH /api/projects/{id}` with `status` still works (`done`/`archived` — archive without touching tasks).
+- When the last open task of a project goes to done or trash (`PATCH`/`DELETE /api/items`, bot `/done` and ✅), the
+  response has `archive_offer` and the app or bot asks "Archive the project?". It never archives silently.
+- `#Name` of an archived project in capture (or `move_task`) restores it: names stay unique per user.
+- Screens: "🗄 Archive" on a project and in the project list; `/archive` lists archived projects with their tasks
+  and "Restore"; Weekly Review lists empty projects with an Archive button. Archive CSS lives in the JS bundle:
+  the guest landing must stay under 45 KB (`test_spa_bundle`).
 
 Manual order: tasks have their own order in each list (`items.position`) and in each project (`items.ppos`);
 projects have one order per user (`projects.position`, SERBITO-391), used by the project list and every project

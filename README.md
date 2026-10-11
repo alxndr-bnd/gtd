@@ -16,7 +16,7 @@ FastAPI + PostgreSQL, one container. English and Russian.
 
 - **Quick capture** with natural dates: `call mom tomorrow at 10am #Family @phone` → task, reminder, project, context.
 - **GTD lists:** Inbox · Next (filter by @context) · Waiting · Calendar/reminders · Projects (⚠ without a next
-  action) · Someday · Reference · Done · Weekly Review.
+  action, archive) · Someday · Reference · Done · Weekly Review.
 - **Telegram bot:** send a message — it lands in the Inbox; reminders come with ✅ Done / 💤 +1h / ⏭ Next buttons.
 - **Sign-in** by email code, Google or Telegram; methods link into one account, accounts can be merged.
 - **AI assistants:** connect Claude, ChatGPT, Cursor or VS Code with sign-in (OAuth, no token), or any MCP client
@@ -95,12 +95,14 @@ Ask, for example: “add ‘call the bank tomorrow 10am’ to my inbox”, “wh
 | --- | --- |
 | `capture` | Captures a task, like the app and the bot: dates, `#Project` and one or more `@contexts` in the text work |
 | `list_tasks` | Lists a list (Inbox, Next, Waiting, Scheduled, Someday, Reference, Done, all); filters by project, context, text |
-| `list_projects` | Active projects with counts; marks projects without a next action |
+| `list_projects` | Active projects with counts; marks projects without a next action; `include_archived` adds archived ones |
 | `list_contexts` | Contexts with counts of open tasks (a task with two contexts counts in both) |
 | `complete_task` | Marks task #N done |
 | `move_task` | Moves task #N to a list, a project (created if missing) and/or sets its contexts (one or several) |
 | `update_task` | Changes the title, notes or due date of task #N, or sets who it waits for (moves it to Waiting) |
-| `weekly_review` | Read-only summary: Inbox count, projects without a next action, overdue, Waiting, next 7 days, Someday count |
+| `archive_project` | Archives a project: with its open tasks (`tasks="archive"`) or only the project (`tasks="keep"`) |
+| `restore_project` | Brings an archived project back with its archived tasks; past reminders are dropped |
+| `weekly_review` | Read-only summary: Inbox count, projects without a next action, empty projects, overdue, Waiting, next 7 days, Someday count |
 
 ### Security
 
