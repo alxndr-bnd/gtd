@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-11
+
 ### Added
 
 - Archive a finished project. Choose to archive its open tasks with it or to keep them active without a project. The archive is under Projects, and "Restore" brings a project back with its tasks.
@@ -489,7 +491,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.48.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.49.0...HEAD
+[0.49.0]: https://github.com/alxndr-bnd/gtd/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/alxndr-bnd/gtd/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/alxndr-bnd/gtd/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/alxndr-bnd/gtd/compare/v0.45.0...v0.46.0
