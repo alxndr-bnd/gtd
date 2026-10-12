@@ -175,12 +175,23 @@ def test_security_headers_on_every_response(client, path):
     h = client.get(path).headers
     assert h["x-content-type-options"] == "nosniff"
     assert h["referrer-policy"] == "strict-origin-when-cross-origin"
-    assert h["x-frame-options"] == "DENY" and h["content-security-policy"] == "frame-ancestors 'none'"
+    assert h["x-frame-options"] == "DENY"
     assert "camera=()" in h["permissions-policy"]
-    csp = h["content-security-policy-report-only"]
+    # Боевая CSP (SERBITO-548) — один заголовок; до неё — report-only и отдельный боевой frame-ancestors
+    csp = h["content-security-policy"] if A.CSP_ENFORCE else h["content-security-policy-report-only"]
+    assert "frame-ancestors 'none'" in h["content-security-policy"]
     assert "default-src 'self'" in csp and "https://accounts.google.com" in csp and "https://oauth.telegram.org" in csp
     assert " https://www.google.com " in csp.split("connect-src", 1)[1].split(";")[0] + " "  # GA4 /g/collect (GTD-6)
     assert "strict-transport-security" not in h  # http: HSTS не отдаём
+
+
+def test_csp_headers_both_modes():
+    """SERBITO-548: перевод в боевой режим — CSP_ENFORCE = True. Политика та же, frame-ancestors не теряется."""
+    assert A.csp_headers(False) == [(b"content-security-policy", b"frame-ancestors 'none'"),
+                                    (b"content-security-policy-report-only", A.CSP.encode())]
+    assert A.csp_headers(True) == [(b"content-security-policy", A.CSP.encode())]
+    assert "frame-ancestors 'none'" in A.CSP
+    assert "'unsafe-eval'" not in A.CSP
 
 
 def test_csp_reports_go_to_sentry(monkeypatch):
