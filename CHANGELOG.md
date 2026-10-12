@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- On phones the Telegram sign-in button is fully visible above the cookie banner again.
+  - RU: На телефоне кнопка входа через Telegram снова видна целиком над баннером cookie.
+
 ## [0.52.0] - 2026-10-12
 
 ### Added

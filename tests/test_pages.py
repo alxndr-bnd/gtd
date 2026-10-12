@@ -224,7 +224,8 @@ def test_about_ga_event_only_on_prod(client, monkeypatch):
 def test_open_source_links(client, path, lang):
     """SERBITO-291: код открыт — ссылка на репозиторий в подвале каждой публичной страницы,
     на лендинге — строка под текстом, на /about — раздел со ссылкой на инструкцию по self-hosting.
-    SERBITO-611: рядом — отзывы на AlternativeTo, обычной ссылкой (без чужих бейджей и скриптов)."""
+    SERBITO-611: рядом — отзывы на AlternativeTo, обычной ссылкой (без чужих бейджей и скриптов). На лендинге
+    над сгибом — только GitHub: вторая ссылка переносила строку, и кнопка входа на телефоне уходила под баннер."""
     h = client.get(path).text
     foot = h[h.index("<footer>"):h.index("</footer>")]
     alt = f'<a href="{P.ALTERNATIVETO_URL}">{"Отзывы на AlternativeTo" if lang == "ru" else "Reviews on AlternativeTo"}</a>'
@@ -234,8 +235,9 @@ def test_open_source_links(client, path, lang):
     assert "mailto:" not in foot  # контактной почты в подвале нет; адрес для запросов о данных — только на /privacy
     if path in ("/", "/en/"):
         root = h[h.index('<div id="root">'):h.index("<footer>")]
-        assert f'<p class="note">{P.T[lang]["oss_note"]} · <a href="{P.REPO_URL}">GitHub</a> · {alt}</p>' in root
+        assert f'<p class="note">{P.T[lang]["oss_note"]} · <a href="{P.REPO_URL}">GitHub</a></p>' in root
         assert root.count(f'href="{P.REPO_URL}"') == 1  # только строка под текстом — без дублей
+        assert P.ALTERNATIVETO_URL not in root  # над сгибом — без отзывов: они в подвале
     elif path.endswith("/about"):
         body = h[:h.index("<footer>")]
         assert ("Где открытый код?</h2>" if lang == "ru" else "Where is the source code?</h2>") in body

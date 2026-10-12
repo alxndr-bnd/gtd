@@ -441,7 +441,7 @@ def topbar(lang: str, page: str) -> str:
 
 
 def oss_links(lang: str) -> str:
-    """Открытый код и отзывы (SERBITO-611): одна строка для подвала и лендинга."""
+    """Открытый код и отзывы (SERBITO-611): строка подвала."""
     return f'<a href="{REPO_URL}">GitHub</a> · <a href="{ALTERNATIVETO_URL}">{T[lang]["reviews"]}</a>'
 
 
@@ -535,7 +535,9 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
     """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin; signin — включённые
     способы входа (для резерва высоты), dev — локальная кнопка «Dev login»."""
     h, hint = LANDING_SIGNIN[lang]
-    oss = f'<p class="note">{T[lang]["oss_note"]} · {oss_links(lang)}</p>'
+    # Над сгибом — только GitHub (SERBITO-611): ссылка на AlternativeTo переносила заметку на вторую строку,
+    # и на телефоне кнопка входа уходила под баннер cookie. Отзывы — в подвале и на /about
+    oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
     return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}{BOT_NOTE[lang]}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
             f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>'
