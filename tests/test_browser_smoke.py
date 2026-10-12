@@ -736,6 +736,9 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
         banner(w, "прод: баннер")
         w.page.wait_for_function("window.__ga && __ga.hits.length", timeout=WAIT_MS)
         assert ["page_view", "denied"] in hits() and all(s == "denied" for _, s in hits())
+        # gtag.js — после load (SERBITO-548): первая отрисовка его не ждёт, а page_view из очереди dataLayer не пропал
+        assert w.page.evaluate("""() => performance.getEntriesByType('resource').find(e => e.name.includes('gtag/js'))
+            .startTime >= performance.getEntriesByType('navigation')[0].loadEventEnd""")
         assert ga_cookies(w) == []
 
         w.page.click('#cc [data-cc="granted"]')

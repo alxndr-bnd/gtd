@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- The site opens faster: Google Analytics now loads after the page is ready.
+  - RU: Сайт открывается быстрее: Google Analytics теперь грузится после того, как страница готова.
+
 ## [0.54.0] - 2026-10-12
 
 ### Changed

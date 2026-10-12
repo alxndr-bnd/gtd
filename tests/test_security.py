@@ -180,6 +180,7 @@ def test_security_headers_on_every_response(client, path):
     assert "camera=()" in h["permissions-policy"]
     csp = h["content-security-policy-report-only"]
     assert "default-src 'self'" in csp and "https://accounts.google.com" in csp and "https://oauth.telegram.org" in csp
+    assert " https://www.google.com " in csp.split("connect-src", 1)[1].split(";")[0] + " "  # GA4 /g/collect (GTD-6)
     assert "strict-transport-security" not in h  # http: HSTS не отдаём
 
 
