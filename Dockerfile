@@ -1,7 +1,7 @@
 # Базовый образ закреплён тегом и digest мультиархитектурного индекса (SERBITO-339): перезалитый
 # 3.14-slim не меняет прод без коммита. Digest поднимает Dependabot (docker, .github/dependabot.yml).
 # Минорная версия Python — та же, что в замке (--python-version в requirements.txt) и в CI (ci.yml читает её отсюда).
-FROM python:3.14-slim@sha256:0741d101873c12ab927e6f8653feb8862b9bd58771177acb1b885b95141f91b4
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 # Исправления безопасности Debian (например, openssl) выходят раньше, чем обновляется python:*-slim —
 # без этого Trivy в деплое останавливает релиз на уже исправленных CVE.
 # APT_REFRESH — дата UTC (её передаёт deploy.yml). RUN читает её, поэтому первая сборка за день
