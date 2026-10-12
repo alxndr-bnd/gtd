@@ -211,6 +211,56 @@ def test_reorder_checks_ownership_and_list(new_client, login):
     assert titles(me, "status=next") == ["a", "b"] and titles(other, "status=next") == ["чужая"]
 
 
+def to_edge(client, iid, to, scope="list"):
+    return client.post(f"/api/items/{iid}/move", json={"to": to, "scope": scope})
+
+
+def test_move_to_top_and_bottom(client, login):
+    """Меню задачи (SERBITO-604): «наверх» и «вниз» — край всего списка, а не только видимых соседей; одна строка."""
+    uid = login(client)
+    a, b, c, d = (add(client, t, "next")["id"] for t in "abcd")
+    before = positions(uid)
+    r = to_edge(client, c, "top")
+    assert r.status_code == 200, r.text
+    after = positions(uid)
+    assert [k for k in before if before[k] != after[k]] == [c]  # одна строка, порядок проекта не тронут
+    assert titles(client, "status=next") == list("cabd")
+    assert to_edge(client, a, "bottom").status_code == 200
+    assert titles(client, "status=next") == list("cbda")
+    once = positions(uid)
+    assert to_edge(client, c, "top").json()["id"] == c and to_edge(client, a, "bottom").status_code == 200
+    assert positions(uid) == once  # уже на краю — ничего не меняется
+    alone = add(client, "одна", "waiting")["id"]
+    assert to_edge(client, alone, "top").status_code == 200 and titles(client, "status=waiting") == ["одна"]
+    assert titles(client, "status=next") == list("cbda")  # другой список не задет
+
+
+def test_move_to_top_and_bottom_of_project(client, login):
+    login(client)
+    x = add(client, "x #П", "next")["id"]
+    y = add(client, "y #П", "waiting")["id"]
+    z = add(client, "z #П", "next")["id"]
+    pid = client.get("/api/projects").json()[0]["id"]
+    assert to_edge(client, z, "top", "project").status_code == 200
+    assert titles(client, f"status=all&project_id={pid}") == ["z", "x", "y"]  # проект — общий для списков
+    assert titles(client, "status=next") == ["x", "z"]  # порядок списка прежний
+    assert to_edge(client, z, "bottom", "project").status_code == 200
+    assert titles(client, f"status=all&project_id={pid}") == ["x", "y", "z"]
+
+
+def test_move_to_edge_checks_input_and_owner(new_client, login):
+    me, other = new_client(), new_client()
+    login(me)
+    login(other, "bob@example.com")
+    a, b = add(me, "a", "next")["id"], add(me, "b", "next")["id"]
+    assert to_edge(me, a, "middle").status_code == 400
+    assert me.post(f"/api/items/{a}/move", json={"to": "top", "next": b}).status_code == 400  # или край, или соседи
+    assert to_edge(me, a, "top", "project").status_code == 400  # задача без проекта
+    assert to_edge(other, b, "top").status_code == 404  # чужую не двигать
+    assert new_client().post(f"/api/items/{b}/move", json={"to": "top"}).status_code == 401
+    assert titles(me, "status=next") == ["a", "b"]
+
+
 def test_project_order_is_separate_from_list_order(client, login):
     login(client)
     x = add(client, "x #П", "next")["id"]

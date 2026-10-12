@@ -283,7 +283,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "about": "📖 О GTD", "about_title": "Как это работает: метод GTD и разделы приложения", "about_url": "/about",
   "cookie_settings": "Настройки cookie", "privacy_url": "/privacy",
   "changes": "✨ Что нового", "changes_url": "/changes", "changes_new": "Есть новая версия",
-  "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>Alt+↑↓ переставить<br>← меню · → задачи · Esc сброс",
+  "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>Alt+↑↓ переставить<br>Shift+F10 меню задачи<br>← меню · → задачи · Esc сброс",
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
   "all": "все", "back_projects": "← Projects", "rename": "Переименовать", "delete": "Удалить",
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие. Порядок меняется перетаскиванием или Alt+↑↓.",
@@ -350,7 +350,13 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "del_project": "Удалить проект",
   "done_mode": {"label": "Выполненные задачи", "hide": "Скрыть выполненные", "list": "Выполненные — в списке",
     "section": "Выполненные — отдельно"},
-  "done_section": "Выполненные ({n})"
+  "done_section": "Выполненные ({n})",
+  "cm": {"label": "Действия с задачей", "top": "Наверх списка", "bottom": "В конец списка",
+    "project": "Добавить в проект", "project_change": "Перенести в другой проект", "unproject": "Убрать из #{p}",
+    "date_add": "Поставить дату", "date_change": "Изменить дату", "undate": "Убрать дату", "back": "‹ Назад",
+    "find": "Найти проект", "none": "Таких проектов нет", "new": "+ Новый проект…", "new_named": "+ Новый проект «{p}»",
+    "today": "Сегодня", "tomorrow": "Завтра", "week": "На следующей неделе", "pick": "Дата и время", "set": "Поставить",
+    "unprojected": "«{title}» убрана из #{p}", "undated": "«{title}»: дата убрана"}
 },
 "en": {
   "views": {"inbox": "📥 Inbox", "next": "⏭ Next", "waiting": "⏳ Waiting", "scheduled": "📅 Calendar / reminders",
@@ -433,7 +439,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "about": "📖 About GTD", "about_title": "How it works: the GTD method and the app sections", "about_url": "/en/about",
   "cookie_settings": "Cookie settings", "privacy_url": "/en/privacy",
   "changes": "✨ What's new", "changes_url": "/en/changes", "changes_new": "There is a new version",
-  "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>Alt+↑↓ reorder<br>← menu · → tasks · Esc clear",
+  "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>Alt+↑↓ reorder<br>Shift+F10 task menu<br>← menu · → tasks · Esc clear",
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action. Drag a project or press Alt+↑↓ to change the order.",
@@ -500,7 +506,13 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "del_project": "Delete project",
   "done_mode": {"label": "Completed tasks", "hide": "Hide completed", "list": "Show completed in the list",
     "section": "Show completed separately"},
-  "done_section": "Completed ({n})"
+  "done_section": "Completed ({n})",
+  "cm": {"label": "Task actions", "top": "Move to the top", "bottom": "Move to the bottom",
+    "project": "Add to a project", "project_change": "Move to another project", "unproject": "Remove from #{p}",
+    "date_add": "Add a date", "date_change": "Change the date", "undate": "Remove the date", "back": "‹ Back",
+    "find": "Find a project", "none": "No projects match", "new": "+ New project…", "new_named": "+ New project “{p}”",
+    "today": "Today", "tomorrow": "Tomorrow", "week": "Next week", "pick": "Date and time", "set": "Set",
+    "unprojected": "“{title}” removed from #{p}", "undated": "“{title}”: date removed"}
 }
 }
 </script>
@@ -1177,7 +1189,7 @@ function dndReset(){
     DND.el.classList.remove('dragging'); DND.el.style.transform = '';
     document.body.classList.remove('dnd-on'); DND.endAt = performance.now();
   }
-  for(const k of ['el','box','on','timer']) delete DND[k];
+  for(const k of ['el','box','on','timer','held']) delete DND[k];
   if(DND.rerender){ DND.rerender = false; render(); }
 }
 function dndStart(){
@@ -1210,7 +1222,7 @@ document.addEventListener('pointerdown', e => {
   if(!el || e.button !== 0 || DND.el || e.target.closest('a,button,input,select,textarea,label') || $('#dlg').open) return;
   Object.assign(DND, {el, box:el.parentElement, x:e.clientX, y:e.clientY, pid:e.pointerId, touch:e.pointerType==='touch'});
   if(DND.touch && e.target.closest('.grip')) dndStart();  // за ручку — сразу, без удержания (SERBITO-354)
-  else if(DND.touch) DND.timer = setTimeout(dndStart, HOLD_MS);
+  else if(DND.touch) DND.timer = setTimeout(() => { DND.held = true; dndStart(); }, HOLD_MS);
 });
 document.addEventListener('pointermove', e => {
   if(!DND.el || e.pointerId !== DND.pid) return;
@@ -1225,11 +1237,13 @@ document.addEventListener('pointermove', e => {
 });
 function dndEnd(e){
   if(!DND.el || e.pointerId !== DND.pid) return;
-  const {el, box, on, was} = DND;
+  const {el, box, on, was, held} = DND, still = on && Math.abs(DND.cy - DND.y) < 12;
   dndReset();
   if(!on) return;
   if(e.type==='pointercancel') return render();  // жест отняла система — вернуть как было
   if(dndOrder(box) !== was) dndSave(el);
+  // Удержал пальцем и отпустил на месте — меню задачи (SERBITO-604); за ручку ⠿ — только перетаскивание
+  else if(held && still && el.dataset.id) cmOpen(el.isConnected ? el : cmCard(+el.dataset.id) || el, e.clientX, e.clientY);
 }
 document.addEventListener('pointerup', dndEnd);
 document.addEventListener('pointercancel', dndEnd);
@@ -1829,6 +1843,239 @@ async function restoreProject(pid, title){
   await load();
   toast(t('restored_toast', {p:title}));
 }
+
+// ── Меню задачи (SERBITO-604): правый клик по задаче, клавиша Menu или Shift+F10 на выбранной задаче, на телефоне —
+// долгое нажатие. Наверх / вниз (только в списках с ручным порядком), проект (поиск, «Новый проект…»; архивных нет —
+// /api/projects отдаёт только активные), снять проект, дата (сегодня, завтра, на следующей неделе, своя), снять дату.
+// Те же запросы, что у карточки и перетаскивания: порядок, напоминания и синхронизация ведут себя так же.
+// Браузерное меню остаётся на ссылках, в полях ввода, на выделенном тексте и вне задач. Палец: в списке с ручным
+// порядком удержание уже поднимает карточку (перетаскивание) — отпустил на месте, и открылось меню; повёл — перестановка.
+// Меню не выходит за край экрана; закрывается по Esc, клику мимо, прокрутке и смене размера окна
+document.head.insertAdjacentHTML('beforeend', `<style>
+.cm{position:fixed;z-index:70;outline:none;min-width:240px;max-width:min(320px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;
+  background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:10px;box-shadow:0 8px 28px #0004;padding:4px}
+.cm [role^=menuitem]{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;border-radius:6px;
+  padding:6px 10px;min-height:34px;color:inherit}
+.cm [role^=menuitem]:hover,.cm [role^=menuitem]:focus{background:var(--bg);outline:none}
+.cm [role^=menuitem]:focus-visible{outline:2px solid var(--ac);outline-offset:-2px}
+.cm [aria-checked=true]{font-weight:600} .cm [aria-checked=true]::after{content:'✓';margin-left:auto;color:var(--ac)}
+.cm .sub{margin-left:auto;padding-left:12px;color:var(--mut);font-size:13px;white-space:nowrap}
+.cm hr{border:0;border-top:1px solid var(--bd);margin:4px 0} .cm .hint{margin:4px 10px}
+.cm input{width:100%;margin:2px 0 4px;padding:7px 9px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit}
+.cm .pjpick{display:block;max-height:240px;overflow:auto;margin:0}
+.cm .cmdt{display:flex;gap:6px;align-items:center;padding:2px 4px 4px} .cm .cmdt input{margin:0;min-width:0;flex:1}
+.cm .cmdt [role=menuitem]{width:auto;flex-shrink:0;border:1px solid var(--bd)}
+.it.cmon{outline:2px solid var(--ac);outline-offset:-1px}
+@media(pointer:coarse){.cm [role^=menuitem]{min-height:44px} main .it[data-id]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
+</style>`);
+const CM = {el:null, at:0};
+const cmCard = id => document.querySelector(`main .it[data-id="${id}"]`);
+// Быстрые даты: время прежнее, если дата у задачи уже есть, иначе 9:00 — как у даты без времени при захвате.
+// «Сегодня», когда это время уже прошло, — ближайший целый час. «Следующая неделя» — её понедельник
+function cmWhen(kind, cur){
+  const now = new Date(), d = new Date(now), was = cur ? new Date(cur*1000) : null;
+  if(kind==='tomorrow') d.setDate(d.getDate() + 1);
+  if(kind==='week') d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+  d.setHours(was ? was.getHours() : 9, was ? was.getMinutes() : 0, 0, 0);
+  if(kind==='today' && d <= now){
+    d.setTime(now); d.setHours(d.getHours() + 1, 0, 0, 0);
+    if(d.getDate() !== now.getDate()){ d.setTime(now); d.setHours(23, 59, 0, 0); }
+  }
+  return Math.floor(d.getTime()/1000);
+}
+const cmItem = (act, label, sub = '', more = '') => `<button type="button" role="menuitem" data-cm="${act}"${more}>${label}${sub
+  ? `<span class="sub">${sub}</span>` : ''}</button>`;
+function cmOpen(card, x, y){
+  const id = +card.dataset.id, it = findItem(id); if(!it) return;
+  cmClose(false);
+  const box = card.parentElement;
+  Object.assign(CM, {id, it, x, y, at:performance.now(), touch:cmPtr==='touch', scope:box?.classList.contains('dnd') ? box.dataset.scope : null});
+  const el = CM.el = document.createElement('div');
+  el.className = 'cm'; el.tabIndex = -1; el.setAttribute('role', 'menu'); el.setAttribute('aria-label', t('cm.label'));
+  el.addEventListener('click', cmClick);
+  document.body.appendChild(el);
+  card.classList.add('cmon');
+  cmPane('main');
+}
+// Панель меню: main — действия; proj и date — подменю на месте главного (так же и на узком экране телефона).
+// from — пункт, с которого ушли в подменю: «Назад» возвращает фокус на него
+function cmPane(pane, from){
+  const {it, el} = CM; CM.pane = pane;
+  const sub = ' aria-haspopup="menu"';
+  if(pane==='main') el.innerHTML = [
+    CM.scope && cmItem('top', '⤒ ' + t('cm.top')), CM.scope && cmItem('bottom', '⤓ ' + t('cm.bottom')), CM.scope && '<hr>',
+    cmItem('proj', '# ' + t(it.project_id ? 'cm.project_change' : 'cm.project'), '›', sub),
+    it.project_id && cmItem('unproj', t('cm.unproject', {p:esc(it.project || '')})), '<hr>',
+    cmItem('date', '⏰ ' + t(it.remind_at ? 'cm.date_change' : 'cm.date_add'), '›', sub),
+    it.remind_at && cmItem('undate', t('cm.undate'), fmtTs(it.remind_at))].filter(Boolean).join('');
+  else if(pane==='proj'){
+    el.innerHTML = `${cmItem('back', t('cm.back'))}<input id="cm-q" type="search" autocomplete="off" enterkeyhint="go"
+      placeholder="${t('cm.find')}" aria-label="${t('cm.find')}">${pjPickHtml(it.project_id ?? null)}
+      <div class="hint cmnone" hidden>${t('cm.none')}</div>${cmItem('new', t('cm.new'))}`;
+    el.querySelectorAll('[data-pick]').forEach(b => {  // общий выбор проекта (SERBITO-602/603) — как пункты меню
+      b.setAttribute('role', 'menuitemradio'); b.setAttribute('aria-checked', b.getAttribute('aria-pressed')); b.removeAttribute('aria-pressed');
+    });
+    $('#cm-q').addEventListener('input', cmFilter);
+  } else {
+    const q = k => cmWhen(k, it.remind_at);
+    el.innerHTML = `${cmItem('back', t('cm.back'))}
+      ${['today', 'tomorrow', 'week'].map(k => cmItem('at', t('cm.' + k), fmtTs(q(k)), ` data-k="${k}" data-ts="${q(k)}"`)).join('')}<hr>
+      <label class="hint" for="cm-dt">${t('cm.pick')}</label><div class="cmdt"><input id="cm-dt" type="datetime-local"
+        value="${toLocalInput(it.remind_at || q('tomorrow'))}">${cmItem('dt', t('cm.set'))}</div>`;
+  }
+  cmPlace();
+  // Пальцем — фокус на само меню: ни рамки фокуса на первом пункте, ни экранной клавиатуры от поля поиска
+  const first = CM.touch ? el : pane==='proj' ? $('#cm-q')
+    : el.querySelector(from ? `[data-cm="${from}"]` : '[data-cm]:not([data-cm=back])') || el.querySelector('[data-cm]');
+  first?.focus({preventScroll:true});
+}
+// Рядом с точкой нажатия, но целиком на экране: не влезает справа — левее, снизу — над точкой
+function cmPlace(){
+  const el = CM.el, w = el.offsetWidth, h = el.offsetHeight, m = 8;
+  let x = CM.x, y = CM.y;
+  if(x + w > innerWidth - m) x = innerWidth - m - w;
+  if(y + h > innerHeight - m) y = y - h >= m ? y - h : innerHeight - m - h;
+  el.style.left = Math.max(m, x) + 'px'; el.style.top = Math.max(m, y) + 'px';
+}
+function cmFilter(){
+  const q = $('#cm-q').value.trim(), ql = q.toLowerCase(), el = CM.el;
+  let shown = 0, exact = false;
+  el.querySelectorAll('[data-pick]').forEach(b => {
+    const name = b.textContent.slice(1).toLowerCase();
+    b.hidden = !!ql && !name.includes(ql); shown += !b.hidden; exact ||= name === ql;
+  });
+  el.querySelector('.cmnone').hidden = !q || shown > 0;
+  el.querySelector('[data-cm=new]').innerHTML = q && !exact ? t('cm.new_named', {p:esc(q)}) : t('cm.new');
+  cmPlace();
+}
+function cmClose(focus){
+  if(!CM.el) return;
+  CM.el.remove(); CM.el = null;
+  document.querySelectorAll('main .it.cmon').forEach(c => c.classList.remove('cmon'));
+  if(focus) cmCard(CM.id)?.focus({preventScroll:true});  // клавиатура — обратно на задачу
+}
+const cmTyping = () => CM.el?.contains(document.activeElement) && document.activeElement.tagName==='INPUT';
+function cmClick(e){
+  const b = e.target.closest('[data-cm],[data-pick]'); if(!b) return;
+  const a = b.dataset.cm;
+  if(b.dataset.pick) return cmProject(+b.dataset.pick, S.projects.find(p => p.id === +b.dataset.pick)?.title);
+  if(a==='proj' || a==='date') return cmPane(a);
+  if(a==='back') return cmPane('main', CM.pane);
+  if(a==='new'){
+    const q = $('#cm-q'), v = q.value.trim();
+    if(v) return cmProject(null, v);
+    q.placeholder = t('new_project_name'); return q.focus();
+  }
+  if(a==='at') return cmPatch({remind_at:+b.dataset.ts});
+  if(a==='dt'){
+    const v = $('#cm-dt').value; if(!v) return $('#cm-dt').focus();
+    return cmPatch({remind_at:Math.floor(new Date(v).getTime()/1000)});
+  }
+  if(a==='unproj') return cmPatch({project_id:null});
+  if(a==='undate') return cmPatch({remind_at:null});
+  if(a==='top' || a==='bottom') return cmMove(a);
+}
+// Наверх / вниз — всего списка или проекта, а не видимой части (фильтр @контекста). Экран — сразу, сервер — через
+// общую очередь перестановок (dndSave): перечитка, начатая раньше, не нарисует старый порядок (SERBITO-562)
+function cmMove(to){
+  const {id, scope} = CM, card = cmCard(id), box = card?.parentElement;
+  cmClose(true);
+  if(box?.classList.contains('dnd')) to==='top' ? box.prepend(card) : box.append(card);
+  if(S.sel!=null && card) S.sel = cards().indexOf(card);
+  moving++; loadSeq++; movedIn = viewKey();
+  moveQ = moveQ.then(() => api(`/items/${id}/move`, 'POST', {to, scope})).catch(() => {})
+    .finally(() => { if(--moving===0) load(); });
+}
+// Проект, дата: тот же PATCH, что у карточки задачи, и тост с «Отменить» — вернуть прежнее значение
+async function cmPatch(body, to){
+  const {id, it} = CM, prev = Object.fromEntries(Object.keys(body).map(k => [k, it[k] ?? null]));
+  cmClose(true);
+  const r = await api('/items/'+id, 'PATCH', body).catch(() => null);
+  if(!r?.id) return toast(t('failed'));
+  load();
+  const msg = 'remind_at' in body ? (body.remind_at ? t('moved', {title:it.title, to:'⏰ ' + fmtTs(body.remind_at)}) : t('cm.undated', {title:it.title}))
+    : body.project_id ? t('moved', {title:it.title, to:'#' + to}) : t('cm.unprojected', {title:it.title, p:it.project || ''});
+  toast(msg, {undo: () => api('/items/'+id, 'PATCH', prev)});
+}
+async function cmProject(pid, title){
+  if(pid==null){
+    const p = await api('/projects', 'POST', {title}).catch(() => null);
+    if(!p?.id){ cmClose(true); return toast(t('failed')); }
+    pid = p.id;
+  }
+  return cmPatch({project_id:pid}, title);
+}
+// Клавиатура в меню: ↑↓ (и Tab) — по пунктам по кругу, → — в подменю, ← и Esc — назад, Enter — выбрать.
+// Ловим на погружении: общие клавиши списка (Enter открывает карточку, стрелки двигают выбор) меню не задевают
+const cmStops = () => [...CM.el.querySelectorAll('[role^=menuitem], input')].filter(x => !x.hidden && x.getClientRects().length);
+document.addEventListener('keydown', e => {
+  if(CM.el){
+    const k = e.key, inside = CM.el.contains(e.target), text = inside && e.target.tagName==='INPUT';
+    if(!inside && !['Escape', 'ArrowDown', 'ArrowUp', 'Tab'].includes(k)) return cmClose(false);
+    e.stopPropagation();
+    const stops = cmStops(), i = stops.indexOf(e.target), step = n => { e.preventDefault(); stops[(i + n + stops.length) % stops.length]?.focus(); };
+    if(k==='Escape'){ e.preventDefault(); return CM.pane==='main' ? cmClose(true) : cmPane('main', CM.pane); }
+    if(k==='Tab' && e.target.type!=='datetime-local') return step(e.shiftKey ? -1 : 1);  // у поля даты Tab ходит по его частям
+    if((k==='ArrowDown' || k==='ArrowUp') && e.target.type!=='datetime-local') return step(k==='ArrowDown' ? 1 : i < 0 ? 0 : -1);
+    if(k==='ArrowRight' && !text && ['proj', 'date'].includes(e.target.dataset?.cm)){ e.preventDefault(); return cmPane(e.target.dataset.cm); }
+    if(k==='ArrowLeft' && !text && CM.pane!=='main'){ e.preventDefault(); return cmPane('main', CM.pane); }
+    if(k==='Enter' && text){
+      e.preventDefault();
+      if(e.target.id==='cm-dt') return CM.el.querySelector('[data-cm=dt]').click();
+      // Поиск: Enter — первый найденный проект, а если ничего не нашлось — новый с этим названием
+      const hit = e.target.value.trim() && CM.el.querySelector('[data-pick]:not([hidden])');
+      return (hit || CM.el.querySelector('[data-cm=new]')).click();
+    }
+    return;
+  }
+  if(!(e.key==='ContextMenu' || (e.shiftKey && e.key==='F10')) || $('#dlg').open) return;
+  const card = document.activeElement?.closest?.('main .it[data-id]') || (S.sel!=null ? cards()[S.sel] : null);
+  if(!card?.dataset.id) return;
+  e.preventDefault(); e.stopPropagation();
+  const r = card.getBoundingClientRect();
+  CM.keyAt = performance.now(); cmPtr = '';
+  cmOpen(card, r.left + Math.min(48, r.width/4), r.top + Math.min(r.height, 36));
+}, true);
+// Мышь: своё меню вместо браузерного только на задаче. Выделенный текст (до нажатия: macOS выделяет слово правым
+// кликом сам), ссылка #N и поля ввода — браузерное меню («Копировать», «Открыть в новой вкладке»)
+const LP = {};
+let cmPtr = '', cmSel = false;
+document.addEventListener('pointerdown', e => {
+  cmPtr = e.pointerType;
+  const card = e.target.closest?.('main .it[data-id]');
+  cmSel = !!card && selecting(card);
+  if(CM.el && !CM.el.contains(e.target)) cmClose(false);
+  // Палец вне списка с ручным порядком (Scheduled, Done, Reference, «Скоро срок»): удержание — сразу меню.
+  // В списке с порядком удержание поднимает карточку, а меню открывает dndEnd, если её отпустили на месте
+  if(e.pointerType!=='touch' || e.button!==0 || !card || card.parentElement.classList.contains('dnd')
+    || e.target.closest('a,button,input,select,textarea,label') || $('#dlg').open) return;
+  clearTimeout(LP.timer);
+  Object.assign(LP, {x:e.clientX, y:e.clientY, pid:e.pointerId, fired:false,
+    timer:setTimeout(() => { LP.timer = null; LP.fired = true; navigator.vibrate?.(15); cmOpen(card, LP.x, LP.y); }, HOLD_MS)});
+}, true);
+document.addEventListener('pointermove', e => {
+  if(LP.timer && e.pointerId===LP.pid && Math.hypot(e.clientX - LP.x, e.clientY - LP.y) > 10){ clearTimeout(LP.timer); LP.timer = null; }
+});
+const lpEnd = e => {
+  if(e.pointerId!==LP.pid) return;
+  clearTimeout(LP.timer); LP.timer = null;
+  if(LP.fired && e.type==='pointerup') DND.endAt = performance.now();  // отпустили палец — это не клик «открыть задачу»
+  LP.fired = false;
+};
+document.addEventListener('pointerup', lpEnd); document.addEventListener('pointercancel', lpEnd);
+document.addEventListener('contextmenu', e => {
+  if(CM.el?.contains(e.target)) return e.preventDefault();
+  const card = e.target.closest?.('main .it[data-id]');
+  if(!card || $('#dlg').open || e.target.closest('a[href],textarea,select,input:not([type=checkbox])')) return;
+  const key = !!CM.el && performance.now() - (CM.keyAt ?? -1e9) < 1000;  // клавиша Menu, Shift+F10: меню уже открыто по keydown
+  if(!key && cmPtr!=='touch' && cmSel) return;
+  e.preventDefault();
+  if(key || cmPtr==='touch') return;  // палец: своё долгое нажатие (выше и в dndEnd), а не системное меню
+  if(!cmSel) getSelection().removeAllRanges();  // слово, которое выделил сам правый клик
+  cmOpen(card, e.clientX, e.clientY);
+});
+addEventListener('scroll', e => { if(CM.el && !(e.target instanceof Node && CM.el.contains(e.target)) && !cmTyping() && performance.now() - CM.at > 300) cmClose(false); }, true);
+addEventListener('resize', () => { if(CM.el && !cmTyping()) cmClose(false); });
 
 // Куда ушла задача, видно не всегда: на странице проекта она в нём, в Waiting или Done — в Inbox. Кроме Inbox
 // (там она в списке или в Next ниже) — тост «… → куда» с «Отменить» (SERBITO-354)

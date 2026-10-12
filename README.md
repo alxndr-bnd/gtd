@@ -23,6 +23,8 @@ FastAPI + PostgreSQL, one container. English and Russian.
 - **Sign-in** by email code, Google or Telegram; methods link into one account, accounts can be merged.
 - **AI assistants:** connect Claude, ChatGPT, Cursor or VS Code with sign-in (OAuth, no token), or any MCP client
   with a personal token — see [Connect Claude](#connect-claude-mcp).
+- **Task menu:** right-click a task (or long-press it on a phone) to move it to the top or bottom, add it to a project
+  or remove it, and set or remove its date.
 - **Keyboard-first** web app, installable to the phone home screen.
 - **Privacy:** analytics never include task content, emails or user ids.
 
