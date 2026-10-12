@@ -1688,8 +1688,9 @@ CSP_REPORT_ONLY = "; ".join([
     "https://www.googletagmanager.com https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline' https://accounts.google.com",
     "img-src 'self' data: https:",
+    # www.google.com — GA4 шлёт туда часть пингов /g/collect (Sentry GTD-6, Firefox Mobile, 2026-10-12)
     "connect-src 'self' https://accounts.google.com https://*.google-analytics.com https://*.analytics.google.com "
-    "https://*.googletagmanager.com https://cloudflareinsights.com",
+    "https://*.googletagmanager.com https://www.google.com https://cloudflareinsights.com",
     "frame-src https://accounts.google.com https://oauth.telegram.org",
     "font-src 'self' data:",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
@@ -3160,14 +3161,21 @@ def get_item_by_num(num: int, request: Request, uid: int = Depends(current_user)
     return it
 
 
-# dataLayer, gtag() и consent default (Consent Mode v2) объявляет pages.CONSENT_HEAD — он всегда стоит перед этим тегом
-GA_SNIPPET = """<script async src="https://www.googletagmanager.com/gtag/js?id={id}"></script>
-<script>
-  gtag("js", new Date());
-  // Страницы шлёт фронт сам (gaPage): только раздел вида /inbox и заголовок «GTD — раздел».
-  // Ни названий задач, ни их номеров из /i/N, ни user_id — поэтому свой page_view выключен.
-  // cookie_domain 'none' — _ga только на gtd.serbito.rs, не общий .serbito.rs с соседними продуктами (SERBITO-319)
-  gtag("config", "{id}", {{ send_page_view: false, cookie_domain: "none" }});
+# dataLayer, gtag() и consent default (Consent Mode v2) объявляет pages.CONSENT_HEAD — он всегда стоит перед этим тегом.
+# Страницы шлёт фронт сам (gaPage): только раздел вида /inbox и заголовок «GTD — раздел». Ни названий задач, ни их
+# номеров из /i/N, ни user_id — поэтому свой page_view выключен. cookie_domain 'none' — _ga только на gtd.serbito.rs,
+# не общий .serbito.rs с соседними продуктами (SERBITO-319).
+# gtag.js (~160 КБ) — не на критическом пути (SERBITO-548, вариант C): грузим после load, в простое браузера, но не
+# позже 3 с (без requestIdleCallback — сразу после load). До загрузки вызовы gtag() копятся в dataLayer, gtag.js
+# разберёт их по порядку: consent default/update и page_view не теряются. Цена — визиты короче 1–2 с без пинга.
+# Комментарии — здесь, не в теге: тег уходит в каждую страницу
+GA_SNIPPET = """<script>
+gtag("js", new Date());
+gtag("config", "{id}", {{ send_page_view: false, cookie_domain: "none" }});
+addEventListener("load", () => (window.requestIdleCallback || setTimeout)(() => {{
+  const s = document.createElement("script");
+  s.async = true; s.src = "https://www.googletagmanager.com/gtag/js?id={id}"; document.head.append(s);
+}}, {{ timeout: 3000 }}));
 </script>"""
 
 

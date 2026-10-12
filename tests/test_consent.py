@@ -20,9 +20,11 @@ def test_consent_default_before_ga_config(client, monkeypatch, path):
     monkeypatch.setattr(A, "GA_ID", "G-TEST123")
     h = client.get(path, headers=PROD).text
     assert h.count(DEFAULT) == 1
-    # dataLayer/gtag → consent default → gtag.js → config: иначе первый пинг уйдёт без согласия
+    # dataLayer/gtag → consent default → config: иначе первый пинг уйдёт без согласия
     assert (h.index("function gtag(){ dataLayer.push(arguments); }") < h.index(DEFAULT)
-            < h.index("googletagmanager.com/gtag/js?id=G-TEST123") < h.index('gtag("config", "G-TEST123"'))
+            < h.index('gtag("config", "G-TEST123"') < h.index("googletagmanager.com/gtag/js?id=G-TEST123"))
+    # gtag.js — не на критическом пути (SERBITO-548): ни <script src>, ни preload; его ставит обработчик load
+    assert "<script async src=" not in h and 'addEventListener("load"' in h
     # _ga — host-only на gtd.serbito.rs, не общий .serbito.rs с соседними продуктами
     assert 'gtag("config", "G-TEST123", { send_page_view: false, cookie_domain: "none" });' in h
     assert h.index(DEFAULT) < h.index("</head>") and "<!--GA-->" not in h
