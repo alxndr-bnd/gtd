@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-12
+
 ### Added
 
 - The home page, "How GTD works" and the footer of every page link to GTD reviews on AlternativeTo, next to the open source code on GitHub.
@@ -512,7 +514,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.51.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.52.0...HEAD
+[0.52.0]: https://github.com/alxndr-bnd/gtd/compare/v0.51.0...v0.52.0
 [0.51.0]: https://github.com/alxndr-bnd/gtd/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/alxndr-bnd/gtd/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/alxndr-bnd/gtd/compare/v0.48.0...v0.49.0
