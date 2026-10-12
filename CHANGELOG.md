@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- The English guides link to each other where it helps: from the bot guide and "How GTD works" to the Todoist comparison, and from the Todoist comparison to the weekly review checklist. New pages also reach Bing and Yandex sooner.
+  - RU: Английские страницы-справки ссылаются друг на друга там, где это помогает: из справки о боте и «Как работает GTD» — на сравнение с Todoist, из сравнения с Todoist — на чек-лист еженедельного обзора. Новые страницы быстрее попадают в Bing и Яндекс.
+
 ## [0.53.0] - 2026-10-12
 
 ### Fixed

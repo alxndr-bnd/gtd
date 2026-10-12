@@ -729,7 +729,9 @@ OSS = {
 <p>Yes, GTD is free: there are no paid plans. The code is open source under the MIT license and lives on
 <a href="{REPO_URL}">GitHub</a> with its full history. Read how it works, suggest a fix, or run your own copy —
 see the <a href="{SELF_HOST_URL}">self-hosting guide</a>. Reviews of GTD and similar apps are on
-<a href="{ALTERNATIVETO_URL}">AlternativeTo</a>.</p>""",
+<a href="{ALTERNATIVETO_URL}">AlternativeTo</a>.</p>
+<p>How GTD compares with Todoist, feature by feature: see the
+<a href="/en/todoist-alternative-open-source">open-source Todoist alternative</a> page.</p>""",
 }
 # Редакция текста /about (SERBITO-470): дата «Обновлено» на странице, dateModified и lastmod в sitemap.
 # Правишь текст /about — ставь новую дату
@@ -1175,6 +1177,8 @@ the Inbox.</li>
 <li>Times use the {tz} time zone.</li>
 <li>The same syntax works in the capture field on the website.</li>
 </ul>
+<p>If you come from Todoist, this works like its Quick Add. Other differences are on the
+<a href="{alt}">open-source Todoist alternative</a> page.</p>
 <h2>How do reminders work?</h2>
 <p>At the set time the bot sends you the task with three buttons.</p>
 <ul class="ex">
@@ -1227,7 +1231,7 @@ def bot(base: str, lang: str, ga: str, tz: str = "Europe/Belgrade") -> str:
                        for text, what in BOT_CAPTURE[lang])
     main = BOT[lang].format(
         bot=BOT_NAME, bot_url=BOT_URL, home=PATHS[(lang, "home")], weekly=PATHS[(lang, "weekly")],
-        privacy=PATHS[(lang, "privacy")], examples=examples, tz=html.escape(tz), mcp=f"{base}/mcp",
+        alt=PATHS[(lang, "alt")], privacy=PATHS[(lang, "privacy")], examples=examples, tz=html.escape(tz), mcp=f"{base}/mcp",
         mcp_doc=REPO_URL + "#connect-claude-mcp", site=SITE_NAME, updated=f"{UPDATED[lang]} {human_date(GUIDES_DAY, lang)}")
     return public_page(base, lang, "bot", ga, main, page_view(lang, "bot"))
 
@@ -1619,7 +1623,7 @@ LANDING_TEXT = {
            "cmp_lead": "In short: GTD is free in full and built for one method; the others run on more devices "
                        "and do more.",
            "not_h": "Who should not switch",
-           "cmp_more": "Full comparison with Todoist →",
+           "cmp_more": "Open-source Todoist alternative: full comparison →",
            "faq_h": "Questions and answers",
            "dev_h": "For developers: self-hosting and MCP",
            "dev": f"""<p>The GTD code is open source under the MIT license. Run your own copy with one Docker Compose
@@ -1719,6 +1723,8 @@ comparison.</p>
 <p>In its approach. GTD is built for one method and is free in full: the code is open, and you can send tasks to
 a bot in Telegram. Todoist is a general task manager with a free plan, paid Pro and Business plans, and apps for
 almost every device.</p>
+<p>GTD also has a Weekly Review view that walks you through all your lists, step by step. See the
+<a href="{weekly}">GTD weekly review checklist</a>.</p>
 {table}
 <h2>Who should not switch from Todoist?</h2>
 <p>If anything in this list matters to you, stay with Todoist: GTD does not have it.</p>
@@ -1752,7 +1758,8 @@ def alt(base: str, lang: str, ga: str) -> str:
     main = ALT[lang].format(
         updated=f"{UPDATED[lang]} {human_date(COMPARE_DAY, lang)}", table=alt_table(lang), who_not=who_not(lang),
         self_host=SELF_HOST_URL, bot=BOT_NAME, bot_url=BOT_URL, about=PATHS[(lang, "about")],
-        beginners=PATHS.get(("ru", "beginners")), freeapps=PATHS.get(("en", "freeapps")), home=PATHS[(lang, "home")])
+        beginners=PATHS.get(("ru", "beginners")), freeapps=PATHS.get(("en", "freeapps")), home=PATHS[(lang, "home")],
+        weekly=PATHS[(lang, "weekly")])
     return public_page(base, lang, "alt", ga, main, page_view(lang, "alt"))
 
 
