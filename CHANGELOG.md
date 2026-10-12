@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-10-12
+
 ### Changed
 
 - The English guides link to each other where it helps: from the bot guide and "How GTD works" to the Todoist comparison, and from the Todoist comparison to the weekly review checklist. New pages also reach Bing and Yandex sooner.
@@ -526,7 +528,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.53.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.54.0...HEAD
+[0.54.0]: https://github.com/alxndr-bnd/gtd/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/alxndr-bnd/gtd/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/alxndr-bnd/gtd/compare/v0.51.0...v0.52.0
 [0.51.0]: https://github.com/alxndr-bnd/gtd/compare/v0.50.0...v0.51.0
