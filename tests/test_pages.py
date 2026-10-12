@@ -814,3 +814,61 @@ def test_footer_javi_link_has_its_own_campaign():
         "https://javi.serbito.rs/?utm_source=gtd&utm_medium=crosslink&utm_campaign=javi&utm_content=footer")
     assert P.product_href("Serbito", "https://serbito.rs/") == (
         "https://serbito.rs/?utm_source=gtd&utm_medium=crosspromo&utm_campaign=footer")
+
+
+# ── Внутренние ссылки на неиндексированные EN-страницы (SERBITO-558, SERBITO-559) ──
+
+def body_links(h: str) -> list[tuple[str, str]]:
+    """Ссылки из текста страницы: без шапки, меню и подвала. (href, текст ссылки)"""
+    h = re.sub(r"<(nav|header)\b.*?</\1>", "", h[:h.index("<footer")], flags=re.S)
+    return [(href, re.sub(r"<[^>]+>|\s+", " ", text).strip())
+            for href, text in re.findall(r'<a [^>]*?href="([^"]+)"[^>]*>(.*?)</a>', h, re.S)]
+
+
+@pytest.mark.parametrize("target", ["/en/weekly-review", "/en/todoist-alternative-open-source"])
+def test_unindexed_en_pages_have_three_in_body_links_with_descriptive_anchors(client, target):
+    """Google нашёл, но не проиндексировал эти страницы: на них ведут не меньше трёх ссылок из текста
+    других EN-страниц, с текстом ссылки по теме, а не «подробнее»"""
+    key = next(pg for (lg, pg), p in P.PATHS.items() if p == target)
+    topic = {"weekly": "weekly review", "alt": "todoist"}[key]
+    sources = []
+    for (lang, page), path in P.PATHS.items():
+        if lang != "en" or path == target:
+            continue
+        r = client.get(path)
+        if r.status_code != 200:
+            continue
+        anchors = [text for href, text in body_links(r.text) if href == target]
+        assert all(topic in a.lower() for a in anchors), (path, anchors)
+        if anchors:
+            sources.append(path)
+    assert len(sources) >= 3, sources
+
+
+# ── IndexNow (SERBITO-558) ──
+
+def test_indexnow_key_file(client):
+    """Ключ отдаётся по /<ключ>.txt текстом, и это тот же файл, который читает scripts/indexnow.py"""
+    import app as A
+    from scripts import indexnow
+    assert re.fullmatch(r"[0-9a-f]{32}", A.INDEXNOW_KEY) and indexnow.key() == A.INDEXNOW_KEY
+    r = client.get(f"/{A.INDEXNOW_KEY}.txt")
+    assert r.status_code == 200 and r.text == A.INDEXNOW_KEY and r.headers["content-type"].startswith("text/plain")
+
+
+def test_indexnow_payload_keeps_own_host_only():
+    from scripts import indexnow
+    xml = "<urlset><url><loc>https://gtd.serbito.rs/</loc></url><url><loc>https://evil.example/x</loc></url></urlset>"
+    urls = indexnow.sitemap_urls(xml, "gtd.serbito.rs")
+    assert urls == ["https://gtd.serbito.rs/"]
+    assert indexnow.payload("https://gtd.serbito.rs", "k", urls) == {
+        "host": "gtd.serbito.rs", "key": "k", "keyLocation": "https://gtd.serbito.rs/k.txt", "urlList": urls}
+
+
+def test_indexnow_network_error_is_not_fatal(monkeypatch, capsys):
+    from scripts import indexnow
+    def boom(*a, **k):
+        raise OSError("no network")
+    monkeypatch.setattr(indexnow.urllib.request, "urlopen", boom)
+    assert indexnow.main(["--base", "https://gtd.serbito.rs"]) == 0
+    assert "not fatal" in capsys.readouterr().err

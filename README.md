@@ -200,6 +200,11 @@ scripts/lock.sh --upgrade                  # all packages
 5. Weekly OS refresh (SERBITO-401): every Wednesday 03:00 UTC (or *Run workflow*) the deploy rebuilds the newest
    `vX.Y.Z` tag with fresh Debian packages and redeploys it: same version, image `<sha>-r<YYYYMMDD>`. Trivy gates it
    like a release; if the main page is not 200 after the switch, traffic goes back to the previous revision.
+6. IndexNow (SERBITO-558): after a tag deploy passes the smoke check, `scripts/indexnow.py` sends every URL in
+   `/sitemap.xml` to `api.indexnow.org` (Bing, Yandex and other IndexNow engines; Google does not use it). The key
+   is the file `static/<key>.txt`, served at `/<key>.txt`; IndexNow keys are public by design. A network error or
+   a non-2xx answer prints a warning and does not fail the deploy. The weekly refresh does not ping. To ping by hand:
+   `python3 scripts/indexnow.py` (`--dry-run` prints the request and does not send it).
 
 `/changes` and `/en/changes` render CHANGELOG.md, parsed once at startup by `changelog.py`;
 `tests/test_changelog.py` checks the format, both languages and that every tag has an entry.

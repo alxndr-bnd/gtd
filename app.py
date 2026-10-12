@@ -3351,6 +3351,10 @@ ROOT_FILES = {
     "icon-192.png": "image/png", "icon-512.png": "image/png",
     "icon-maskable-192.png": "image/png", "icon-maskable-512.png": "image/png",
 }
+# Ключ IndexNow (SERBITO-558): Bing и Yandex проверяют, что адреса из пинга scripts/indexnow.py присылает владелец
+# сайта. Ключ публичный по замыслу IndexNow; файл — static/<ключ>.txt
+INDEXNOW_KEY = "186b4ba6d6b9fd1c7838cd9e8705c841"
+ROOT_FILES[f"{INDEXNOW_KEY}.txt"] = "text/plain; charset=utf-8"
 
 
 def root_file(request: Request):

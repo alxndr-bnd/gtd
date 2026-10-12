@@ -289,6 +289,15 @@ jobs:
           echo "::error::The main page does not return 200 after the deploy. Traffic is back on $PREV_REVISION."
           exit 1
 
+      # SERBITO-558: IndexNow — Bing и Yandex узнают адреса из sitemap сразу после релиза. Только для тега
+      # (не для еженедельной пересборки: страницы не менялись). Сбой не фатален — скрипт всегда выходит с 0.
+      # Пересборка старого тега без скрипта шаг пропускает.
+      - name: IndexNow ping
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: |
+          if [ -f scripts/indexnow.py ]; then python3 scripts/indexnow.py; fi
+
       # SERBITO-348: заголовки безопасности на главной новой ревизии (адрес тега candidate — та же
       # ревизия, что за gtd.serbito.rs). Без отката: страница работает, но без защиты. Запуск падает и шлёт письмо.
       # Пересборка старого тега, в котором скрипта ещё нет, проверку пропускает с предупреждением.
