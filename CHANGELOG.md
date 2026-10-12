@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-12
+
 ### Added
 
 - Right-click a task to open its menu: move it to the top or bottom of the list, add it to a project or remove it, and add, change or remove its date. On a phone, hold the task and release it. On a keyboard, press Shift+F10 or the Menu key.
@@ -505,7 +507,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.50.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.51.0...HEAD
+[0.51.0]: https://github.com/alxndr-bnd/gtd/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/alxndr-bnd/gtd/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/alxndr-bnd/gtd/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/alxndr-bnd/gtd/compare/v0.47.0...v0.48.0
