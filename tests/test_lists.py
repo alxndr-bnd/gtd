@@ -130,7 +130,7 @@ def positions(uid):
 
 def test_backfill_keeps_current_order(client, login):
     """До SERBITO-328 списки шли по времени создания, старые сверху, — после миграции порядок тот же."""
-    uid = login(client)
+    login(client)
     for t, created in (("вторая", 200), ("первая", 100), ("третья", 300)):
         it = client.post("/api/capture", json={"text": t + " #П"}).json()
         A.run("update items set created=%s where id=%s", (created, it["id"]))
@@ -237,8 +237,8 @@ def test_move_to_top_and_bottom(client, login):
 
 def test_move_to_top_and_bottom_of_project(client, login):
     login(client)
-    x = add(client, "x #П", "next")["id"]
-    y = add(client, "y #П", "waiting")["id"]
+    add(client, "x #П", "next")
+    add(client, "y #П", "waiting")
     z = add(client, "z #П", "next")["id"]
     pid = client.get("/api/projects").json()[0]["id"]
     assert to_edge(client, z, "top", "project").status_code == 200
@@ -344,7 +344,7 @@ def test_project_reorder_checks_ownership(new_client, login):
     me, other = new_client(), new_client()
     login(me)
     login(other, "bob@example.com")
-    a, b = new_project(me, "a"), new_project(me, "b")
+    a, _ = new_project(me, "a"), new_project(me, "b")
     theirs = new_project(other, "чужой")
     assert move_project(other, a, nxt=theirs).status_code == 404  # чужой проект не двигать
     assert move_project(me, a, nxt=theirs).status_code == 404  # и не ставить рядом с чужим

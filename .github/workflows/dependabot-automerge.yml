@@ -82,6 +82,7 @@ jobs:
           # The PR CI jobs (check run names), one per line. All must exist and pass.
           REQUIRED_CHECKS: |
             test
+            lint
             lock
             image
           WAIT_SECONDS: "3000" # 50 min, inside the job's timeout-minutes

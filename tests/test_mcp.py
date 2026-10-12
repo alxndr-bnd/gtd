@@ -42,14 +42,6 @@ def call_error(c, tok, tool, **args) -> str:
     return res["content"][0]["text"]
 
 
-@pytest.fixture
-def alice(new_client, login):
-    """Вошедшая в браузере Алиса и её токен; MCP-запросы — с отдельного клиента без cookie."""
-    web = new_client()
-    uid = login(web, "alice@example.com")
-    return {"web": web, "uid": uid, "tok": new_token(web), "mcp": new_client()}
-
-
 # ── токены ──
 
 def test_token_shown_once_and_stored_only_as_hash(alice):
@@ -209,7 +201,9 @@ def test_list_tasks(alice):
     A.capture(uid, "call mom @phone")
     A.capture(uid, "dentist 2026-12-01 10:00")
     A.mark_done(uid, num=3)
-    titles = lambda **kw: [t["title"] for t in call(mcp, tok, "list_tasks", **kw)["tasks"]]
+    def titles(**kw):
+        return [t["title"] for t in call(mcp, tok, "list_tasks", **kw)["tasks"]]
+
     assert titles() == ["inbox one", "dentist"]
     assert titles(list="next") == ["fix the roof", "call mom"]
     assert titles(list="next", context="@home") == ["fix the roof"] == titles(list="next", context="HOME")
@@ -379,7 +373,9 @@ def test_weekly_review(alice):
     A.capture(uid, "dentist")                         # 8: через 2 дня
     A.capture(uid, "idea")                            # 9: someday
     A.capture(uid, "old overdue but done")            # 10: done — не в обзоре
-    st = lambda n, s: A.run("update items set status=%s where user_id=%s and num=%s", (s, uid, n))
+    def st(n, s):
+        return A.run("update items set status=%s where user_id=%s and num=%s", (s, uid, n))
+
     st(4, "waiting"), st(5, "waiting"), st(6, "waiting"), st(9, "someday"), st(10, "done")
     A.run("update items set created=%s where user_id=%s and num=5", (now - 10 * 86400, uid))
     A.run("update items set remind_at=%s where user_id=%s and num in (7, 10)", (now - 3600, uid))

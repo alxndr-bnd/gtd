@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 import app as A
 from conftest import bot_message, texts

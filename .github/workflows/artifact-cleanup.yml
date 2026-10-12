@@ -34,6 +34,11 @@ concurrency:
 env:
   WIF_PROVIDER: projects/488744139718/locations/global/workloadIdentityPools/github-pool/providers/github
   CLEANUP_SA: ar-cleanup@serbito.iam.gserviceaccount.com
+  # actions/checkout делает `git init`; без ветки по умолчанию git пишет в лог 10 строк подсказки «Using 'master'».
+  # Задаём её для каждого вызова git (SERBITO-613, как SERBITO-530 в serbito)
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 
 jobs:
   cleanup:

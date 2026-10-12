@@ -2,6 +2,7 @@ name: CI
 
 # Проверка каждого PR (в том числе от Dependabot) и каждого пуша в main (SERBITO-339):
 #   test  — весь pytest, включая браузерный смоук SPA в Chromium, на временной базе в Postgres;
+#   lint  — ruff check: неиспользуемые импорты и переменные, переопределения (SERBITO-613);
 #   lock  — замок requirements*.txt совпадает с requirements*.in (scripts/lock.sh);
 #   image — образ собирается из замка с --require-hashes и закреплённой базой.
 # Релиз по-прежнему гоняет тесты локально (scripts/release_minor.sh), деплой — deploy.yml по тегу.
@@ -18,6 +19,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # actions/checkout делает `git init`; без ветки по умолчанию git пишет в лог 10 строк подсказки «Using 'master'».
+  # Задаём её для каждого вызова git (SERBITO-613, как SERBITO-530 в serbito)
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 jobs:
   test:
     # Явная версия: ubuntu-latest переезжает на 26.04 (2026-10-19) — обновлять осознанно
@@ -29,6 +37,9 @@ jobs:
         image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
+          # Явная аутентификация вместо trust: иначе initdb предупреждает в каждом прогоне (SERBITO-613).
+          # Тесты ходят по TCP с паролем; сокет — для pg_isready от пользователя postgres внутри контейнера
+          POSTGRES_INITDB_ARGS: --auth-local=peer --auth-host=scram-sha-256
         ports:
           - 5432:5432
         options: >-
@@ -69,6 +80,23 @@ jobs:
       - name: pytest
         run: python -m pytest -n auto --dist worksteal
 
+  # Линтер (SERBITO-613): ошибки pyflakes и pycodestyle (правила ruff по умолчанию) валят CI.
+  # Версия закреплена здесь: ruff не в замке, его не ставят ни образ, ни тесты
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.22"
+
+      - name: ruff check
+        run: uvx ruff@0.14.0 check --output-format github .
+
   lock:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -107,3 +135,5 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
+          # Только кэш сборки: без outputs buildx предупреждает «No output specified» (SERBITO-613)
+          outputs: type=cacheonly

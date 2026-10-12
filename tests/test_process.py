@@ -3,7 +3,7 @@
 import time
 
 import app as A
-from test_mcp import alice, rpc  # noqa: F401 — alice: фикстура
+from test_mcp import rpc
 
 
 def inbox(uid, text="разобрать почту"):
@@ -160,7 +160,7 @@ def test_process_view_is_an_app_page(client):
         assert r.status_code == 200 and r.headers["x-robots-tag"] == "noindex"
 
 
-def test_mcp_process_inbox_prompt(alice):  # noqa: F811
+def test_mcp_process_inbox_prompt(alice):
     r = rpc(alice["mcp"], alice["tok"], "prompts/list")
     assert r.status_code == 200, r.text
     assert [p["name"] for p in r.json()["result"]["prompts"]] == ["process_inbox"]

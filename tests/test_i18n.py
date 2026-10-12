@@ -1,4 +1,5 @@
 """Английская версия (SERBITO-259): выбор языка, настройка в /api/me, ответы бота и сервера, письмо с кодом."""
+from pathlib import Path
 import asyncio
 import json
 import re
@@ -278,7 +279,7 @@ def test_no_russian_in_english_bot_and_server_texts():
 
 # ── веб-приложение: словарь в static/index.html ──
 
-INDEX = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+INDEX = Path(f"{A.STATIC}/index.html").read_text(encoding="utf-8")
 UI = json.loads(re.search(r'<script type="application/json" id="i18n">(.+?)</script>', INDEX, re.S).group(1))
 
 

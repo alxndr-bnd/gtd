@@ -5,7 +5,7 @@ import time
 
 import app as A
 from conftest import bot_callback, bot_message, texts
-from test_mcp import alice, call, call_error  # noqa: F401 — alice: фикстура
+from test_mcp import call, call_error
 
 
 def project(uid, title):
