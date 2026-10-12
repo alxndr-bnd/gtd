@@ -2789,16 +2789,29 @@ def _between(prev, nxt, col):
 @app.post("/api/items/{iid}/move")
 def move_item(iid: int, body: dict, uid: int = Depends(current_user)):
     """Ручной порядок (SERBITO-328): задачу поставили между prev (над ней) и next (под ней) — соседями на экране,
-    в списке (scope=list) или в проекте (scope=project). Обычно меняется одна строка — позиция задачи."""
-    scope = body.get("scope", "list")
+    в списке (scope=list) или в проекте (scope=project). Обычно меняется одна строка — позиция задачи.
+    to=top|bottom (меню задачи, SERBITO-604) — в самый верх или низ всего списка или проекта, без соседей: экран
+    может показывать не весь список (фильтр @контекста, «Скоро срок» на экране Inbox)."""
+    scope, to = body.get("scope", "list"), body.get("to")
     if scope not in MOVE_SCOPES:
         raise HTTPException(400, "bad scope")
+    if to is not None and (to not in ("top", "bottom") or body.get("prev") is not None or body.get("next") is not None):
+        raise HTTPException(400, "bad to")
     col, key = MOVE_SCOPES[scope]
     it = item_get(uid, iid)
     if not it:
         raise HTTPException(404)
     if it[key] is None:
         raise HTTPException(400, "no project")
+    if to:
+        top = to == "top"
+        edge = row(f"select {'min' if top else 'max'}({col}) v from items where user_id=%s and {key}=%s and id<>%s",
+                   (uid, it[key], iid))["v"]
+        if edge is None or (it[col] is not None and (it[col] < edge if top else it[col] > edge)):
+            return it  # одна в списке или уже на краю
+        track(uid, "web")
+        run(f"update items set {col}=%s where id=%s and user_id=%s", (edge - 1024 if top else edge + 1024, iid, uid))
+        return item_get(uid, iid)
 
     def neighbours():
         got = {}

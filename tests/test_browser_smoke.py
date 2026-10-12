@@ -9,6 +9,7 @@
 запросы браузера блокируются и тоже роняют тест; Google Sign-In подменён заглушкой.
 
 Не пропускается никогда: нет Playwright или Chromium — тест падает с командой установки."""
+import os
 import socket
 import threading
 import time
@@ -2592,4 +2593,282 @@ def test_process_inbox_undo_and_empty(watch):
     w.goto("/en/process")
     w.wait("main .prend", "пустой разбор")
     assert "empty" in w.page.inner_text("main .prend")
+    w.check("итог")
+
+
+# ── Меню задачи (SERBITO-604) ──
+def shot(w, name):
+    """Снимок экрана для ручной проверки — только с GTD_SHOTS=<папка>; в гейте ничего не пишет."""
+    folder = os.environ.get("GTD_SHOTS")
+    if folder:
+        w.page.screenshot(path=os.path.join(folder, f"{name}.png"))
+
+
+def cm_user(w, lang):
+    """Next: First, Second, Third; проект Alpha активный, Old — в архиве (в меню его нет)."""
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden,dnd_tip_seen) values(0,'Smoke',%s,%s,true,true) "
+                "returning id", (int(time.time()), lang))
+    a, b, c = (A.capture(uid, f"{t} @home")["id"] for t in ("First", "Second", "Third"))
+    A.project_by_title(uid, "Alpha")
+    A.project_archive(uid, A.project_by_title(uid, "Old"), "all")
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    w.goto("/next")  # по адресу: на телефоне меню разделов спрятано
+    w.wait('nav > a.on[data-view="next"]', f"[{lang}] Next")
+    track_loads(w)
+    settled(w)
+    return uid, (a, b, c)
+
+
+def cm_open(w, iid, what):
+    w.page.click(f'main .it[data-id="{iid}"] .t', button="right")
+    w.wait(".cm[role=menu]", what)
+
+
+def cm_closed(w):
+    w.page.wait_for_selector(".cm", state="detached", timeout=WAIT_MS)
+
+
+def cm_labels(w):
+    return w.page.eval_on_selector_all(".cm [role^=menuitem]", "els => els.filter(e => !e.hidden).map(e => e.dataset.cm || 'pick')")
+
+
+def item(iid):
+    return A.row("select i.remind_at, i.status, p.title project from items i left join projects p on p.id=i.project_id "
+                 "where i.id=%s", (iid,))
+
+
+def shown(w, iid, key, value):
+    """Перечитка после действия дошла до данных страницы: следующее меню откроется уже с новым проектом или датой."""
+    w.page.wait_for_function("([id, k, v]) => (findItem(id)?.[k] ?? null) === v", arg=[iid, key, value], timeout=SAVE_MS)
+
+
+def in_viewport(w):
+    return w.page.evaluate("(() => { const r = document.querySelector('.cm').getBoundingClientRect();"
+                           " return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })()")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_task_context_menu_actions(watch, lang):
+    """Правый клик по задаче: наверх и вниз (весь список), проект (поиск, без архивных, новый), убрать проект,
+    дата (быстрая и своя), убрать дату. Каждое действие — тот же запрос, что у карточки, и сохраняется на сервере."""
+    w = watch(lang)
+    uid, (a, b, c) = cm_user(w, lang)
+    assert screen_order(w) == [a, b, c]
+
+    cm_open(w, c, f"[{lang}] меню")
+    shot(w, f"cm-main-{lang}")
+    assert cm_labels(w) == ["top", "bottom", "proj", "date"]  # без проекта и даты — нечего убирать
+    assert w.page.evaluate("document.activeElement.dataset.cm") == "top"
+    assert w.page.locator(f'main .it.cmon[data-id="{c}"]').count() == 1
+    with saves(w, f"[{lang}] наверх", "POST", move(c)):
+        w.page.click(".cm [data-cm=top]")
+    cm_closed(w)
+    assert screen_order(w) == [c, a, b] and db_order(uid, "next") == [c, a, b]
+    settled(w)
+    cm_open(w, c, f"[{lang}] меню 2")
+    with saves(w, f"[{lang}] вниз", "POST", move(c)):
+        w.page.click(".cm [data-cm=bottom]")
+    assert db_order(uid, "next") == [a, b, c]
+    settled(w)
+
+    # Проект: поиск по активным, архивного Old нет; выбор — PATCH, тост с «Отменить»
+    cm_open(w, b, f"[{lang}] меню проекта")
+    w.page.click(".cm [data-cm=proj]")
+    w.wait(".cm #cm-q", f"[{lang}] подменю проектов")
+    picks = w.page.eval_on_selector_all(".cm [data-pick]", "els => els.map(e => e.textContent)")
+    assert picks == ["#Alpha"], picks
+    w.page.fill(".cm #cm-q", "zzz")
+    assert w.page.is_visible(".cm .cmnone") and w.page.is_hidden(".cm [data-pick]")
+    w.page.fill(".cm #cm-q", "alp")
+    shot(w, f"cm-project-{lang}")
+    with saves(w, f"[{lang}] в проект", "PATCH", f"/api/items/{b}"):
+        w.page.click(".cm [data-pick]")
+    assert item(b)["project"] == "Alpha"
+    shown(w, b, "project", "Alpha")
+    w.wait("#toast:not([hidden])", f"[{lang}] тост")
+    assert "#Alpha" in w.page.inner_text("#toast .tx")
+    w.wait(f'main .it[data-id="{b}"] .meta:has-text("#Alpha")', f"[{lang}] проект на карточке")
+
+    cm_open(w, b, f"[{lang}] меню с проектом")
+    assert cm_labels(w) == ["top", "bottom", "proj", "unproj", "date"]
+    assert "#Alpha" in w.page.inner_text(".cm [data-cm=unproj]")
+    with saves(w, f"[{lang}] убрать проект", "PATCH", f"/api/items/{b}"):
+        w.page.click(".cm [data-cm=unproj]")
+    assert item(b)["project"] is None
+    shown(w, b, "project", None)
+    w.wait("#toast:not([hidden]) .tx:not(:has-text('→'))", f"[{lang}] тост «убрана из проекта»")
+    with saves(w, f"[{lang}] отменить", "PATCH", f"/api/items/{b}"):
+        w.page.click('#toast [data-act="undo"]')
+    assert item(b)["project"] == "Alpha"
+    shown(w, b, "project", "Alpha")
+    w.wait(f'main .it[data-id="{b}"] .meta:has-text("#Alpha")', f"[{lang}] проект вернулся")
+
+    # Новый проект из поиска: Enter, если ничего не нашлось
+    cm_open(w, a, f"[{lang}] меню нового проекта")
+    w.page.click(".cm [data-cm=proj]")
+    w.page.fill(".cm #cm-q", "Garden")
+    assert "Garden" in w.page.inner_text(".cm [data-cm=new]")
+    with saves(w, f"[{lang}] новый проект", "PATCH", f"/api/items/{a}"):
+        w.page.press(".cm #cm-q", "Enter")
+    assert item(a)["project"] == "Garden"
+    shown(w, a, "project", "Garden")
+
+    # Дата: «Завтра» — 9:00 следующего дня (у задачи даты не было)
+    cm_open(w, a, f"[{lang}] меню даты")
+    w.page.click(".cm [data-cm=date]")
+    w.wait(".cm #cm-dt", f"[{lang}] подменю даты")
+    shot(w, f"cm-date-{lang}")
+    ts = int(w.page.get_attribute('.cm [data-k=tomorrow]', "data-ts"))
+    assert w.page.evaluate("""ts => { const d = new Date(ts*1000), t = new Date(); t.setDate(t.getDate() + 1);
+        return d.getDate() === t.getDate() && d.getHours() === 9 && d.getMinutes() === 0; }""", ts)
+    with saves(w, f"[{lang}] завтра", "PATCH", f"/api/items/{a}"):
+        w.page.click(".cm [data-k=tomorrow]")
+    assert item(a)["remind_at"] == ts
+    shown(w, a, "remind_at", ts)
+    # Своя дата и время
+    cm_open(w, a, f"[{lang}] меню своей даты")
+    assert "undate" in cm_labels(w)
+    w.page.click(".cm [data-cm=date]")
+    w.page.fill(".cm #cm-dt", "2030-05-17T14:30")
+    with saves(w, f"[{lang}] своя дата", "PATCH", f"/api/items/{a}"):
+        w.page.click(".cm [data-cm=dt]")
+    own = w.page.evaluate("Math.floor(new Date('2030-05-17T14:30').getTime()/1000)")
+    assert item(a)["remind_at"] == own
+    shown(w, a, "remind_at", own)
+    cm_open(w, a, f"[{lang}] меню убрать дату")
+    with saves(w, f"[{lang}] убрать дату", "PATCH", f"/api/items/{a}"):
+        w.page.click(".cm [data-cm=undate]")
+    assert item(a)["remind_at"] is None
+    assert item(a)["status"] == "next"  # список не меняется
+    w.check(f"[{lang}] итог")
+
+
+def test_task_context_menu_keyboard_and_bounds(watch):
+    """Shift+F10 и клавиша Menu на выбранной задаче, ↑↓, Enter, → и ← в подменю, Esc; меню не выходит за экран,
+    закрывается по прокрутке и клику мимо; браузерное меню вне задач, на ссылке #N и на выделенном тексте."""
+    w = watch("en")
+    uid, (a, b, c) = cm_user(w, "en")
+    w.page.locator("#cap").press("ArrowDown")  # выбрана первая задача
+    w.page.keyboard.press("Shift+F10")
+    w.wait(".cm[role=menu]", "Shift+F10")
+    assert w.page.evaluate("document.activeElement.dataset.cm") == "top"
+    w.page.keyboard.press("ArrowDown")
+    assert w.page.evaluate("document.activeElement.dataset.cm") == "bottom"
+    with saves(w, "Enter — вниз", "POST", move(a)):
+        w.page.keyboard.press("Enter")
+    cm_closed(w)
+    assert db_order(uid, "next") == [b, c, a]
+    settled(w)
+    assert w.page.evaluate("document.activeElement.dataset.id") == str(a)  # фокус вернулся на задачу
+
+    w.page.keyboard.press("ContextMenu")
+    w.wait(".cm[role=menu]", "клавиша Menu")
+    for _ in range(2):
+        w.page.keyboard.press("ArrowDown")
+    assert w.page.evaluate("document.activeElement.dataset.cm") == "proj"
+    w.page.keyboard.press("ArrowRight")
+    w.wait(".cm #cm-q", "→ в подменю")
+    assert w.page.evaluate("document.activeElement.id") == "cm-q"
+    w.page.keyboard.press("ArrowLeft")  # в поле ввода ← — курсор, не назад
+    assert w.page.locator(".cm #cm-q").count()
+    w.page.keyboard.press("Escape")  # из подменю — назад, на его пункт
+    w.wait(".cm [data-cm=top]", "Esc — назад")
+    assert w.page.evaluate("document.activeElement.dataset.cm") == "proj"
+    w.page.keyboard.press("Escape")
+    cm_closed(w)
+    assert w.page.evaluate("document.activeElement.dataset.id") == str(a)
+    assert not w.page.locator("#dlg[open]").count()
+
+    # У края экрана меню остаётся на экране
+    box = w.page.locator(f'main .it[data-id="{c}"] .t').bounding_box()
+    w.page.mouse.click(box["x"] + box["width"] - 4, box["y"] + 4, button="right")
+    w.wait(".cm[role=menu]", "у правого края")
+    assert in_viewport(w)
+    w.page.set_viewport_size({"width": 1280, "height": int(box["y"] + 60)})
+    cm_closed(w)  # смена размера окна закрывает
+    cm_open(w, c, "у нижнего края")
+    assert in_viewport(w)
+    shot(w, "cm-edge")
+    w.page.set_viewport_size({"width": 1280, "height": 900})
+    cm_closed(w)
+    # Прокрутка и клик мимо закрывают
+    cm_open(w, c, "перед прокруткой")
+    w.page.wait_for_timeout(350)
+    w.page.evaluate("dispatchEvent(new Event('scroll'))")
+    cm_closed(w)
+    cm_open(w, c, "перед кликом мимо")
+    w.page.mouse.click(5, 890)
+    cm_closed(w)
+
+    # Браузерное меню: вне задач, на ссылке #N, на выделенном тексте — не трогаем
+    ctx = """sel => { const el = document.querySelector(sel), r = el.getBoundingClientRect();
+        return !el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2,
+          clientX: r.left + 2, clientY: r.top + 2})); }"""
+    assert not w.page.evaluate(ctx, "main h2")
+    assert not w.page.evaluate(ctx, f'main .it[data-id="{c}"] a.num')
+    assert not w.page.locator(".cm").count()
+    w.page.evaluate(f"""() => {{ const t = document.querySelector('main .it[data-id="{c}"] .t');
+        getSelection().selectAllChildren(t); }}""")
+    w.page.click(f'main .it[data-id="{c}"] .t', button="right")
+    w.page.wait_for_timeout(100)
+    assert not w.page.locator(".cm").count(), "на выделенном тексте — меню браузера"
+    w.check("итог")
+
+
+def test_task_context_menu_long_press_on_phone(watch):
+    """390 px, палец: удержать и отпустить на месте — меню задачи, карточка не открывается; удержать и повести —
+    перестановка, как раньше, без меню. Вне списка с ручным порядком (Scheduled) меню открывается удержанием."""
+    w = watch(viewport=PHONE, touch=True)
+    uid, (a, b, c) = cm_user(w, "ru")
+    card = f'main .it[data-id="{a}"]'
+    touch(w, card, "pointerdown")
+    w.page.wait_for_timeout(450)
+    assert w.page.locator("main .it.dragging").count() == 1  # удержание поднимает карточку, как раньше
+    touch(w, card, "pointerup")
+    w.wait(".cm[role=menu]", "меню по удержанию")
+    w.page.wait_for_timeout(300)
+    assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
+    assert in_viewport(w)
+    shot(w, "cm-phone")
+    assert w.page.locator(".cm [data-cm=top]").bounding_box()["height"] >= 44  # пальцем удобно
+    with saves(w, "вниз с телефона", "POST", move(a)):
+        w.page.tap(".cm [data-cm=bottom]")
+    cm_closed(w)
+    assert db_order(uid, "next") == [b, c, a]
+    settled(w)
+
+    # Удержал и повёл — перестановка, меню нет
+    card = f'main .it[data-id="{b}"]'
+    step = w.page.locator(f'main .it[data-id="{c}"]').bounding_box()["y"] - w.page.locator(card).bounding_box()["y"]
+    touch(w, card, "pointerdown")
+    w.page.wait_for_timeout(450)
+    touch(w, card, "pointermove", step * 1.6)
+    with saves(w, "перестановка пальцем", "POST", move(b)):
+        touch(w, card, "pointerup", step * 1.6)
+    assert db_order(uid, "next") == [c, b, a]
+    assert not w.page.locator(".cm").count()
+    settled(w)
+
+    # Системное меню долгого нажатия (Android шлёт contextmenu) не дублирует наше и не открывается
+    prevented = w.page.evaluate(f"""() => {{ const el = document.querySelector('main .it[data-id="{c}"] .t');
+        el.dispatchEvent(new PointerEvent('pointerdown', {{bubbles: true, pointerType: 'touch', pointerId: 9, button: 0}}));
+        el.dispatchEvent(new PointerEvent('pointercancel', {{bubbles: true, pointerType: 'touch', pointerId: 9}}));
+        return !el.dispatchEvent(new MouseEvent('contextmenu', {{bubbles: true, cancelable: true}})); }}""")
+    assert prevented and not w.page.locator(".cm").count()
+
+    # Scheduled — без ручного порядка: удержание сразу открывает меню
+    A.run("update items set remind_at=%s where id=%s", (int(time.time()) + 7200, c))
+    w.goto("/scheduled")
+    w.wait('main .it[data-id]', "Scheduled")
+    card = f'main .it[data-id="{c}"]'
+    touch(w, card, "pointerdown")
+    w.wait(".cm[role=menu]", "меню в Scheduled")
+    assert "undate" in cm_labels(w) and "top" not in cm_labels(w)
+    touch(w, card, "pointerup")
+    w.page.wait_for_timeout(300)
+    assert not w.page.locator("#dlg[open]").count()
+    with saves(w, "убрать дату с телефона", "PATCH", f"/api/items/{c}"):
+        w.page.tap(".cm [data-cm=undate]")
+    assert item(c)["remind_at"] is None
     w.check("итог")

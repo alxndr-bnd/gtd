@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- Right-click a task to open its menu: move it to the top or bottom of the list, add it to a project or remove it, and add, change or remove its date. On a phone, hold the task and release it. On a keyboard, press Shift+F10 or the Menu key.
+  - RU: Правый клик по задаче открывает её меню: наверх или в конец списка, добавить в проект или убрать из него, поставить, изменить или убрать дату. На телефоне — удержать задачу и отпустить. С клавиатуры — Shift+F10 или клавиша Menu.
+
 ## [0.50.0] - 2026-10-12
 
 ### Added

@@ -204,6 +204,17 @@ picker. Drag a card with the mouse, hold it or drag it by ⠿ on a phone, or pre
 grip shows on touch screens and on hover or selection with a mouse. A one-time hint above the first list with 2+
 tasks explains this; its dismissal is stored per user (`users.dnd_tip_seen`, SERBITO-390).
 
+Task menu (SERBITO-604): right-click a task, press the Menu key or Shift+F10 on the selected task, or long-press it
+on a phone. Items: move to the top or bottom (only in lists with a manual order; `POST /api/items/{id}/move` with
+`to: "top" | "bottom"` and the list's `scope` — the edge of the whole list, not of the visible part), add to a
+project (search, "New project…"; archived projects are not offered), remove from the project, add or change the date
+(today, tomorrow, next week, own date and time), remove the date. Project and date use the same `PATCH` as the task
+card and show an Undo toast. Quick dates keep the task's time, else 09:00; "today" after that time is the next full
+hour; "next week" is next Monday. Long press: in a list with a manual order the hold lifts the card as before;
+release it in place and the menu opens, move it and the card is reordered. In other lists the hold opens the menu.
+The browser menu stays outside task rows, on the `#N` link, in inputs and on selected text. The menu stays on screen
+and closes on Esc, an outside click, scroll or resize. The CSS is in the JS bundle.
+
 Public pages are `pages.py`; the server renders the text (for search engines): landing for guests on `/` and
 `/en/`, “How it works” on `/about` and `/en/about`, privacy policy on `/privacy`, “What's new” on `/changes`
 (rendered from `CHANGELOG.md` via `changelog.py`, parsed once at startup), `robots.txt`, `sitemap.xml`, `llms.txt`
