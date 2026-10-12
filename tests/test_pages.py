@@ -73,7 +73,9 @@ def test_public_page_seo_tags(client, path, lang):
     assert app["@id"] == home + "#app" and app["url"] == home  # одна сущность на всех страницах обоих языков
     assert app["applicationCategory"] == "ProductivityApplication" and app["offers"]["price"] == "0"
     assert app["isAccessibleForFree"] is True and app["license"] == "https://opensource.org/licenses/MIT"
-    assert app["sameAs"] == ["https://t.me/gtdsrbot", "https://github.com/alxndr-bnd/gtd"]
+    # Бот, код и страница в каталоге AlternativeTo (SERBITO-611) — одна сущность для поисковиков и AI-ответов
+    assert app["sameAs"] == ["https://t.me/gtdsrbot", "https://github.com/alxndr-bnd/gtd",
+                             "https://alternativeto.net/software/gtd/"]
     assert nodes["Organization"]["@id"] == home + "#org" == app["author"]["@id"] == nodes["WebSite"]["publisher"]["@id"]
     assert page["url"] == BASE + path and page["inLanguage"] == lang and page["name"] == title
     assert page["isPartOf"]["@id"] == nodes["WebSite"]["@id"] and page["about"]["@id"] == app["@id"]
@@ -221,19 +223,26 @@ def test_about_ga_event_only_on_prod(client, monkeypatch):
 @pytest.mark.parametrize("path, lang", PUBLIC.items())
 def test_open_source_links(client, path, lang):
     """SERBITO-291: код открыт — ссылка на репозиторий в подвале каждой публичной страницы,
-    на лендинге — строка под текстом, на /about — раздел со ссылкой на инструкцию по self-hosting."""
+    на лендинге — строка под текстом, на /about — раздел со ссылкой на инструкцию по self-hosting.
+    SERBITO-611: рядом — отзывы на AlternativeTo, обычной ссылкой (без чужих бейджей и скриптов)."""
     h = client.get(path).text
     foot = h[h.index("<footer>"):h.index("</footer>")]
-    assert f'{P.T[lang]["oss"]} · <a href="{P.REPO_URL}">GitHub</a>' in foot
+    alt = f'<a href="{P.ALTERNATIVETO_URL}">{"Отзывы на AlternativeTo" if lang == "ru" else "Reviews on AlternativeTo"}</a>'
+    assert f'{P.T[lang]["oss"]} · <a href="{P.REPO_URL}">GitHub</a> · {alt}' in foot
+    assert foot.count(f'href="{P.REPO_URL}"') == 1 and foot.count(f'href="{P.ALTERNATIVETO_URL}"') == 1
     assert ("Открытый код (MIT)" if lang == "ru" else "Open source (MIT)") in foot
     assert "mailto:" not in foot  # контактной почты в подвале нет; адрес для запросов о данных — только на /privacy
     if path in ("/", "/en/"):
         root = h[h.index('<div id="root">'):h.index("<footer>")]
-        assert f'<p class="note">{P.T[lang]["oss_note"]} · <a href="{P.REPO_URL}">GitHub</a></p>' in root
+        assert f'<p class="note">{P.T[lang]["oss_note"]} · <a href="{P.REPO_URL}">GitHub</a> · {alt}</p>' in root
+        assert root.count(f'href="{P.REPO_URL}"') == 1  # только строка под текстом — без дублей
     elif path.endswith("/about"):
         body = h[:h.index("<footer>")]
         assert ("Где открытый код?</h2>" if lang == "ru" else "Where is the source code?</h2>") in body
         assert f'href="{P.REPO_URL}"' in body and f'href="{P.SELF_HOST_URL}"' in body
+        assert f'href="{P.ALTERNATIVETO_URL}"' in body
+    assert not re.search(r"<(script|img|iframe)[^>]+alternativeto", h)  # без чужого бейджа и скрипта
+    assert P.ALTERNATIVETO_URL == "https://alternativeto.net/software/gtd/"
     assert P.REPO_URL == "https://github.com/alxndr-bnd/gtd"
     assert P.SELF_HOST_URL == P.REPO_URL + "/blob/main/docs/self-host.md"
 
@@ -274,7 +283,7 @@ def test_llms_txt(client):
     for path in PUBLIC:
         if "privacy" not in path:  # политика — не про продукт
             assert f"({BASE}{path})" in r.text, path
-    assert f"({P.REPO_URL})" in r.text and f"({P.BOT_URL})" in r.text
+    assert f"({P.REPO_URL})" in r.text and f"({P.BOT_URL})" in r.text and f"({P.ALTERNATIVETO_URL})" in r.text
     assert "Sitemap" not in r.text and r.text.endswith("\n")
 
 

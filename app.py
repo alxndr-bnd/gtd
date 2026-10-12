@@ -3211,7 +3211,12 @@ def spa_shell() -> tuple[str, str, str]:
         i18n = page[i18n_start + len(I18N_BLOCK):i18n_end].strip()
         bundle = f"window.GTD_I18N = {i18n};\n" + page[js_start + len("<script>\n"):js_end]
         digest = hashlib.sha256(bundle.encode()).hexdigest()[:12]
-        page = (page[:i18n_start] + f'<script defer src="/app.{digest}.js"></script>\n'
+        # Комментарий к словарю над ним уходит вместе со словарём (SERBITO-611): гостю он не нужен, а это
+        # ~200 байт кириллицы на лимите лендинга в 45 КБ
+        head = page[:i18n_start]
+        if head.rstrip().endswith("-->"):
+            head = head[:head.rindex("<!--")]
+        page = (head + f'<script defer src="/app.{digest}.js"></script>\n'
                 + page[i18n_end + len("</script>"):js_start].lstrip("\n") + page[js_end + len("</script>"):].lstrip("\n"))
         _shell.update(mtime=mtime, page=page, bundle=bundle, digest=digest)
     return _shell["page"], _shell["bundle"], _shell["digest"]

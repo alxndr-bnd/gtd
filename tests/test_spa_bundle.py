@@ -14,6 +14,7 @@ def test_landing_html_is_light_and_has_one_h1(client):
         h = client.get(path).text
         assert len(h.encode()) < 45_000, len(h.encode())  # было ~160 КБ
         assert "function loginScreen" not in h and 'id="i18n"' not in h
+        assert "<!--" not in h  # комментарий к словарю уходит вместе со словарём (SERBITO-611)
         assert h.count("<h1") == 1  # лишние <h1> были в шаблонах кода приложения
         assert BUNDLE.search(h)
 
