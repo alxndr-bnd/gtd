@@ -123,6 +123,8 @@ tasks, projects (same-name projects are joined), sessions and missing sign-in me
   `restore_project(name)`, `list_tasks(list="archived")`. `complete_task` and `move_task` return `project_now_empty`
   and a `hint` when the last open task of a project is closed: the model asks the user, it does not archive by itself.
   `weekly_review` has `empty_projects`. `move_task` to an archived project restores it.
+- **Prompt `process_inbox`** (SERBITO-603) — the GTD processing order for the assistant, with the tools for each
+  answer. The server `instructions` point to it.
 - **Logs** — no token values, codes or task text; SDK loggers (`mcp.*`) log warnings only.
 
 ## Telegram capture
@@ -184,6 +186,17 @@ Project archive (SERBITO-602): `projects.status` is `active` or `archived`, with
 - Screens: "🗄 Archive" on a project and in the project list; `/archive` lists archived projects with their tasks
   and "Restore"; Weekly Review lists empty projects with an Archive button. Archive CSS lives in the JS bundle:
   the guest landing must stay under 45 KB (`test_spa_bundle`).
+
+Process Inbox (SERBITO-603): `/process` takes Inbox tasks one at a time, oldest first, and asks the GTD questions
+in order: actionable? → under 2 minutes? → mine? → more than one step? → fixed date? Each final answer is one
+`POST /api/items/{id}/process` (`app.process_item`): `action` is `trash`, `someday`, `reference`, `done`, `waiting`
+(`who` required, `follow_up` → `remind_at`, "Waiting for: …" as the first line of notes), `project` (`project_id` of
+an active project or a new `project` name; `next_action` is required and becomes the task title; the old title goes
+to the notes unless it is the project name), `dated` (`remind_at`, status `next`) or `next` (optional `contexts`).
+A task not in the Inbox → 409. There is no 2-minute timer: only "Done now" with a hint. Skip keeps the task in the
+Inbox. Each decision has an Undo toast. Keys: digits answer, → skips, Esc goes back. `process_runs` counts processed
+tasks per run (no task data) for `/api/admin/stats` → `process`. The flow diagram is on `/about#process`. The CSS is
+in the JS bundle, like the archive.
 
 Manual order: tasks have their own order in each list (`items.position`) and in each project (`items.ppos`);
 projects have one order per user (`projects.position`, SERBITO-391), used by the project list and every project

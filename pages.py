@@ -569,6 +569,22 @@ AI-ассистентов есть MCP-сервер: они умеют запи�
 <li><b>5. Делать</b>Выбрать следующее действие по месту и ситуации.
 <span class="where">Next с фильтром по @контексту</span></li>
 </ol>
+<h2 id="process">Как разобрать Inbox?</h2>
+<p>По одной записи, задавая одни и те же пять вопросов по порядку. Первый ответ, который решает дело, говорит,
+куда положить запись. В приложении это режим «▶ Разобрать по шагам» над задачами Inbox: большие кнопки, счётчик
+«3 из 12» и «Пропустить».</p>
+<ol class="steps">
+<li><b>1. Нужно ли действие?</b>Нет — в корзину, в Someday/Maybe или в Reference.
+<span class="where">Да → вопрос 2</span></li>
+<li><b>2. Меньше 2 минут?</b>Да — сделай сразу и отметь «Сделано».
+<span class="where">Нет → вопрос 3</span></li>
+<li><b>3. Делать мне?</b>Нет — поручи и положи в Waiting: кто делает и когда проверить.
+<span class="where">Да → вопрос 4</span></li>
+<li><b>4. Больше одного шага?</b>Да — это проект: выбери или создай его и запиши первое следующее действие.
+<span class="where">Нет → вопрос 5</span></li>
+<li><b>5. Есть точная дата?</b>Да — поставь дату, задача появится в календаре. Нет — в Next, с @контекстом.
+<span class="where">Готово, следующая запись</span></li>
+</ol>
 <h2>Как быстро записать задачу?</h2>
 <p>Напиши задачу в поле захвата на сайте или сообщением боту. Срок, #проект и @контекст пиши прямо в тексте:
 приложение само поставит напоминание и уберёт эти слова из названия. Без проекта и контекста задача попадает
@@ -628,6 +644,23 @@ where you are. Below is what each step means and where it lives in the app.</p>
 <li><b>5. Engage</b>Pick the next action that fits where you are and what you have at hand.
 <span class="where">Next, filtered by @context</span></li>
 </ol>
+<h2 id="process">How do I process the Inbox?</h2>
+<p>One item at a time, with the same five questions in the same order. The first answer that decides it tells you
+where the item goes. In the app, this is the “▶ Process step by step” mode above your Inbox tasks: large buttons,
+a “3 of 12” counter and Skip.</p>
+<ol class="steps">
+<li><b>1. Is it actionable?</b>No — trash it, or put it in Someday/Maybe or Reference.
+<span class="where">Yes → question 2</span></li>
+<li><b>2. Less than 2 minutes?</b>Yes — do it now and mark it “Done”.
+<span class="where">No → question 3</span></li>
+<li><b>3. Am I the one to do it?</b>No — delegate it and put it in Waiting: who does it and when to follow up.
+<span class="where">Yes → question 4</span></li>
+<li><b>4. More than one step?</b>Yes — it is a project: pick or create one and write the first next action.
+<span class="where">No → question 5</span></li>
+<li><b>5. Does it have a fixed date?</b>Yes — set the date, and it shows in the calendar. No — to Next, with an
+@context.
+<span class="where">Done, next item</span></li>
+</ol>
 <h2>How do I capture a task quickly?</h2>
 <p>Type the task into the capture field on the website or send it to the bot. Put the date, #Project and @context
 right in the text: the app sets the reminder and removes these words from the title. Without a project or a context,
@@ -686,7 +719,7 @@ see the <a href="{SELF_HOST_URL}">self-hosting guide</a>.</p>""",
 }
 # Редакция текста /about (SERBITO-470): дата «Обновлено» на странице, dateModified и lastmod в sitemap.
 # Правишь текст /about — ставь новую дату
-ABOUT_DAY = "2026-10-05"
+ABOUT_DAY = "2026-10-12"
 
 
 def about(base: str, lang: str, ga: str) -> str:

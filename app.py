@@ -349,6 +349,12 @@ alter table projects add column if not exists archive_mode text;
 alter table items add column if not exists archived_from text;
 update projects set status='archived', archive_mode='project', archived_at=coalesce(archived_at, created)
 where status='done';
+-- Разбор Inbox по шагам (SERBITO-603): один заход в режим — строка, items — сколько задач разобрано за него.
+-- Только счётчик, без задач и их текста — для статистики, как activity
+create table if not exists process_runs(
+  id bigserial primary key, user_id bigint not null, channel text not null, started bigint not null,
+  items integer not null default 0);
+create index if not exists process_runs_started on process_runs(started);
 """
 
 with _pool.connection() as _c:
@@ -2357,6 +2363,9 @@ def admin_stats(uid: int = Depends(current_user)):
                                 today - timedelta(days=7)),
                 "oauth_connections": one("select count(*) n from oauth_grants"),
                 "api_tokens": one("select count(*) n from api_tokens")},
+        # Разбор Inbox по шагам (SERBITO-603): сколько заходов за 30 дней и сколько задач в них разобрано
+        "process": row("select count(*) runs, coalesce(sum(items), 0) items from process_runs where started >= %s",
+                       (since(30),)),
         "tasks": {"total": one("select count(*) n from items"),
                   "created_7d": one("select count(*) n from items where created >= %s", since(7)),
                   "created_30d": one("select count(*) n from items where created >= %s", since(30))},
@@ -3020,6 +3029,111 @@ def delete_project(pid: int, items: str = "keep", uid: int = Depends(current_use
     return {"ok": True, "items": items, "affected": n}
 
 
+# ───────────────────────── Разбор Inbox по шагам (SERBITO-603) ─────────────────────────
+# Вопросы GTD по порядку: нужно ли действие → меньше 2 минут → я ли делаю → больше одного шага → есть ли дата.
+# Ответ — одно решение (action), и задача уходит из Inbox туда, где ей место. Одна функция для сайта и MCP.
+# Таймера «2 минуты» нет: только «Сделано сейчас» с подсказкой. Новый проект — только с первым следующим действием
+PROCESS_ACTIONS = ("trash", "someday", "reference", "done", "waiting", "project", "dated", "next")
+# «Кого ждём» — первая строка заметок (MCP update_task, SERBITO-375): отдельного поля у задачи нет, а заметки видны
+# и в приложении, и в боте. Метка — на языке аккаунта; заменяем и снимаем строку с любой из двух
+WAITING_MARK = {"ru": "Ждём: ", "en": "Waiting for: "}
+WAITING_RE = re.compile(r"^(?:Ждём|Waiting for): .*(?:\n|$)")
+
+
+def waiting_notes(uid: int, notes: str, who: str) -> str:
+    """Заметки с новой строкой «Ждём: …» (who пустой — без неё)."""
+    rest = WAITING_RE.sub("", notes or "", count=1)
+    if not who:
+        return rest
+    lang = (row("select lang from users where id=%s", (uid,)) or {}).get("lang") \
+        or ("ru" if re.search("[а-яё]", who, re.I) else "en")
+    return WAITING_MARK[lang] + who + ("\n" + rest if rest else "")
+
+
+def _text(body: dict, key: str, limit: int = 500) -> str:
+    v = body.get(key)
+    if v is None:
+        return ""
+    if not isinstance(v, str):
+        raise HTTPException(400, key)
+    return " ".join(v.split())[:limit]
+
+
+def _ts(body: dict, key: str) -> int | None:
+    v = body.get(key)
+    if v is None:
+        return None
+    if type(v) is not int or v <= 0:
+        raise HTTPException(400, key)
+    return v
+
+
+def process_item(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
+    """Решение по задаче из Inbox. action: trash, someday, reference — не действие; done — сделано сейчас (меньше
+    2 минут); waiting — делает другой (who обязательно, follow_up — дата напоминания); project — больше одного
+    шага: project_id (только активный) или project (название, новый создаётся), next_action обязательно — им
+    становится сама задача; dated — дата (remind_at) и в Next; next — в Next. contexts — для next, dated, project.
+    run — номер захода (process_runs): нет или чужой — заводим новый. Задача не в Inbox — 409."""
+    cur = item_get(uid, iid)
+    if not cur:
+        raise HTTPException(404)
+    if cur["status"] != "inbox":
+        raise HTTPException(409, "not in inbox")
+    action = body.get("action")
+    if action not in PROCESS_ACTIONS:
+        raise HTTPException(400, "bad action")
+    if action in ("trash", "someday", "reference", "done"):
+        patch = {"status": action}
+    elif action == "waiting":
+        who = _text(body, "who", 200)
+        if not who:
+            raise HTTPException(400, "who")
+        patch = {"status": "waiting", "notes": waiting_notes(uid, cur["notes"], who)}
+        if (follow := _ts(body, "follow_up")) is not None:
+            patch["remind_at"] = follow
+    elif action == "project":
+        nxt, name, pid = _text(body, "next_action"), _text(body, "project", 200), body.get("project_id")
+        if not nxt:
+            raise HTTPException(400, "next_action")
+        if pid is not None:
+            if type(pid) is not int:
+                raise HTTPException(400, "project_id")
+            if not row("select 1 from projects where id=%s and user_id=%s and status='active'", (pid, uid)):
+                raise HTTPException(404, "project not found")
+        elif name:
+            pid = project_by_title(uid, name)
+        else:
+            raise HTTPException(400, "project")
+        patch = {"status": "next", "project_id": pid, "title": nxt}
+        # Задача становится следующим действием. Её прежний текст не теряем: если это не название проекта —
+        # первой строкой заметок
+        ptitle = row("select title from projects where id=%s", (pid,))["title"]
+        if nxt != cur["title"] and cur["title"].casefold() != ptitle.casefold():
+            patch["notes"] = cur["title"] + ("\n" + cur["notes"] if cur["notes"] else "")
+    elif action == "dated":
+        when = _ts(body, "remind_at")
+        if not when:
+            raise HTTPException(400, "remind_at")
+        patch = {"status": "next", "remind_at": when}
+    else:
+        patch = {"status": "next"}
+    if action in ("next", "dated", "project") and "contexts" in body:
+        patch["contexts"] = body["contexts"]
+    it = item_patch(uid, iid, patch, channel)
+    rid = body.get("run")
+    if not (type(rid) is int and run("update process_runs set items=items+1 where id=%s and user_id=%s returning id",
+                                     (rid, uid))):
+        rid = run("insert into process_runs(user_id, channel, started, items) values(%s,%s,%s,1) returning id",
+                  (uid, channel, int(time.time())))
+    it["run"] = rid
+    return it
+
+
+@app.post("/api/items/{iid}/process")
+def process_inbox_item(iid: int, body: dict, uid: int = Depends(current_user)):
+    return process_item(uid, iid, body)
+
+
 @app.get("/api/items/n/{num}")
 def get_item_by_num(num: int, request: Request, uid: int = Depends(current_user)):
     it = item_by_num(uid, num)  # номера у каждого свои: чужую задачу по ссылке не открыть
@@ -3281,7 +3395,7 @@ def item_page(num: int, request: Request):
 # жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Сервер отдаёт на них то же приложение, что
 # на /i/N: раздел выбирает фронт по адресу. Inbox — это / (и /en/). Список — тот же, что ROUTE_VIEWS в index.html
 APP_VIEWS = ("next", "waiting", "scheduled", "projects", "archive", "someday", "reference", "done", "review", "account",
-             "stats")
+             "stats", "process")
 
 
 def section_page(request: Request):

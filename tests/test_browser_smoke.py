@@ -824,8 +824,10 @@ def test_inbox_what_to_do_next(watch, lang):
     order = w.page.eval_on_selector_all("main > .dnd, main > .below", "els => els.map(e => e.className)")
     assert len(order) == 3 and "inbox-sec" in order[0] and "due-soon" in order[1] and "next-sec" in order[2]
     # У задач Inbox — свой заголовок с подсказкой, как у других разделов (SERBITO-581); под полем подсказки нет
-    assert tx["sec"] in w.page.inner_text("main .inbox-sec > h3")
-    assert tx["hint"] in w.page.inner_text("main .inbox-sec > h3 + .hint")
+    # Заголовок — в строке с кнопкой «Разобрать по шагам» (SERBITO-603)
+    assert tx["sec"] in w.page.inner_text("main .inbox-sec > .sech > h3")
+    assert w.page.locator('main .inbox-sec > .sech > a.prgo[data-view="process"]').count() == 1
+    assert tx["hint"] in w.page.inner_text("main .inbox-sec > .sech + .hint")
     assert not w.page.locator("main .hero .hint").count()
     # Поле → раздел Inbox — тот же шаг, что между разделами
     gaps = w.page.evaluate("""() => {
@@ -2415,4 +2417,179 @@ def test_archive_offer_after_last_task_and_in_review(watch):
     w.page.click('#dlg [data-arch="all"]')
     w.page.wait_for_function("document.querySelectorAll('main .rv .ar').length === 1", timeout=SAVE_MS)
     assert proj_status(uid, "Empty")["status"] == "archived"
+    w.check("итог")
+
+
+PROC_TITLES = ["Old receipt", "Learn Serbian", "Wifi password", "Reply to Ana", "Quote from Marko", "Kitchen remodel",
+               "Visa for the trip", "Dentist", "Buy batteries", "Skip me"]
+
+
+def process_user(lang):
+    """Inbox из десяти задач — по одной на каждую ветку разбора и одна, чтобы пропустить; созданы по порядку,
+    старые первыми. Проект Trip — активный, Old — в архиве (в выборе проекта его нет); контекст @shop уже есть."""
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden) values(0,'Smoke',%s,%s,true) "
+                "returning id", (int(time.time()), lang))
+    now = int(time.time())
+    ids = []
+    for n, title in enumerate(PROC_TITLES):
+        iid = A.capture(uid, title)["id"]
+        A.run("update items set created=%s where id=%s", (now - 1000 + n, iid))
+        ids.append(iid)
+    A.capture(uid, "Pack bags #Trip")
+    A.capture(uid, "Milk @shop")
+    old = A.project_by_title(uid, "Old")
+    A.project_archive(uid, old, "all")
+    return uid, dict(zip(PROC_TITLES, ids))
+
+
+def it_row(iid):
+    return A.row("select i.title, i.status, i.notes, i.remind_at, i.contexts, p.title project from items i "
+                 "left join projects p on p.id=i.project_id where i.id=%s", (iid,))
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+@pytest.mark.parametrize("viewport", [PHONE, (1280, 900)])
+def test_process_inbox_every_branch(watch, lang, viewport):
+    """SERBITO-603: «Разобрать по шагам» проводит по вопросам GTD, задача за задачей, старые первыми: корзина,
+    Someday, Reference, сделано сейчас, Waiting (кто и когда), проект с первым действием (новый и выбранный, без
+    архивных), дата, Next с контекстом, «Пропустить». На телефоне — касания, на компьютере — клавиши."""
+    phone = viewport == PHONE
+    uid, ids = process_user(lang)
+    w = watch(lang, viewport=viewport, touch=phone)
+    w.goto("/dev-login")
+    w.wait("main a.prgo", f"[{lang}] кнопка разбора в Inbox")
+    w.page.click("main a.prgo")
+    w.wait(f'main .prt:text-is("{PROC_TITLES[0]}")', f"[{lang}] первая задача")
+    assert w.page.url.endswith("/process")
+    assert w.page.locator('nav > a.on[data-view="inbox"]').count()
+    assert w.page.inner_text("main .prn").replace(" ", "") in ("1из10", "1of10")
+    assert w.page.locator('main .prf a[href$="/about#process"]').count()
+    assert w.page.locator("main .prkeys").is_visible() != phone  # подсказка клавиш — только с мышью
+
+    def answer(*picks):
+        """Ответы по порядку: на компьютере — цифрой (номер кнопки), на телефоне — касанием."""
+        for a in picks:
+            btn = w.page.locator(f'main .prb button[data-a="{a}"]')
+            btn.wait_for()
+            if phone:
+                btn.tap()
+            else:
+                n = w.page.eval_on_selector_all("main .prb button", "(bs, a) => bs.findIndex(b => b.dataset.a === a)", a)
+                w.page.keyboard.press(str(n + 1))
+
+    def decide(title, *picks, form=None):
+        with saves(w, f"[{lang}] {title}", "POST", f"/api/items/{ids[title]}/process"):
+            answer(*picks)
+            if form:
+                form()
+        nxt = PROC_TITLES[PROC_TITLES.index(title) + 1]
+        w.wait(f'main .prt:text-is("{nxt}")', f"[{lang}] после «{title}»")
+
+    decide("Old receipt", "trash")
+    decide("Learn Serbian", "someday")
+    decide("Wifi password", "reference")
+    assert [it_row(ids[t])["status"] for t in PROC_TITLES[:3]] == ["trash", "someday", "reference"]
+    assert w.page.inner_text("main .prn").replace(" ", "") in ("4из10", "4of10")
+
+    # Esc — шаг назад: со второго вопроса к первому
+    answer("yes")
+    w.wait("main .prq .hint", f"[{lang}] подсказка про 2 минуты")
+    if not phone:
+        w.page.keyboard.press("Escape")
+        w.wait('main .prb button[data-a="trash"]', f"[{lang}] Esc — назад")
+    else:
+        w.page.tap('main [data-act="prback"]')
+        w.wait('main .prb button[data-a="trash"]', f"[{lang}] «Назад»")
+    decide("Reply to Ana", "yes", "done")
+    assert it_row(ids["Reply to Ana"])["status"] == "done"
+
+    def waiting_form():
+        w.wait("#pr-who", f"[{lang}] форма Waiting")
+        w.page.fill("#pr-follow", "2030-01-15T10:00")
+        w.page.fill("#pr-who", "Marko")
+        w.page.keyboard.press("Enter") if not phone else w.page.tap("#prform button.go")
+    decide("Quote from Marko", "yes", "no", "waiting", form=waiting_form)
+    r = it_row(ids["Quote from Marko"])
+    assert (r["status"], r["notes"].split("\n")[0]) == ("waiting", "Ждём: Marko" if lang == "ru" else "Waiting for: Marko")
+    assert r["remind_at"]
+
+    def new_project():
+        w.wait("#pr-next", f"[{lang}] форма проекта")
+        picks = w.page.eval_on_selector_all("#prform .pjpick button", "bs => bs.map(b => b.textContent)")
+        assert picks == ["#Trip"]  # архивного Old нет
+        assert w.page.input_value("#pr-pnew") == "Kitchen remodel"
+        w.page.click("#prform button.go")  # без следующего действия проект не создаётся
+        assert w.page.inner_text("#prmsg")
+        assert A.row("select 1 from projects where title='Kitchen remodel'") is None
+        w.page.fill("#pr-next", "Call the builder")
+        w.page.click("#prform button.go")
+    decide("Kitchen remodel", "yes", "no", "yes", "project", form=new_project)
+    r = it_row(ids["Kitchen remodel"])
+    assert (r["title"], r["status"], r["project"]) == ("Call the builder", "next", "Kitchen remodel")
+
+    def pick_trip():
+        w.wait("#pr-next", f"[{lang}] форма проекта")
+        w.page.click('#prform .pjpick button:has-text("#Trip")')
+        assert w.page.get_attribute('#prform .pjpick button:has-text("#Trip")', "aria-pressed") == "true"
+        w.page.fill("#pr-next", "Book the consulate")
+        w.page.click("#prform button.go")
+    decide("Visa for the trip", "yes", "no", "yes", "project", form=pick_trip)
+    r = it_row(ids["Visa for the trip"])
+    assert (r["title"], r["project"], r["notes"]) == ("Book the consulate", "Trip", "Visa for the trip")
+
+    def date_form():
+        w.wait("#pr-when", f"[{lang}] форма даты")
+        w.page.fill("#pr-when", "2030-02-01T09:30")
+        w.page.click("#prform button.go")
+    decide("Dentist", "yes", "no", "yes", "no", "dated", form=date_form)
+    r = it_row(ids["Dentist"])
+    assert r["status"] == "next" and r["remind_at"]
+
+    def next_form():
+        w.wait('#prform [data-cx="shop"]', f"[{lang}] контексты")
+        w.page.click('#prform [data-cx="shop"]')
+        w.page.fill("#pr-cx", "@errands")
+        w.page.click("#prform button.go")
+    decide("Buy batteries", "yes", "no", "yes", "no", "next", form=next_form)
+    r = it_row(ids["Buy batteries"])
+    assert (r["status"], r["contexts"]) == ("next", ["shop", "errands"])
+
+    # Пропустить — задача остаётся в Inbox; итог: девять разобраны, одна пропущена
+    w.page.keyboard.press("ArrowRight") if not phone else w.page.tap('main [data-act="prskip"]')
+    w.wait('main [data-act="pragain"]', f"[{lang}] итог")
+    assert it_row(ids["Skip me"])["status"] == "inbox"
+    assert "9" in w.page.inner_text("main .prend")
+    assert A.rows("select items from process_runs where user_id=%s", (uid,)) == [{"items": 9}]
+    # Пропущенные — ещё раз
+    w.page.click('main [data-act="pragain"]')
+    w.wait('main .prt:text-is("Skip me")', f"[{lang}] пропущенная")
+    assert w.page.inner_text("main .prn").replace(" ", "") in ("1из1", "1of1")
+    # Ширина: на телефоне страница не прокручивается вбок
+    assert w.page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    w.check(f"[{lang}] итог")
+
+
+def test_process_inbox_undo_and_empty(watch):
+    """SERBITO-603: «Отменить» в тосте возвращает задачу в Inbox и на экран разбора; пустой Inbox — сообщение."""
+    uid, ids = process_user("en")
+    w = watch("en")
+    w.goto("/dev-login")
+    w.wait("main a.prgo", "кнопка разбора")
+    w.page.click("main a.prgo")
+    w.wait(f'main .prt:text-is("{PROC_TITLES[0]}")', "первая задача")
+    with saves(w, "в корзину", "POST", f"/api/items/{ids['Old receipt']}/process"):
+        w.page.click('main .prb button[data-a="trash"]')
+    w.wait(f'main .prt:text-is("{PROC_TITLES[1]}")', "вторая задача")
+    with saves(w, "отменить", "PATCH", f"/api/items/{ids['Old receipt']}"):
+        w.page.click('#toast [data-act="undo"]')
+    w.wait(f'main .prt:text-is("{PROC_TITLES[0]}")', "задача вернулась")
+    assert it_row(ids["Old receipt"])["status"] == "inbox"
+    assert w.page.inner_text("main .prn") == "1 of 10"
+    A.run("update items set status='trash' where user_id=%s and status='inbox'", (uid,))
+    w.page.click('main .prf a[data-view="inbox"]')
+    w.wait("main .hero .inbox-empty", "пустой Inbox")
+    assert not w.page.locator("main a.prgo").count()  # разбирать нечего — кнопки нет
+    w.goto("/en/process")
+    w.wait("main .prend", "пустой разбор")
+    assert "empty" in w.page.inner_text("main .prend")
     w.check("итог")

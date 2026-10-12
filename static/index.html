@@ -277,6 +277,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "st_new7": "новых за 7 дней", "st_new30": "новых за 30 дней", "st_tasks7": "задач за 7 дней", "st_tasks30": "задач за 30 дней",
   "st_channels": "Каналы за 30 дней", "st_channels_text": "Сайт — {web} · Telegram-бот — {tg}",
   "st_mcp": "MCP: AI-ассистенты", "st_mcp_text": "Активны за 7 дней — {users} · OAuth (claude.ai и другие коннекторы) — {oauth} · Личные токены — {tokens}",
+  "st_process": "Разбор Inbox по шагам", "st_process_text": "За 30 дней: заходов — {runs} · разобрано задач — {items} · в среднем за заход — {avg}",
   "st_methods": "Способы входа", "st_methods_text": "Почта — {email} · Google — {google} · Telegram — {tg}",
   "sign_out": "Выйти", "menu": "Меню", "to_inbox": "Открыть Inbox",
   "about": "📖 О GTD", "about_title": "Как это работает: метод GTD и разделы приложения", "about_url": "/about",
@@ -304,8 +305,30 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "archived_toast": "Проект #{p} в архиве", "restored_toast": "Проект #{p} снова в Projects",
   "archived_meta": "в архиве с {d}", "archived_all": "задачи ушли в архив вместе с ним", "archived_only": "задачи остались в работе",
   "archived_tasks": "Задачи ({n})", "archived_none": "Задач нет",
+  "proc": {"title": "▶ Разобрать Inbox", "start": "▶ Разобрать по шагам", "of": "{i} из {n}",
+    "help": "Как это работает", "exit": "Выйти из разбора", "skip": "Пропустить", "back": "← Назад",
+    "q1": "Нужно ли что-то делать?", "q1_yes": "Да, нужно действие", "trash": "Нет — в корзину",
+    "someday": "Нет — когда-нибудь (Someday)", "reference": "Нет — для справки (Reference)",
+    "q2": "Займёт меньше 2 минут?", "q2_hint": "Если да — сделай прямо сейчас и отметь. Записывать дольше, чем сделать.",
+    "done": "✅ Да — сделано сейчас", "q2_no": "Нет, дольше",
+    "q3": "Это делать мне?", "q3_yes": "Да, мне", "waiting": "Нет — поручить и ждать (Waiting)",
+    "who": "Кто сделает?", "who_ph": "Например, Марко", "follow": "Когда проверить (необязательно)",
+    "who_needed": "Напиши, кого ждёшь", "to_waiting": "→ Waiting",
+    "q4": "Больше одного шага?", "project": "Да — это проект", "q4_no": "Нет, один шаг",
+    "project_h": "Какой это проект?", "pick": "Выбери проект или назови новый:", "new_name": "Новый проект",
+    "next_action": "Первое следующее действие", "next_ph": "Например, позвонить Марко",
+    "need_project": "Выбери проект или напиши название нового",
+    "need_next": "Без следующего действия проект застрянет. Напиши первый шаг",
+    "to_project": "Сохранить в проект",
+    "q5": "Есть точная дата?", "dated": "Да — поставить дату", "next": "Нет — в Next",
+    "when": "Когда?", "when_needed": "Выбери дату и время", "to_dated": "Сохранить с датой",
+    "ctx_h": "Где это делать? Контекст — по желанию", "ctx_ph": "@дом @телефон", "to_next": "→ Next",
+    "done_all": "Inbox пуст 🎉", "summary": "Разобрано: {n}.", "left": "Пропущено: {n}. Они остались в Inbox.",
+    "again": "Пройти пропущенные", "to_inbox": "К Inbox", "empty": "В Inbox ничего нет — разбирать нечего.",
+    "gone": "Эту задачу уже разобрали в другом месте",
+    "keys": "Клавиши: 1–4 — ответ · → — пропустить · Esc — назад"},
   "review": {"s1": "1. Очистить голову", "s1_text": "Запиши всё, что в голове, в поле захвата выше.",
-    "s2": "2. Разобрать Inbox до нуля", "s2_text": "В Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">разобрать</a>",
+    "s2": "2. Разобрать Inbox до нуля", "s2_text": "В Inbox: <b>{n}</b> — <a href=\"#process\" data-view=\"process\">разобрать по шагам</a>",
     "s3": "3. Проекты без следующего действия", "s3_ok": "Все проекты движутся ✅",
     "empty": "Без задач. Проект закончен? Убери его в архив:",
     "s4": "4. В Waiting дольше недели", "s4_ok": "Ничего не зависло ✅",
@@ -404,6 +427,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "st_new7": "new in 7 days", "st_new30": "new in 30 days", "st_tasks7": "tasks in 7 days", "st_tasks30": "tasks in 30 days",
   "st_channels": "Channels, 30 days", "st_channels_text": "Website — {web} · Telegram bot — {tg}",
   "st_mcp": "MCP: AI assistants", "st_mcp_text": "Active in 7 days — {users} · OAuth (claude.ai and other connectors) — {oauth} · Personal tokens — {tokens}",
+  "st_process": "Inbox processing", "st_process_text": "In 30 days: runs — {runs} · tasks processed — {items} · per run — {avg}",
   "st_methods": "Sign-in methods", "st_methods_text": "Email — {email} · Google — {google} · Telegram — {tg}",
   "sign_out": "Sign out", "menu": "Menu", "to_inbox": "To Inbox",
   "about": "📖 About GTD", "about_title": "How it works: the GTD method and the app sections", "about_url": "/en/about",
@@ -431,8 +455,30 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "archived_toast": "Project #{p} archived", "restored_toast": "Project #{p} is back in Projects",
   "archived_meta": "archived {d}", "archived_all": "its tasks were archived with it", "archived_only": "its tasks stayed active",
   "archived_tasks": "Tasks ({n})", "archived_none": "No tasks",
+  "proc": {"title": "▶ Process Inbox", "start": "▶ Process step by step", "of": "{i} of {n}",
+    "help": "How it works", "exit": "Stop processing", "skip": "Skip", "back": "← Back",
+    "q1": "Is it actionable?", "q1_yes": "Yes, it needs action", "trash": "No — trash it",
+    "someday": "No — Someday/Maybe", "reference": "No — keep as Reference",
+    "q2": "Does it take less than 2 minutes?", "q2_hint": "If yes, do it right now and mark it done. Tracking it takes longer than doing it.",
+    "done": "✅ Yes — done now", "q2_no": "No, it takes longer",
+    "q3": "Am I the right person to do it?", "q3_yes": "Yes, me", "waiting": "No — delegate and wait (Waiting)",
+    "who": "Who will do it?", "who_ph": "For example, Marko", "follow": "Follow up on (optional)",
+    "who_needed": "Write who you are waiting for", "to_waiting": "→ Waiting",
+    "q4": "Is it more than one step?", "project": "Yes — it is a project", "q4_no": "No, one step",
+    "project_h": "Which project is it?", "pick": "Pick a project or name a new one:", "new_name": "New project",
+    "next_action": "First next action", "next_ph": "For example, call Marko",
+    "need_project": "Pick a project or write the name of a new one",
+    "need_next": "A project without a next action gets stuck. Write the first step",
+    "to_project": "Save to the project",
+    "q5": "Does it have a fixed date?", "dated": "Yes — set the date", "next": "No — to Next",
+    "when": "When?", "when_needed": "Pick a date and time", "to_dated": "Save with the date",
+    "ctx_h": "Where can you do it? A context is optional", "ctx_ph": "@home @phone", "to_next": "→ Next",
+    "done_all": "Inbox zero 🎉", "summary": "Processed: {n}.", "left": "Skipped: {n}. They stay in the Inbox.",
+    "again": "Go through the skipped ones", "to_inbox": "To the Inbox", "empty": "The Inbox is empty. Nothing to process.",
+    "gone": "This task was already processed somewhere else",
+    "keys": "Keys: 1–4 — answer · → — skip · Esc — back"},
   "review": {"s1": "1. Get clear", "s1_text": "Write down everything on your mind in the capture field above.",
-    "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a href=\"#inbox\" data-view=\"inbox\">process it</a>",
+    "s2": "2. Inbox to zero", "s2_text": "In the Inbox: <b>{n}</b> — <a href=\"#process\" data-view=\"process\">process it step by step</a>",
     "s3": "3. Projects without a next action", "s3_ok": "All projects are moving ✅",
     "empty": "No tasks left. Is the project finished? Archive it:",
     "s4": "4. Waiting for over a week", "s4_ok": "Nothing is stuck ✅",
@@ -497,7 +543,7 @@ let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, 
 // ── Адреса разделов (SERBITO-354): /next, /projects, /p/<id>… (на /en/ — /en/next). Переход — запись в истории
 // браузера, и Back (кнопка, жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Inbox — это /.
 // Карточка задачи — /i/<номер>: открыли из списка — своя запись, Back её закрывает. Список — app.APP_VIEWS
-const ROUTE_VIEWS = ['next','waiting','scheduled','projects','archive','someday','reference','done','review','account','stats'];
+const ROUTE_VIEWS = ['next','waiting','scheduled','projects','archive','someday','reference','done','review','account','stats','process'];
 function routeOf(path = location.pathname){
   const p = path.replace(/^\/en(?=\/|$)/, '') || '/';
   let m;
@@ -511,7 +557,7 @@ function viewPath(view = S.view, pid = S.pid){
   const p = view==='projects' && pid ? `/p/${pid}` : view==='inbox' ? '/' : '/'+view;
   return S.en ? (p==='/' ? '/en/' : '/en'+p) : p;
 }
-function routeApply(r){ S.view = r.view || 'inbox'; S.pid = r.pid || null; S.ctx = null; S.sel = null; }
+function routeApply(r){ S.view = r.view || 'inbox'; S.pid = r.pid || null; S.ctx = null; S.sel = null; if(S.view!=='process') S.proc = null; }
 // Перейти в раздел (проект): новая запись в истории, если адрес другой
 function go(view, pid = null){
   routeApply({view, pid});
@@ -570,6 +616,7 @@ async function load(){
     else if(S.view==='stats') d.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) d.items=[];
     else if(S.view==='archive'){ d.items = []; d.archive = await api('/archive'); }  // архив проектов (SERBITO-602)
+    else if(S.view==='process') d.items = await api('/items?status=inbox');  // разбор Inbox по шагам (SERBITO-603)
     else if(S.view==='projects'){  // выполненные сервер отдаёт, только если проект их показывает (SERBITO-327)
       const pj = projects.find(p=>p.id===S.pid);
       d.items = await api(`/items?status=all&project_id=${S.pid}${pj && doneMode(pj)!=='hide' ? '&done=1' : ''}`);
@@ -581,6 +628,7 @@ async function load(){
       ? await Promise.all([api('/items?status=due'), api('/items?status=next')]) : [[], []];
     if(stale()) return;
     Object.assign(S, {counts, projects, contexts}, d);
+    if(S.view==='process' && !S.proc) procInit(S.items);  // очередь — один раз на заход: перечитка её не сбрасывает
     render();
     await openDeepLink();
   }catch(e){ if(e.message==='auth') return loginScreen(); console.error(e); }
@@ -903,11 +951,13 @@ function statsHtml(){
     ${tile(st.tasks.created_7d,t('st_tasks7'))}${tile(st.tasks.created_30d,t('st_tasks30'))}</div>
   <div class="rv"><h3>${t('st_channels')}</h3>${t('st_channels_text', {web:st.active.web_30d, tg:st.active.telegram_30d})}
     <h3 style="margin-top:12px">${t('st_mcp')}</h3><div class="st-mcp">${t('st_mcp_text', {users:st.mcp.users_7d, oauth:st.mcp.oauth_connections, tokens:st.mcp.api_tokens})}</div>
+    <h3 style="margin-top:12px">${t('st_process')}</h3><div class="st-proc">${t('st_process_text', {runs:st.process.runs, items:st.process.items,
+      avg:st.process.runs ? (st.process.items / st.process.runs).toFixed(1) : 0})}</div>
     <h3 style="margin-top:12px">${t('st_methods')}</h3>${t('st_methods_text', {email:st.users.with_email, google:st.users.with_google, tg:st.users.with_telegram})}</div>`;
 }
 
 const viewLabel = () => S.view==='account' ? t('account') : S.view==='stats' ? t('stats')
-  : S.view==='archive' ? t('archive_title') : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
+  : S.view==='archive' ? t('archive_title') : S.view==='process' ? t('proc.title') : (VIEWS.find(v=>v[0]===S.view)||VIEWS[0])[1];
 // Вкладка: «(3) Next — GTD» — число во Входящих видно, не переключаясь на вкладку (задачи из бота). Текст задач
 // сюда не попадает никогда, и на /i/N тоже: заголовок остаётся в истории браузера и на скриншотах
 function docTitle(){
@@ -935,7 +985,8 @@ function navHtml(){
   const cur = viewLabel();
   // Бургер — SVG, а не символ ☰: у глифа рисунок сидит ниже центра строки, и он «проваливается».
   // Разделы — ссылки с href (SERBITO-349): без него <a> не получает фокус с клавиатуры и не читается как ссылка
-  const on = k => S.view===k || (k==='projects' && S.view==='archive');  // архив — часть раздела Projects
+  // архив — часть раздела Projects, разбор по шагам — часть Inbox
+  const on = k => S.view===k || (k==='projects' && S.view==='archive') || (k==='inbox' && S.view==='process');
   const item = (k, l, n) => `<a href="${viewPath(k, null)}" class="${on(k)?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
   return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
@@ -1003,6 +1054,7 @@ function render(){
   else if(S.view==='stats') body = statsHtml();
   else if(S.view==='projects' && !S.pid){ body = projectsHtml(); topCap = false; }
   else if(S.view==='archive'){ body = archiveHtml(); topCap = false; }
+  else if(S.view==='process'){ body = procHtml(); topCap = false; }
   else{
     let items = S.items;
     let chips='';
@@ -1018,12 +1070,14 @@ function render(){
       // со сроком остаются в своём списке, задача из «Скоро срок» не повторяется в Next
       const onb = onbHtml(), due = S.dueItems.filter(i => i.status!=='inbox'), dueIds = new Set(due.map(i => i.id));
       const next = S.nextItems.filter(i => !dueIds.has(i.id));
-      const sec = (cls, title, hint, list, cards = list.map(itemHtml).join('')) => list.length
-        ? `<section class="below ${cls}"><h3>${title}</h3><div class="hint">${hint}</div>${cards}</section>` : '';
+      const sec = (cls, title, hint, list, cards = list.map(itemHtml).join(''), head = '') => list.length
+        ? `<section class="below ${cls}">${head ? `<div class="sech"><h3>${title}</h3>${head}</div>` : `<h3>${title}</h3>`}<div class="hint">${hint}</div>${cards}</section>` : '';
+      // «Разобрать по шагам» (SERBITO-603) — рядом с заголовком задач Inbox
+      const proc = `<a class="prgo" href="${viewPath('process', null)}" data-view="process">${t('proc.start')}</a>`;
       // Задачи Inbox — свой раздел с заголовком, как «Скоро срок» и Next (SERBITO-581); пустой Inbox — сообщение под полем
       hero = `${onb}<section class="hero ${onb||items.length||due.length||next.length?'':'solo'}"><h2>${VIEWS[0][1]}</h2>${capHtml()}
         ${items.length ? '' : `<div class="inbox-empty">${t('inbox_empty')}</div><div class="hint">${EMPTY.inbox[0]}<br>${t('ex', {ex:EMPTY.inbox[1]})}</div>`}</section>`;
-      body = sec('inbox-sec', t('inbox_sec'), HELP.inbox, items, dndHtml(items))
+      body = sec('inbox-sec', t('inbox_sec'), HELP.inbox, items, dndHtml(items), proc)
         + sec('due-soon', t('due_soon'), t('due_hint'), due)  // «Скоро срок» — по дате, не переставляется
         + sec('next-sec', VIEWS[1][1], HELP.next, next, dndHtml(next));
     } else if(pj){ body = projectHtml(pj, items); topCap = false; }  // поле захвата — своё, под заголовком проекта
@@ -1032,6 +1086,7 @@ function render(){
   }
   $('#root').innerHTML = `<div class="app">${navHtml()}<main>${hero || (topCap ? capHtml() : '')}${body}</main></div>`;
   if(S.view==='account'){ mountGoogle(); mountTelegram(); }
+  if(S.view==='process') procMount();
   dndTip.draw();
   const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
   capFit(cap); capHint(cap);
@@ -1238,6 +1293,194 @@ function archiveHtml(){
       : `<div class="meta">${t('archived_none')}</div>`}</section>`).join('') : `<div class="empty"><div>${t('archive_empty')}</div></div>`}`;
 }
 
+// ── Разбор Inbox по шагам (SERBITO-603). Задачи по одной, старые первыми, и вопросы GTD по порядку:
+// q1 нужно ли действие → q2 меньше 2 минут → q3 делать мне → q4 больше одного шага → q5 есть ли дата.
+// Ответ с данными (кого ждём, проект и первое действие, дата, контекст) — короткая форма. Решение уходит на сервер
+// одним запросом (/items/N/process) с тостом «Отменить»; «Пропустить» оставляет задачу в Inbox. Таймера «2 минуты»
+// нет — только «Сделано сейчас» с подсказкой. Клавиатура: цифры — ответы, → — пропустить, Esc — шаг назад.
+// Стили — в бандле, как у архива: лендинг гостя держим меньше 45 КБ (test_spa_bundle)
+document.head.insertAdjacentHTML('beforeend', `<style>
+.sech{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px} .sech h3{margin:0}
+a.prgo{padding:6px 12px;border:1px solid var(--ac);border-radius:8px;color:var(--ac);text-decoration:none;font-size:14px;font-weight:600;white-space:nowrap}
+a.prgo:hover{background:var(--ac);color:var(--on-ac)}
+.prh{display:flex;align-items:baseline;justify-content:space-between;gap:12px} .prh h2{margin:0}
+.prn{color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.prbar{height:4px;background:var(--bd);border-radius:2px;margin:10px 0 16px;overflow:hidden} .prbar i{display:block;height:100%;background:var(--ac)}
+.prc{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin-bottom:18px;display:flex;gap:10px;align-items:flex-start}
+.prc .b{flex:1;min-width:0} .prt{font-size:18px;font-weight:600;word-break:break-word}
+.prno{color:var(--mut);font-size:14px;margin-top:4px;white-space:pre-wrap;word-break:break-word} .prc .num{color:var(--mut);font-size:12.5px}
+.prq h3{font-size:20px;margin:0 0 8px} .prq .hint{margin:0 0 12px}
+.prb{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.prb button{min-height:52px;text-align:left;display:flex;align-items:center;gap:10px}
+.prb kbd,.prk{font:12px ui-monospace,Menlo,monospace;border:1px solid currentColor;border-radius:4px;padding:0 5px;opacity:.75}
+.prform input{width:100%;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font:inherit}
+.prform label{display:block;margin:12px 0 4px;color:var(--mut);font-size:13px} .prform .pjpick{margin:4px 0 0}
+.prform [aria-pressed=true]{background:var(--ac);color:var(--on-ac);border-color:var(--ac)}
+.prform .chips{margin:0 0 8px} .prform .chip{font:inherit;font-size:14px;min-height:36px;padding:3px 12px}
+.prform .go{margin-top:16px;min-height:48px;min-width:200px}
+.prf{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:20px} .prf .sp{flex:1}
+.prf a{color:var(--mut);font-size:14px;padding:10px 4px} .prkeys{margin:14px 0 0}
+.prend{text-align:center;padding:32px 0} .prend p{color:var(--mut)} .prend .prf{justify-content:center}
+@media(max-width:700px){.prb{grid-template-columns:1fr} .prform .go{width:100%}}
+@media(pointer:coarse){.prf button,a.prgo{min-height:44px;display:inline-flex;align-items:center}}
+@media not all and (hover:hover) and (pointer:fine){.prb kbd,.prk,.prkeys{display:none}}
+</style>`);
+const PROC_ASK = {  // [ответ, ключ подписи, главная кнопка]
+  q1: [['yes', 'q1_yes', 1], ['trash', 'trash'], ['someday', 'someday'], ['reference', 'reference']],
+  q2: [['done', 'done', 1], ['no', 'q2_no']],
+  q3: [['yes', 'q3_yes', 1], ['waiting', 'waiting']],
+  q4: [['project', 'project'], ['no', 'q4_no', 1]],
+  q5: [['dated', 'dated'], ['next', 'next', 1]],
+};
+const PROC_NEXT = {q1:'q2', q2:'q3', q3:'q4', q4:'q5'};
+const PROC_FORMS = ['waiting', 'project', 'dated', 'next'];
+function procInit(items){
+  S.proc = {queue:[...items].sort((a, b) => a.created - b.created || a.id - b.id), pos:0, done:0, run:null};
+  procReset();
+}
+// Новая задача или новый шаг — ответы прошлого шага забываем
+function procReset(step = 'q1'){ Object.assign(S.proc, {step, hist:step==='q1' ? [] : S.proc.hist, form:{}, cx:[], pid:null}); }
+const procCur = () => S.proc?.queue[S.proc.pos];
+function procHtml(){
+  const P = S.proc, it = procCur();
+  if(!P) return '';
+  const help = `<a href="${t('about_url')}#process" target="_blank" rel="noopener">${t('proc.help')}</a>`;
+  if(!it){  // очередь пройдена: пропущенные остались в ней
+    const left = P.queue.length;
+    return `<h2>${t('proc.title')}</h2><div class="prend"><div class="inbox-empty">${left ? t('proc.summary', {n:P.done})
+        : P.done ? t('proc.done_all') : t('proc.empty')}</div>
+      <p>${left ? t('proc.left', {n:left}) : P.done ? t('proc.summary', {n:P.done}) : ''}</p>
+      <div class="prf">${left ? `<button class="pri" data-act="pragain">${t('proc.again')}</button>` : ''}
+        <a href="${viewPath('inbox', null)}" data-view="inbox">${t('proc.to_inbox')}</a></div></div>`;
+  }
+  const n = P.done + P.queue.length, i = P.done + P.pos + 1;
+  const meta = [it.remind_at ? dueHtml(it) : '', ...(it.contexts||[]).map(c => `<span>@${esc(c)}</span>`),
+    it.project ? `<span>#${esc(it.project)}</span>` : ''].join('');
+  return `<div class="prh"><h2>${t('proc.title')}</h2><span class="prn">${t('proc.of', {i, n})}</span></div>
+  <div class="prbar" role="progressbar" aria-label="${t('proc.title')}" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${i-1}">
+    <i style="width:${Math.round((i-1) / n * 100)}%"></i></div>
+  <div class="prc"><div class="b"><div class="prt">${esc(it.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ''}
+    ${it.notes ? `<div class="prno">${esc(it.notes)}</div>` : ''}</div><span class="num">#${it.num}</span></div>
+  <section class="prq" aria-labelledby="prq-h">${procStepHtml(it)}</section>
+  <div class="prf">${P.hist.length ? `<button data-act="prback">${t('proc.back')} <span class="prk">Esc</span></button>` : ''}
+    <button data-act="prskip">${t('proc.skip')} <span class="prk">→</span></button><span class="sp"></span>${help}
+    <a href="${viewPath('inbox', null)}" data-view="inbox">${t('proc.exit')}</a></div>
+  <div class="hint prkeys">${t('proc.keys')}</div>`;
+}
+function procStepHtml(it){
+  const P = S.proc, st = P.step, h = k => `<h3 id="prq-h">${t('proc.'+k)}</h3>`;
+  if(PROC_ASK[st]) return h(st) + (st==='q2' ? `<div class="hint">${t('proc.q2_hint')}</div>` : '')
+    + `<div class="prb">${PROC_ASK[st].map(([a, k, main], i) =>
+      `<button class="${main ? 'pri' : ''}" data-act="pr" data-a="${a}"><kbd>${i+1}</kbd>${t('proc.'+k)}</button>`).join('')}</div>`;
+  const form = (head, body, go) => `<form id="prform" class="prform" novalidate>${h(head)}${body}
+    <div class="msg" id="prmsg" role="alert"></div><button class="pri go" type="submit">${t('proc.'+go)}</button></form>`;
+  if(st==='waiting') return form('who', `<input id="pr-who" aria-labelledby="prq-h" placeholder="${t('proc.who_ph')}" autocomplete="off" data-focus>
+    <label for="pr-follow">${t('proc.follow')}</label><input id="pr-follow" type="datetime-local">`, 'to_waiting');
+  if(st==='project') return form('project_h', `${S.projects.length ? `<label>${t('proc.pick')}</label>${pjPickHtml(P.pid)}` : ''}
+    <label for="pr-pnew">${t('proc.new_name')}</label><input id="pr-pnew" value="${esc(it.title)}" autocomplete="off">
+    <label for="pr-next">${t('proc.next_action')}</label><input id="pr-next" placeholder="${t('proc.next_ph')}" autocomplete="off" data-focus>`,
+    'to_project');
+  if(st==='dated') return form('when', `<input id="pr-when" type="datetime-local" aria-labelledby="prq-h" data-focus>`, 'to_dated');
+  return form('ctx_h', `${S.contexts.length ? `<div class="chips">${S.contexts.map(c =>
+      `<button type="button" class="chip" data-cx="${esc(c)}" aria-pressed="${P.cx.includes(c)}">@${esc(c)}</button>`).join('')}</div>` : ''}
+    <input id="pr-cx" aria-labelledby="prq-h" placeholder="${t('proc.ctx_ph')}" autocomplete="off">`, 'to_next');
+}
+// После отрисовки: обработчики формы, введённое до перерисовки (перечитка не стирает набранное) и фокус —
+// на первое поле формы или главную кнопку вопроса, только когда сменились задача или шаг
+function procMount(){
+  const P = S.proc; if(!P) return;
+  const f = $('#prform'), key = `${procCur()?.id}/${P.step}`, fresh = P.mounted !== key;
+  P.mounted = key;
+  if(f){
+    for(const [id, v] of Object.entries(P.form)){ const x = document.getElementById(id); if(x) x.value = v; }
+    f.addEventListener('input', e => { if(e.target.id) P.form[e.target.id] = e.target.value; });
+    f.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
+      P.pid = P.pid === +b.dataset.pick ? null : +b.dataset.pick;
+      f.querySelectorAll('[data-pick]').forEach(x => x.setAttribute('aria-pressed', +x.dataset.pick === P.pid));
+    });
+    $('#pr-pnew')?.addEventListener('input', () => {  // пишет новое название — выбор существующего снимаем
+      P.pid = null; f.querySelectorAll('[data-pick]').forEach(x => x.setAttribute('aria-pressed', false));
+    });
+    f.querySelectorAll('[data-cx]').forEach(b => b.onclick = () => {
+      const c = b.dataset.cx; P.cx = P.cx.includes(c) ? P.cx.filter(x => x !== c) : [...P.cx, c];
+      b.setAttribute('aria-pressed', P.cx.includes(c));
+    });
+    f.onsubmit = e => { e.preventDefault(); procSubmit(); };
+  }
+  if(fresh) (f ? f.querySelector('[data-focus]') || f.querySelector('input') : $('.prb button.pri'))?.focus({preventScroll:true});
+}
+function procAnswer(a){
+  const P = S.proc; if(!P || P.busy || !procCur()) return;
+  if(a==='yes' || a==='no') return procStep(PROC_NEXT[P.step]);
+  if(PROC_FORMS.includes(a)) return procStep(a);
+  return procDecide({action:a});  // trash, someday, reference, done
+}
+function procStep(step){ S.proc.hist.push(S.proc.step); procReset(step); render(); }
+function procBack(){
+  const P = S.proc;
+  if(!P?.hist.length) return go('inbox');
+  procReset(P.hist.pop());
+  render();
+}
+function procSkip(){ const P = S.proc; if(!P || P.busy || !procCur()) return; P.pos++; procReset(); render(); }
+const procMsg = m => { const el = $('#prmsg'); if(el) el.textContent = m; else toast(m); };
+function procSubmit(){
+  const P = S.proc, val = id => ($('#'+id)?.value || '').trim();
+  const ts = id => val(id) ? Math.floor(new Date(val(id)).getTime() / 1000) : null;
+  const need = (m, id) => { procMsg(m); $('#'+id)?.focus(); };
+  if(P.step==='waiting'){
+    if(!val('pr-who')) return need(t('proc.who_needed'), 'pr-who');
+    return procDecide({action:'waiting', who:val('pr-who'), ...(ts('pr-follow') ? {follow_up:ts('pr-follow')} : {})});
+  }
+  if(P.step==='project'){
+    if(!P.pid && !val('pr-pnew')) return need(t('proc.need_project'), 'pr-pnew');
+    if(!val('pr-next')) return need(t('proc.need_next'), 'pr-next');  // проект без следующего действия не создаём
+    return procDecide({action:'project', next_action:val('pr-next'), ...(P.pid ? {project_id:P.pid} : {project:val('pr-pnew')})});
+  }
+  if(P.step==='dated'){
+    if(!ts('pr-when')) return need(t('proc.when_needed'), 'pr-when');
+    return procDecide({action:'dated', remind_at:ts('pr-when')});
+  }
+  const typed = val('pr-cx').split(/[\s,]+/).map(c => c.replace(/^@+/, '')).filter(Boolean);
+  return procDecide({action:'next', contexts:[...new Set([...P.cx, ...typed])]});
+}
+async function procDecide(body){
+  const P = S.proc, it = procCur(); if(!it || P.busy) return;
+  P.busy = true;
+  let r, d;
+  try{
+    r = await fetch(`/api/items/${it.id}/process`, {method:'POST', headers:hdrs(true), body:JSON.stringify({...body, run:P.run})});
+    d = await r.json();
+  }catch{ return procMsg(t('failed')); }
+  finally{ P.busy = false; }
+  if(r.status===409 || r.status===404){  // разобрали в другой вкладке, в боте или удалили — дальше
+    P.queue.splice(P.pos, 1); procReset(); toast(t('proc.gone')); return load();
+  }
+  if(!r.ok) return procMsg(t('failed'));
+  P.run = d.run; P.done++; P.queue.splice(P.pos, 1); procReset();
+  ga('inbox_process', {action:body.action});  // только решение — без текста задачи
+  const to = body.action==='project' ? '#'+(d.project || '') : body.action==='dated' ? `${L.moved_to.next} ⏰ ${fmtTs(d.remind_at)}`
+    : L.moved_to[d.status] || d.status;
+  const prev = {title:it.title, notes:it.notes || '', status:'inbox', project_id:it.project_id ?? null, contexts:it.contexts || [],
+    remind_at:it.remind_at ?? null};
+  toast(t('moved', {title:it.title, to}), {undo: async () => {
+    await api('/items/'+it.id, 'PATCH', prev);
+    if(S.proc === P){ P.queue.splice(P.pos, 0, it); P.done--; procReset(); }  // задача снова перед глазами
+  }});
+  load();
+}
+// Клавиши разбора — раньше остальных: цифры отвечают на вопрос, → пропускает задачу, Esc — шаг назад (с первого
+// вопроса — выход в Inbox). Пока печатаешь в поле формы, работает только Esc
+function procKey(e){
+  if(S.view!=='process' || !S.proc || $('#dlg').open || e.metaKey || e.ctrlKey || e.altKey) return false;
+  if(e.key==='Escape'){ e.preventDefault(); procBack(); return true; }
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !procCur()) return false;
+  const btns = [...document.querySelectorAll('.prb button')];
+  if(/^[1-9]$/.test(e.key) && btns[+e.key - 1]){ e.preventDefault(); btns[+e.key - 1].click(); return true; }
+  if(e.key==='ArrowRight'){ e.preventDefault(); procSkip(); return true; }
+  return false;
+}
+
 // p — название проекта для примера: пробелы → «_», как их разбирает захват
 function emptyHtml(k, p = ''){
   const [what, ex] = EMPTY[k] || [t('empty_default'), ''];
@@ -1291,7 +1534,7 @@ function gaPage(){
   S.gaPage = page;
   const ru = I18N.ru;  // заголовок — всегда русский: отчёты GA не делятся по языку интерфейса, язык — в language
   const label = page==='login' ? ru.login_page : page==='account' ? ru.account_short : page==='stats' ? ru.stats
-    : page==='archive' ? ru.archive_title : (ru.views[page] || page);
+    : page==='archive' ? ru.archive_title : page==='process' ? ru.proc.title : (ru.views[page] || page);
   gtag('event', 'page_view', {page_location: location.origin + '/' + page, page_title: 'GTD — ' + label.replace(/^\S+\s/, ''),
     language: LANG});
 }
@@ -1465,12 +1708,16 @@ function openEdit(id, found){
 
 // «→ Project» на задаче во Inbox (SERBITO-354): выбрать проект или сразу создать новый. Задача уходит в Next
 // этого проекта, тост — с «Отменить» (вернуть список и проект, как были)
+// Выбор проекта: кнопки активных проектов (архив сюда не попадает: /api/projects отдаёт только активные).
+// sel — выбранный: кнопки-переключатели с aria-pressed (разбор Inbox, SERBITO-603)
+const pjPickHtml = (sel) => `<div class="pjpick">${S.projects.map(p => `<button type="button" data-pick="${p.id}"${sel===undefined ? ''
+  : ` aria-pressed="${p.id===sel}"`}>#${esc(p.title)}</button>`).join('')}</div>`;
 function openToProject(id){
   const it = findItem(id); if(!it) return;
   const d = $('#dlg');
   d.innerHTML = `<div id="tp"><h3 id="dlg-h" style="margin:0 0 4px">${t('pick_project')}</h3>
     <p class="hint" style="margin:0 0 10px">${esc(it.title)}</p>
-    <div class="pjpick">${S.projects.map(p => `<button type="button" data-pick="${p.id}">#${esc(p.title)}</button>`).join('')}</div>
+    ${pjPickHtml()}
     <label for="tp-new">${t('new_project')}</label>
     <div class="cap" style="margin:0"><input id="tp-new" autocomplete="off"><button type="button" class="pri" data-pick="new">${t('create')}</button></div>
     <div class="msg" id="tpmsg"></div>
@@ -1695,6 +1942,10 @@ document.addEventListener('click', async e => {
   if(act==='restoreproj') return restoreProject(+el.dataset.pid, el.dataset.title);
   if(act==='opennum'){ if(e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); return openByNum(+el.dataset.n); }
   if(act==='back') return go('projects');
+  if(act==='pr') return procAnswer(el.dataset.a);
+  if(act==='prback') return procBack();
+  if(act==='prskip') return procSkip();
+  if(act==='pragain'){ S.proc = null; return load(); }
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
   if(el.dataset.view){
     S.toBurger = !!el.closest('nav.open');  // выбрали в выезжающем меню — оно закроется, фокус вернётся на ☰
@@ -1859,6 +2110,7 @@ document.addEventListener('keydown', e => {
   if(drawerTab(e)) return;
   const um = e.key==='Escape' && [...document.querySelectorAll('.umenu')].find(m => !m.hidden);
   if(um){ closeUmenu(); return um.parentElement.querySelector('button.user')?.focus(); }
+  if(procKey(e)) return;
   if(captureKey(e)) return;
   if(reorderKey(e)) return;
   if(navKey(e)) return;
