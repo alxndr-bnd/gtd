@@ -193,4 +193,4 @@ def test_spa_widget_redirects_instead_of_eval_callback():
     html = Path(A.os.path.join(A.os.path.dirname(A.__file__), "static", "index.html")).read_text(encoding="utf-8")
     assert "onauth:" not in html and "onTelegramAuth" not in html  # ни data-onauth, ни глобального колбэка
     assert "authUrl:back" in html and "'#tgw?_s='" in html
-    assert "'unsafe-eval'" not in A.CSP_REPORT_ONLY
+    assert "'unsafe-eval'" not in A.CSP

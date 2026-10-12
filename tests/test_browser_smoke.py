@@ -36,6 +36,24 @@ SAVE_MS = 30000  # потолок ожидания ответа сервера �
 GSI_STUB = ("window.google={accounts:{id:{initialize(){},"
             "renderButton(el,o){el.textContent='Google';window.__gsi=o;}}}};")  # o — параметры кнопки для проверки
 SECTIONS = ["inbox", "next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review"]
+# Боевая CSP до её включения (SERBITO-548): GTD_CSP_ENFORCE_IN_TESTS=1 — сервер смоука шлёт политику как
+# Content-Security-Policy, нарушение блокирует загрузку и падает тестом. С app.CSP_ENFORCE = True — всегда так
+CSP_ENFORCE = A.CSP_ENFORCE or os.getenv("GTD_CSP_ENFORCE_IN_TESTS") == "1"
+
+
+def enforce_csp(asgi):
+    """Подменяет CSP-заголовки ответа боевыми — только у сервера смоука, app.SECURITY_HEADERS не трогаем:
+    при pytest -n в том же воркере идут и другие тесты заголовков."""
+    csp = A.csp_headers(True)
+    names = {k for k, _ in A.csp_headers(False)} | {k for k, _ in csp}
+
+    async def app(scope, receive, send):
+        async def send_h(msg):
+            if msg["type"] == "http.response.start":
+                msg = {**msg, "headers": [(k, v) for k, v in msg.get("headers", []) if k.lower() not in names] + csp}
+            await send(msg)
+        return await asgi(scope, receive, send_h if scope["type"] == "http" else send)
+    return app
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +64,8 @@ def server():
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
-    srv = uvicorn.Server(uvicorn.Config(A.app, host="127.0.0.1", port=port, lifespan="off", log_level="warning"))
+    asgi = enforce_csp(A.app) if CSP_ENFORCE else A.app
+    srv = uvicorn.Server(uvicorn.Config(asgi, host="127.0.0.1", port=port, lifespan="off", log_level="warning"))
     th = threading.Thread(target=srv.run, kwargs={"sockets": [sock]}, daemon=True)
     th.start()
     deadline = time.monotonic() + 10
@@ -112,11 +131,10 @@ class Watch:
 
     def _console(self, msg):
         # Нарушения CSP в режиме report-only Chromium пишет уровнем info — ловим по тексту: смоук проверяет, что
-        # политика (app.CSP_REPORT_ONLY) пропускает всё, что страницы реально грузят (SERBITO-360, GTD-9)
+        # политика (app.CSP) пропускает всё, что страницы реально грузят (SERBITO-360, GTD-9). Без исключений и для
+        # самих тестов (SERBITO-548): wait_for_function со строкой-выражением («window.x») опрашивает через eval —
+        # при боевой CSP падает, поэтому предикат всегда функция: «() => window.x»
         if "Content Security Policy" in msg.text:
-            # Кроме eval без адреса скрипта: это сам Playwright — строковый предикат wait_for_function
-            if msg.text.startswith("Evaluating a string as JavaScript") and not msg.location.get("url"):
-                return
             self.errors.append(f"CSP: {msg.text} @ {msg.location.get('url')}")
             return
         if msg.type != "error":
@@ -272,6 +290,23 @@ def test_public_pages(watch, path, status, ready):
     w.goto(path, status)
     w.page.wait_for_load_state("load")
     w.wait(ready, path)
+
+
+def test_csp_mode(watch):
+    """SERBITO-548: смоук проверяет ту CSP, которую обещает режим. Боевая — один заголовок с политикой, и браузер
+    правда блокирует eval; report-only — политика отдельно, eval только в отчёте."""
+    w = watch()
+    r = w.page.goto(w.base + "/about")
+    h = r.headers
+    if CSP_ENFORCE:
+        assert h["content-security-policy"] == A.CSP and "content-security-policy-report-only" not in h
+    else:
+        assert h["content-security-policy-report-only"] == A.CSP
+    # eval — из таймера страницы: внутри самого evaluate (вызов через CDP) Chromium CSP не применяет
+    w.page.evaluate("() => setTimeout(() => { try { eval('1'); window.__ev = 'ok' } catch (e) { window.__ev = e.name } })")
+    assert w.page.wait_for_function("() => window.__ev", timeout=WAIT_MS).json_value() == (
+        "EvalError" if CSP_ENFORCE else "ok")
+    w.errors.clear()  # нарушение eval здесь нарочное
 
 
 def test_menu_whats_new_and_version(watch, monkeypatch):
@@ -516,7 +551,7 @@ def test_click_anywhere_on_card_opens_it(watch):
     w.wait("#dlg[open] #ef", "карточка по клику в тело")
     assert w.page.url.endswith("/i/1")
     w.page.click('#ef [data-act="cancel"]')
-    w.page.wait_for_function("location.pathname === '/'", timeout=WAIT_MS)  # close — событие, адрес меняется в нём
+    w.page.wait_for_function("() => location.pathname === '/'", timeout=WAIT_MS)  # close — событие, адрес меняется в нём
     assert not w.page.locator("#dlg[open]").count()
 
     # ⌘/Ctrl-клик по номеру #N — обычная ссылка /i/N: приложение не отменяет переход (вкладку откроет браузер)
@@ -531,7 +566,7 @@ def test_click_anywhere_on_card_opens_it(watch):
         e.preventDefault();
     })""")
     num.click(modifiers=["ControlOrMeta"])
-    w.page.wait_for_function("window.__numClick", timeout=WAIT_MS)
+    w.page.wait_for_function("() => window.__numClick", timeout=WAIT_MS)
     assert w.page.evaluate("window.__numClick") == {"prevented": False, "modified": True}
     assert not w.page.locator("#dlg[open]").count() and w.page.url.endswith("/")
 
@@ -732,7 +767,7 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
         hits = lambda: w.page.evaluate("window.__ga ? __ga.hits : null")  # noqa: E731
         w.goto("/")
         banner(w, "прод: баннер")
-        w.page.wait_for_function("window.__ga && __ga.hits.length", timeout=WAIT_MS)
+        w.page.wait_for_function("() => window.__ga && __ga.hits.length", timeout=WAIT_MS)
         assert ["page_view", "denied"] in hits() and all(s == "denied" for _, s in hits())
         # gtag.js — после load (SERBITO-548): первая отрисовка его не ждёт, а page_view из очереди dataLayer не пропал
         assert w.page.evaluate("""() => performance.getEntriesByType('resource').find(e => e.name.includes('gtag/js'))
@@ -744,7 +779,7 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
         assert ga_cookies(w) == [("_ga", "gtd.serbito.rs"), ("_ga_TEST", "gtd.serbito.rs")]  # host-only
 
         w.goto("/en/about")
-        w.page.wait_for_function("window.__ga && __ga.hits.some(h => h[0] === 'about_view')", timeout=WAIT_MS)
+        w.page.wait_for_function("() => window.__ga && __ga.hits.some(h => h[0] === 'about_view')", timeout=WAIT_MS)
         assert not w.page.locator("#cc").count()
         assert hits() == [["page_view", "granted"], ["about_view", "granted"]]
 
@@ -753,7 +788,7 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
         w.wait('nav > a.on[data-view="inbox"]', "прод: вход")
         w.page.fill("#cap", "Проверить согласие")
         w.page.press("#cap", "Enter")
-        w.page.wait_for_function("__ga.hits.some(h => h[0] === 'task_capture')", timeout=WAIT_MS)
+        w.page.wait_for_function("() => __ga.hits.some(h => h[0] === 'task_capture')", timeout=WAIT_MS)
         assert all(s == "granted" for _, s in hits()) and ["page_view", "granted"] in hits()
 
         # Старая cookie с .serbito.rs (до host-only) — тоже уйдёт при отказе; соседняя не-GA cookie — останется
@@ -906,7 +941,7 @@ def test_project_completed_modes(watch, lang):
     w.wait(f'main > .dnd > .it[data-id="{fresh}"]', f"[{lang}] вернулась в открытые")
     assert A.row("select status from items where id=%s", (fresh,))["status"] == "next"
     w.page.select_option("main select.dmode", "hide")
-    w.page.wait_for_function("!document.querySelector('main details.donesec')", timeout=WAIT_MS)
+    w.page.wait_for_function("() => !document.querySelector('main details.donesec')", timeout=WAIT_MS)
     assert sorted(cards()) == sorted([open_id, fresh])
     w.check(f"[{lang}] итог")
 
@@ -962,7 +997,7 @@ def track_loads(w):
 
 def settled(w):
     """Очередь перестановок пуста и ни одна перечитка (load) не идёт."""
-    w.page.wait_for_function("moving === 0 && window.__loads === 0", timeout=SAVE_MS)
+    w.page.wait_for_function("() => moving === 0 && window.__loads === 0", timeout=SAVE_MS)
 
 
 def order_user(w, lang="ru"):
@@ -1120,7 +1155,7 @@ def test_stale_load_after_keyboard_reorder(watch):
     want = [second, first, third]
     assert db_order(uid, "next") == want, "порядок не сохранился на сервере"
     # Перечитка после очереди нарисовала новый порядок; старая load() всё ещё ждёт ответа
-    w.page.wait_for_function("moving === 0 && window.__loads === 1", timeout=SAVE_MS)
+    w.page.wait_for_function("() => moving === 0 && window.__loads === 1", timeout=SAVE_MS)
     assert screen_order(w) == want
     route, resp = held[0]
     route.fulfill(response=resp)
@@ -1158,7 +1193,7 @@ def test_stalled_move_does_not_block_navigation(watch):
     held = hold_move(w, first)
     w.page.locator("#cap").press("ArrowDown")
     w.page.keyboard.press("Alt+ArrowDown")
-    w.page.wait_for_function("moving === 1", timeout=WAIT_MS)
+    w.page.wait_for_function("() => moving === 1", timeout=WAIT_MS)
     assert held, "перестановка не ушла на сервер"
     w.page.click('nav > a[data-view="waiting"]')
     w.wait(f'main .it[data-id="{waiting}"]', "Waiting при зависшей перестановке")
@@ -1182,11 +1217,11 @@ def test_stalled_move_times_out_and_redraws(watch):
     held = hold_move(w, first)
     w.page.locator("#cap").press("ArrowDown")
     w.page.keyboard.press("Alt+ArrowDown")
-    w.page.wait_for_function("moving === 1 && window.__timeouts.length === 1", timeout=WAIT_MS)
+    w.page.wait_for_function("() => moving === 1 && window.__timeouts.length === 1", timeout=WAIT_MS)
     assert w.page.evaluate("__timeouts[0].ms === MOVE_MS"), "перестановка ушла без таймаута MOVE_MS"
     late = A.capture(uid, "Добавлена в обход экрана @дом")["id"]
     w.page.evaluate("() => { load(); }")  # перечитка того же списка, пока очередь не пуста: не рисует
-    w.page.wait_for_function("window.__loads === 0", timeout=SAVE_MS)
+    w.page.wait_for_function("() => window.__loads === 0", timeout=SAVE_MS)
     assert late not in screen_order(w)
     assert w.page.evaluate("moving") == 1  # таймаута ещё не было: запрос висит
     w.page.evaluate("() => __timeouts[0].fire()")  # истёк MOVE_MS
@@ -1266,7 +1301,7 @@ def test_phone_drawer_focus(watch):
     w.page.focus('nav > a[data-view="next"]')
     w.page.keyboard.press("Enter")
     w.wait('nav:not(.open) > a.on[data-view="next"]', "раздел из меню")
-    w.page.wait_for_function("document.activeElement.classList.contains('burger')", timeout=WAIT_MS)
+    w.page.wait_for_function("() => document.activeElement.classList.contains('burger')", timeout=WAIT_MS)
     w.check("итог")
 
 
@@ -1291,7 +1326,7 @@ def test_task_dialog_labels_and_focus_return(watch):
                                          "els => els.map(x => [x.name, x.labels[0]?.textContent.trim() || ''])")
     assert len(fields) == 7 and all(label for _, label in fields), fields  # 7-е — имя нового проекта (SERBITO-354)
     w.page.keyboard.press("Escape")
-    w.page.wait_for_function("!document.querySelector('#dlg[open]')", timeout=WAIT_MS)
+    w.page.wait_for_function("() => !document.querySelector('#dlg[open]')", timeout=WAIT_MS)
     assert w.page.evaluate(FOCUSED)["card"] == str(ids["inbox"])
     # Мышью, с сохранением: список перерисован — фокус на той же задаче в новом списке
     w.page.click(f"{card} .t")
@@ -1299,7 +1334,7 @@ def test_task_dialog_labels_and_focus_return(watch):
     w.page.fill("#ef-title", "Позвонить маме вечером")
     w.page.click("#ef button.pri")
     w.wait(f'{card} .t:text-is("Позвонить маме вечером")', "сохранено")
-    w.page.wait_for_function(f"document.activeElement === document.querySelector('{card}')", timeout=WAIT_MS)
+    w.page.wait_for_function(f"() => document.activeElement === document.querySelector('{card}')", timeout=WAIT_MS)
     w.check("итог")
 
 
@@ -1404,7 +1439,7 @@ def test_window_refocus_does_not_scroll(focus_browser, server, monkeypatch):
         other.bring_to_front()
         w.page.bring_to_front()
         other.close()
-        w.page.wait_for_function(f"__focusins > {seen}", timeout=WAIT_MS)  # окно вернуло фокус — focusin пришёл
+        w.page.wait_for_function(f"() => __focusins > {seen}", timeout=WAIT_MS)  # окно вернуло фокус — focusin пришёл
         settle(w.page)
         assert first.evaluate("el => el === document.activeElement")
         assert w.page.evaluate("scrollY") == y, "возврат фокуса в окно прокрутил страницу"
@@ -1891,11 +1926,11 @@ def test_mouse_grip_and_tip(watch, lang):
     assert w.page.eval_on_selector(grip(first), OPACITY) == "0"  # без наведения ручки не видно, место занято
     assert w.page.get_attribute(grip(first), "title")  # подсказка по наведению на ручку — с Alt+↑↓
     w.page.hover(f'main .it[data-id="{second}"] .t')
-    w.page.wait_for_function(f"getComputedStyle(document.querySelector('{grip(second)}')).opacity === '1'",
+    w.page.wait_for_function(f"() => getComputedStyle(document.querySelector('{grip(second)}')).opacity === '1'",
                              timeout=WAIT_MS)
     w.page.mouse.move(1, 1)
     w.page.locator("#cap").press("ArrowDown")  # с клавиатуры: выбрана первая карточка — ручка видна на ней
-    w.page.wait_for_function(f"getComputedStyle(document.querySelector('{grip(first)}')).opacity === '1'",
+    w.page.wait_for_function(f"() => getComputedStyle(document.querySelector('{grip(first)}')).opacity === '1'",
                              timeout=WAIT_MS)
     with saves(w, f"[{lang}] «Понятно»", "PATCH", "/api/me"):
         w.page.click('main .dndtip [data-act="dndtip"]')
@@ -2180,7 +2215,7 @@ def test_signin_buttons_consistent(watch, monkeypatch, lang, viewport):
     w.goto("/en/" if lang == "en" else "/")
     w.wait("#signin .tgfb", "кнопки входа")
     w.page.hover("#signin")  # виджеты грузятся, когда к блоку потянулись
-    w.page.wait_for_function("window.__gsi", timeout=WAIT_MS)
+    w.page.wait_for_function("() => window.__gsi", timeout=WAIT_MS)
     width = lambda sel: w.page.locator(sel).bounding_box()["width"]  # noqa: E731
     box = width("#signin")
     assert abs(width("#signin .cap") - box) < 1 and abs(width("#signin .tgfb") - box) < 1
@@ -2231,7 +2266,7 @@ def test_landing_signin_keeps_the_owner_order(watch, monkeypatch, bot, viewport)
     w.goto("/")
     w.wait('#signin a[href="/dev-login"]', "кнопки входа")
     w.page.hover("#signin") if viewport != PHONE else w.page.tap("#signin h2, .signin h2")
-    w.page.wait_for_function("window.__gsi", timeout=WAIT_MS)
+    w.page.wait_for_function("() => window.__gsi", timeout=WAIT_MS)
     assert w.page.evaluate(FILLED) == []
     first = w.page.evaluate("document.querySelector('#signin').firstElementChild.className")
     assert first == "gbtn", first
@@ -2314,7 +2349,7 @@ def test_landing_screenshots_load_without_shift(watch, lang):
     assert imgs.count() == 3
     for i in range(3):
         imgs.nth(i).scroll_into_view_if_needed()
-    w.page.wait_for_function("[...document.querySelectorAll('.shots img')].every(i => i.complete && i.naturalWidth)")
+    w.page.wait_for_function("() => [...document.querySelectorAll('.shots img')].every(i => i.complete && i.naturalWidth)")
     sizes = w.page.eval_on_selector_all(".shots img", "els => els.map(e => [e.naturalWidth, e.getBoundingClientRect().right])")
     assert all(nw == P.SHOT_SIZE[0] and right <= PHONE[0] for nw, right in sizes), sizes
     assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0]
@@ -2438,7 +2473,7 @@ def test_archive_offer_after_last_task_and_in_review(watch):
     w.page.click('main .rv .ar:has-text("Empty") [data-act="archproj"]')
     w.wait('#dlg[open] [data-arch="all"]', "диалог архива из Review")
     w.page.click('#dlg [data-arch="all"]')
-    w.page.wait_for_function("document.querySelectorAll('main .rv .ar').length === 1", timeout=SAVE_MS)
+    w.page.wait_for_function("() => document.querySelectorAll('main .rv .ar').length === 1", timeout=SAVE_MS)
     assert proj_status(uid, "Empty")["status"] == "archived"
     w.check("итог")
 

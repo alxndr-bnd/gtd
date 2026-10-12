@@ -154,8 +154,12 @@ A temporary database in the local Postgres (`brew services start postgresql@17`,
 and dropped automatically, one per pytest-xdist worker. It is also dropped on Ctrl-C and SIGTERM; a test run
 drops `gtd_test_*` databases that are older than 1 hour and have no connections (left by `kill -9`).
 Telegram, Google and email are stubbed. `tests/test_browser_smoke.py` opens every
-section of the app and the public pages in headless Chromium and fails on any JS error. The release script runs
-the tests before tagging.
+section of the app and the public pages in headless Chromium and fails on any JS error or CSP violation. The release
+script runs the tests before tagging.
+
+The CSP is report-only until `CSP_ENFORCE = True` in `app.py`. To run the smoke with the enforced policy before
+that, set `GTD_CSP_ENFORCE_IN_TESTS=1`. In smoke tests, give `wait_for_function` a function (`"() => window.x"`),
+not an expression: Playwright polls an expression through `eval`, and the enforced CSP blocks it.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every pull request and every push to `main`:
 the full pytest with the browser smoke, a lock check and an image build.

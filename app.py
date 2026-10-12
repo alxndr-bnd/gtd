@@ -1681,8 +1681,11 @@ def sentry_csp_uri() -> str:
 
 # GTD-9. CSP пока только report-only: SPA и страницы живут на inline-скриптах, стилях и обработчиках, внешние —
 # Google Sign-In, виджет Telegram, GA и Cloudflare. Нарушения видны в консоли и в Sentry, не ломая сайт; когда
-# отчёты затихнут — перевести в Content-Security-Policy. frame-ancestors (нас нельзя встроить во фрейм) — сразу
-CSP_REPORT_ONLY = "; ".join([
+# отчёты затихнут — перевести в Content-Security-Policy. frame-ancestors (нас нельзя встроить во фрейм) — сразу.
+# Перевод — одна строка: CSP_ENFORCE = True (SERBITO-548, не раньше 2026-10-26). Смоук проверяет боевой режим
+# заранее: GTD_CSP_ENFORCE_IN_TESTS=1 pytest tests/test_browser_smoke.py
+CSP_ENFORCE = False
+CSP = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' https://accounts.google.com https://telegram.org "
     "https://www.googletagmanager.com https://static.cloudflareinsights.com",
@@ -1696,12 +1699,22 @@ CSP_REPORT_ONLY = "; ".join([
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
     *([f"report-uri {sentry_csp_uri()}"] if sentry_csp_uri() else []),
 ])
+
+
+def csp_headers(enforce: bool) -> list[tuple[bytes, bytes]]:
+    """Боевая CSP — один заголовок (frame-ancestors уже в ней). Report-only не умеет frame-ancestors, поэтому
+    запрет фрейма идёт отдельной боевой CSP рядом с ней."""
+    if enforce:
+        return [(b"content-security-policy", CSP.encode())]
+    return [(b"content-security-policy", b"frame-ancestors 'none'"),
+            (b"content-security-policy-report-only", CSP.encode())]
+
+
 SECURITY_HEADERS = [
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"strict-origin-when-cross-origin"),
     (b"x-frame-options", b"DENY"),
-    (b"content-security-policy", b"frame-ancestors 'none'"),
-    (b"content-security-policy-report-only", CSP_REPORT_ONLY.encode()),
+    *csp_headers(CSP_ENFORCE),
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
     # HSTS — только с https: по http браузер его всё равно игнорирует
     *([(b"strict-transport-security", b"max-age=31536000; includeSubDomains")] if COOKIE_SECURE else []),
