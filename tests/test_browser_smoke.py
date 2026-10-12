@@ -28,7 +28,8 @@ except ImportError:  # громко на сборе тестов, а не тих
                 ".venv/bin/playwright install chromium", pytrace=False)
 
 INSTALL_HINT = "Нет Chromium для Playwright: запустите `.venv/bin/playwright install chromium`"
-WAIT_MS = 5000  # потолок ожидания одного условия рендера; обычно — десятки миллисекунд
+WAIT_MS = 15000  # потолок ожидания одного условия рендера; обычно — десятки миллисекунд. Только потолок:
+# на занятой машине (pytest -n и нагрузка) вход однажды рисовался дольше 5 с (SERBITO-614)
 SAVE_MS = 30000  # потолок ожидания ответа сервера на запись (saves): срабатывает, только если ответа нет вовсе
 
 # Кнопка Google грузит скрипт с accounts.google.com — в тестах вместо него заглушка с тем же API
@@ -139,17 +140,14 @@ class Watch:
         assert r.status == expect_status, f"{path}: HTTP {r.status}"
 
     def wait(self, selector, what):
-        """Ждём признак отрисовки. Ждём кусками по 100 мс: если страница уже упала с ошибкой, рендера
-        не будет — падаем сразу с её текстом, а не через весь таймаут."""
-        deadline = time.monotonic() + WAIT_MS / 1000
-        while True:
-            try:
-                self.page.wait_for_selector(selector, timeout=100, state="attached")
-                break
-            except PWTimeout:
-                self.check(f"{what} (нет «{selector}»)")
-                if time.monotonic() > deadline:
-                    pytest.fail(f"{what}: нет «{selector}» за {WAIT_MS} мс, ошибок на странице нет", pytrace=False)
+        """Ждём признак отрисовки одним ожиданием Playwright на весь WAIT_MS (SERBITO-614). Прежние куски по 100 мс
+        на занятой машине истекали раньше, чем Playwright успевал проверить страницу, и тест падал на часах.
+        Страница упала с ошибкой — рендера не будет: по таймауту сначала показываем её ошибки."""
+        try:
+            self.page.wait_for_selector(selector, timeout=WAIT_MS, state="attached")
+        except PWTimeout:
+            self.check(f"{what} (нет «{selector}»)")
+            pytest.fail(f"{what}: нет «{selector}» за {WAIT_MS} мс, ошибок на странице нет", pytrace=False)
         self.check(what)
 
     def check(self, what):
@@ -544,13 +542,13 @@ def test_click_anywhere_on_card_opens_it(watch):
     w.page.mouse.move(box["x"] + box["width"] - 2, box["y"] + box["height"] / 2, steps=5)
     w.page.mouse.up()
     assert w.page.evaluate("getSelection().toString()")
-    w.page.wait_for_timeout(200)
+    page_pause(w, 200)
     assert not w.page.locator("#dlg[open]").count()
 
     # Кнопка списка — переносит задачу, карточку не открывает
     w.page.click(f'{card} [data-act="mv"][data-st="someday"]')
     w.wait("#toast:not([hidden])", "перенос")
-    w.page.wait_for_timeout(200)
+    page_pause(w, 200)
     assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
     assert A.row("select status from items where id=%s", (ids["inbox"],))["status"] == "someday"
     w.check("итог")
@@ -683,7 +681,7 @@ def test_no_consent_without_ga(watch):
     assert not w.page.locator("#cc, [data-cc-open]").count()
     assert w.page.evaluate("typeof window.gtdConsent === 'undefined' && typeof window.dataLayer === 'undefined'")
     smoke_user(w)
-    w.page.wait_for_timeout(300)  # баннер появился бы на DOMContentLoaded — ждём с запасом
+    page_pause(w, 300)  # баннер появился бы на DOMContentLoaded — ждём с запасом по часам страницы
     assert not w.page.locator("#cc, nav a.ccl, [data-cc-open]").count()
     w.check("итог")
 
@@ -997,7 +995,7 @@ def test_drag_to_reorder_with_mouse(watch):
         w.page.mouse.up()
     assert screen_order(w) == [second, third, first]
     assert db_order(uid, "next") == [second, third, first], "порядок не сохранился на сервере"
-    w.page.wait_for_timeout(300)
+    page_pause(w, 300)
     assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
     w.page.reload()  # адрес раздела (SERBITO-354) — после перезагрузки снова Next
     w.wait('nav > a.on[data-view="next"]', f"[{lang}] перезагрузка")
@@ -1020,6 +1018,18 @@ def touch(w, sel, kind, dy=0):
     }""", [kind, dy])
 
 
+def page_pause(w, ms):
+    """Пауза по часам страницы, а не теста (SERBITO-614). Таймеры, которые действие поставило раньше и на меньший
+    срок (удержание HOLD_MS, защита меню от прокрутки), к её концу уже сработали, как бы ни отставала занятая
+    машина: wait_for_timeout считает часы теста, и страница могла ещё не дойти до своих таймеров."""
+    w.page.evaluate("ms => new Promise(r => setTimeout(r, ms))", ms)
+
+
+def past_hold(w):
+    """Палец держат дольше HOLD_MS — таймер удержания страницы уже сработал (или отменён движением)."""
+    w.page.evaluate("() => new Promise(r => setTimeout(r, HOLD_MS + 100))")
+
+
 def test_touch_long_press_drags_quick_swipe_scrolls(watch):
     """Палец: сразу повёл — это прокрутка, карточка не двигается; удержал ~0,35 с — перетаскивание."""
     w = watch()
@@ -1028,13 +1038,13 @@ def test_touch_long_press_drags_quick_swipe_scrolls(watch):
     step = w.page.locator(f'main .it[data-id="{second}"]').bounding_box()["y"] - w.page.locator(card).bounding_box()["y"]
     touch(w, card, "pointerdown")
     touch(w, card, "pointermove", 30)  # до удержания — прокрутка
-    w.page.wait_for_timeout(450)
+    past_hold(w)
     assert not w.page.locator("main .it.dragging").count()
     touch(w, card, "pointerup", 30)
     assert screen_order(w) == [first, second, third]
 
     touch(w, card, "pointerdown")
-    w.page.wait_for_timeout(450)  # удержание
+    past_hold(w)  # удержание
     assert w.page.locator("main .it.dragging").count() == 1
     touch(w, card, "pointermove", step * 1.6)
     with saves(w, "перестановка пальцем", "POST", move(first)):
@@ -1097,7 +1107,7 @@ def test_stale_load_after_keyboard_reorder(watch):
 
     w.page.route("**/api/items?status=next", hold)
     w.page.evaluate("() => { load(); }")  # перечитка, как от любого действия, — без ожидания
-    deadline = time.monotonic() + WAIT_MS / 1000
+    deadline = time.monotonic() + SAVE_MS / 1000
     while not held:
         assert time.monotonic() < deadline, "load() не запросила список Next"
         w.page.wait_for_timeout(20)
@@ -1156,18 +1166,27 @@ def test_stalled_move_does_not_block_navigation(watch):
 
 def test_stalled_move_times_out_and_redraws(watch):
     """SERBITO-562, ревью: зависший POST перестановки обрывается через MOVE_MS. Очередь пустеет, её load()
-    рисует свежие данные — экран не застывает до конца сетевого таймаута браузера."""
+    рисует свежие данные — экран не застывает до конца сетевого таймаута браузера.
+    Таймаут срабатывает по команде теста, а не по часам (SERBITO-614): прежний MOVE_MS = 500 на занятой машине
+    истекал до проверки «load() не рисует», и список уже был перерисован. AbortSignal.timeout(MOVE_MS) подменён
+    сигналом, который тест обрывает сам — так же, как обрывает настоящий таймаут (TimeoutError)."""
     w = watch()
     uid, (first, second, third) = order_user(w)
-    w.page.evaluate("() => { MOVE_MS = 500; }")
+    w.page.evaluate("""() => { window.__timeouts = [];
+        AbortSignal.timeout = ms => { const c = new AbortController();
+            __timeouts.push({ms, fire: () => c.abort(new DOMException('signal timed out', 'TimeoutError'))});
+            return c.signal; }; }""")
     held = hold_move(w, first)
     w.page.locator("#cap").press("ArrowDown")
     w.page.keyboard.press("Alt+ArrowDown")
-    w.page.wait_for_function("moving === 1", timeout=WAIT_MS)
+    w.page.wait_for_function("moving === 1 && window.__timeouts.length === 1", timeout=WAIT_MS)
+    assert w.page.evaluate("__timeouts[0].ms === MOVE_MS"), "перестановка ушла без таймаута MOVE_MS"
     late = A.capture(uid, "Добавлена в обход экрана @дом")["id"]
     w.page.evaluate("() => { load(); }")  # перечитка того же списка, пока очередь не пуста: не рисует
-    w.page.wait_for_function("window.__loads === 0", timeout=WAIT_MS)
+    w.page.wait_for_function("window.__loads === 0", timeout=SAVE_MS)
     assert late not in screen_order(w)
+    assert w.page.evaluate("moving") == 1  # таймаута ещё не было: запрос висит
+    w.page.evaluate("() => __timeouts[0].fire()")  # истёк MOVE_MS
     settled(w)  # очередь опустела по таймауту, её load() дорисована
     assert late in screen_order(w), "после таймаута перестановки список не перерисовался"
     assert db_order(uid, "next")[:3] == [first, second, third], "оборванная перестановка не должна сохраниться"
@@ -1965,7 +1984,7 @@ def test_reorder_projects_with_mouse_and_keyboard(watch):
         w.page.mouse.up()
     assert project_screen_order(w) == [b, c, a]
     assert db_project_order(uid) == [b, c, a], "порядок проектов не сохранился"
-    w.page.wait_for_timeout(300)
+    page_pause(w, 300)
     assert urlsplit(w.page.url).path == "/projects", "перетаскивание открыло проект"
 
     w.page.evaluate("document.activeElement?.blur()")
@@ -2020,7 +2039,7 @@ def test_reorder_projects_by_touch(watch):
     card = f'{PJ}[data-pid="{c}"]'
     up = w.page.locator(f'{PJ}[data-pid="{b}"]').bounding_box()["y"] - w.page.locator(card).bounding_box()["y"]
     touch(w, card, "pointerdown")
-    w.page.wait_for_timeout(450)  # удержание
+    past_hold(w)  # удержание
     assert w.page.locator("main .it.dragging").count() == 1
     touch(w, card, "pointermove", up * 1.1)
     with saves(w, "проект пальцем", "POST", project_move(c)):
@@ -2228,7 +2247,7 @@ def test_landing_fetches_config_once(watch):
     w.goto("/")
     w.wait('#signin a[href="/dev-login"]', "кнопки входа")
     w.page.wait_for_load_state("load")
-    w.page.wait_for_timeout(300)
+    page_pause(w, 300)
     assert len(asked) == 1, asked
     w.check("итог")
 
@@ -2794,7 +2813,7 @@ def test_task_context_menu_keyboard_and_bounds(watch):
     cm_closed(w)
     # Прокрутка и клик мимо закрывают
     cm_open(w, c, "перед прокруткой")
-    w.page.wait_for_timeout(350)
+    page_pause(w, 350)
     w.page.evaluate("dispatchEvent(new Event('scroll'))")
     cm_closed(w)
     cm_open(w, c, "перед кликом мимо")
@@ -2811,7 +2830,7 @@ def test_task_context_menu_keyboard_and_bounds(watch):
     w.page.evaluate(f"""() => {{ const t = document.querySelector('main .it[data-id="{c}"] .t');
         getSelection().selectAllChildren(t); }}""")
     w.page.click(f'main .it[data-id="{c}"] .t', button="right")
-    w.page.wait_for_timeout(100)
+    page_pause(w, 100)
     assert not w.page.locator(".cm").count(), "на выделенном тексте — меню браузера"
     w.check("итог")
 
@@ -2823,11 +2842,11 @@ def test_task_context_menu_long_press_on_phone(watch):
     uid, (a, b, c) = cm_user(w, "ru")
     card = f'main .it[data-id="{a}"]'
     touch(w, card, "pointerdown")
-    w.page.wait_for_timeout(450)
+    past_hold(w)
     assert w.page.locator("main .it.dragging").count() == 1  # удержание поднимает карточку, как раньше
     touch(w, card, "pointerup")
     w.wait(".cm[role=menu]", "меню по удержанию")
-    w.page.wait_for_timeout(300)
+    page_pause(w, 300)
     assert not w.page.locator("#dlg[open]").count() and "/i/" not in w.page.url
     assert in_viewport(w)
     shot(w, "cm-phone")
@@ -2842,7 +2861,7 @@ def test_task_context_menu_long_press_on_phone(watch):
     card = f'main .it[data-id="{b}"]'
     step = w.page.locator(f'main .it[data-id="{c}"]').bounding_box()["y"] - w.page.locator(card).bounding_box()["y"]
     touch(w, card, "pointerdown")
-    w.page.wait_for_timeout(450)
+    past_hold(w)
     touch(w, card, "pointermove", step * 1.6)
     with saves(w, "перестановка пальцем", "POST", move(b)):
         touch(w, card, "pointerup", step * 1.6)
@@ -2866,7 +2885,7 @@ def test_task_context_menu_long_press_on_phone(watch):
     w.wait(".cm[role=menu]", "меню в Scheduled")
     assert "undate" in cm_labels(w) and "top" not in cm_labels(w)
     touch(w, card, "pointerup")
-    w.page.wait_for_timeout(300)
+    page_pause(w, 300)
     assert not w.page.locator("#dlg[open]").count()
     with saves(w, "убрать дату с телефона", "PATCH", f"/api/items/{c}"):
         w.page.tap(".cm [data-cm=undate]")
