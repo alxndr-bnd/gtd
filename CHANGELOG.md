@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- The home page, "How GTD works" and the footer of every page link to GTD reviews on AlternativeTo, next to the open source code on GitHub.
+  - RU: Главная, «Как работает GTD» и подвал каждой страницы ведут на отзывы о GTD на AlternativeTo, рядом с открытым кодом на GitHub.
+
 ## [0.51.0] - 2026-10-12
 
 ### Added

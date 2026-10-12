@@ -18,6 +18,9 @@ NOHANDOFF_URL = "https://www.linkedin.com/company/nohandoff/"
 # Код открыт под MIT (SERBITO-291): ссылка — в подвале, на лендинге и на /about
 REPO_URL = "https://github.com/alxndr-bnd/gtd"
 SELF_HOST_URL = REPO_URL + "/blob/main/docs/self-host.md"
+# Страница gtd в каталоге AlternativeTo (SERBITO-611): отзывы со стороны — рядом со ссылкой на код. Обычная
+# ссылка, без их бейджа и скриптов: CSP и вес лендинга
+ALTERNATIVETO_URL = "https://alternativeto.net/software/gtd/"
 # Контактная почта в подвале. Пусто — строки нет: владелец ещё не выбрал адрес
 CONTACT_EMAIL = ""
 SITE_NAME = "GTD"
@@ -100,6 +103,7 @@ T = {
         "locale": "ru_RU", "how": "Как это работает", "other_lang": "English", "open": "Открыть GTD",
         "other": "Другие проекты", "made": "Сделано",
         "oss": "Открытый код (MIT)", "oss_note": "Бесплатно и с открытым кодом (MIT)",
+        "reviews": "Отзывы на AlternativeTo",
         "tm": "GTD® и Getting Things Done® — товарные знаки David Allen Company. "
               "Сервис независимый и не связан с автором метода.",
     },
@@ -114,6 +118,7 @@ T = {
         "locale": "en_US", "how": "How it works", "other_lang": "Русский", "open": "Open GTD",
         "other": "Other projects", "made": "Made by",
         "oss": "Open source (MIT)", "oss_note": "Free and open source (MIT)",
+        "reviews": "Reviews on AlternativeTo",
         "tm": "GTD® and Getting Things Done® are trademarks of the David Allen Company. "
               "This service is independent and not affiliated with the author of the method.",
     },
@@ -367,7 +372,7 @@ def structured_data(base: str, lang: str, page: str, img: str) -> dict:
         "isAccessibleForFree": True, "license": "https://opensource.org/licenses/MIT", "image": img,
         "author": {"@id": org}, "publisher": {"@id": org},
         "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR", "availability": "https://schema.org/InStock"},
-        "sameAs": [BOT_URL, REPO_URL]}
+        "sameAs": [BOT_URL, REPO_URL, ALTERNATIVETO_URL]}
     if VERSION:
         application["softwareVersion"] = VERSION
     # codeRepository по schema.org — у SoftwareSourceCode, не у приложения: код — свой узел (SERBITO-484)
@@ -435,6 +440,11 @@ def topbar(lang: str, page: str) -> str:
             f'<a href="{switch_path(other, page)}" hreflang="{other}" lang="{other}">{t["other_lang"]}</a></header>')
 
 
+def oss_links(lang: str) -> str:
+    """Открытый код и отзывы (SERBITO-611): одна строка для подвала и лендинга."""
+    return f'<a href="{REPO_URL}">GitHub</a> · <a href="{ALTERNATIVETO_URL}">{T[lang]["reviews"]}</a>'
+
+
 def footer(lang: str, consent: bool = False) -> str:
     """Другие проекты No Handoff, открытый код, подпись и оговорка о товарном знаке — на всех публичных страницах.
     consent — задан GA: тогда и ссылка «Настройки cookie»."""
@@ -449,7 +459,7 @@ def footer(lang: str, consent: bool = False) -> str:
     # Справочные страницы (SERBITO-441, SERBITO-446) — ссылки со всех публичных страниц
     guides = " · ".join(f'<a href="{PATHS[(lang, page)]}">{t[CRUMB[page]]}</a>' for page in GUIDE_PAGES[lang])
     return (f'<footer><p>{guides}</p><b>{t["other"]}</b><ul>{items}</ul>'
-            f'<p>{t["oss"]} · <a href="{REPO_URL}">GitHub</a>{changes}{contact}</p>'
+            f'<p>{t["oss"]} · {oss_links(lang)}{changes}{contact}</p>'
             f'<p>{t["made"]} <a href="{NOHANDOFF_URL}">No Handoff</a> · '
             f'<a href="{PATHS[(lang, "privacy")]}">{t["privacy"]}</a>{cookie}</p>'
             f'<p>{t["tm"]} <a href="{GTD_SITE}">gettingthingsdone.com</a></p></footer>')
@@ -525,7 +535,7 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
     """Лендинг для гостя: вставляется в #root index.html. Кнопки входа JS кладёт в #signin; signin — включённые
     способы входа (для резерва высоты), dev — локальная кнопка «Dev login»."""
     h, hint = LANDING_SIGNIN[lang]
-    oss = f'<p class="note">{T[lang]["oss_note"]} · <a href="{REPO_URL}">GitHub</a></p>'
+    oss = f'<p class="note">{T[lang]["oss_note"]} · {oss_links(lang)}</p>'
     return (f'<div class="pub">{topbar(lang, "home")}<main><div class="intro"><div>{LANDING[lang]}{oss}{BOT_NOTE[lang]}</div>'
             f'<div class="card signin"><h2>{h}</h2><p class="hint" style="margin:0 0 16px">{hint}</p>'
             f'<div id="signin" style="min-height:{signin_height(list(signin), dev)}px"></div>'
@@ -711,11 +721,13 @@ OSS = {
 <p>Да, GTD бесплатный: платных тарифов нет. Код открыт под лицензией MIT и лежит на <a href="{REPO_URL}">GitHub</a>
 вместе с историей изменений. Можно посмотреть, как всё устроено, предложить правку или поднять свою копию —
 <a href="{SELF_HOST_URL}">инструкция по self-hosting</a> (на английском). Что менялось в каждой версии —
-на странице <a href="/changes">«Что нового»</a>.</p>""",
+на странице <a href="/changes">«Что нового»</a>. Отзывы о GTD и похожие приложения — на
+<a href="{ALTERNATIVETO_URL}">AlternativeTo</a>.</p>""",
     "en": f"""<h2>Is GTD free? Where is the source code?</h2>
 <p>Yes, GTD is free: there are no paid plans. The code is open source under the MIT license and lives on
 <a href="{REPO_URL}">GitHub</a> with its full history. Read how it works, suggest a fix, or run your own copy —
-see the <a href="{SELF_HOST_URL}">self-hosting guide</a>.</p>""",
+see the <a href="{SELF_HOST_URL}">self-hosting guide</a>. Reviews of GTD and similar apps are on
+<a href="{ALTERNATIVETO_URL}">AlternativeTo</a>.</p>""",
 }
 # Редакция текста /about (SERBITO-470): дата «Обновлено» на странице, dateModified и lastmod в sitemap.
 # Правишь текст /about — ставь новую дату
@@ -1896,7 +1908,8 @@ def llms(base: str) -> str:
         page("ru", "beginners", "GTD for beginners (Russian)") + ": lists, contexts, the Inbox and the weekly review", "",
         "## Elsewhere", "",
         f"- [Telegram bot @{BOT_NAME}]({BOT_URL}): send a task as a message, get reminders in the chat",
-        f"- [Source code on GitHub]({REPO_URL}): MIT license, self-hosting guide", ""])
+        f"- [Source code on GitHub]({REPO_URL}): MIT license, self-hosting guide",
+        f"- [GTD on AlternativeTo]({ALTERNATIVETO_URL}): user reviews and similar apps", ""])
 
 
 def sitemap(base: str) -> str:
