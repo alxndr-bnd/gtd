@@ -38,10 +38,6 @@ MCP_RATE = (120, 60)        # запросов на токен в минуту
 MCP_BAD_TOKENS = (30, 600)  # неверных токенов с одного IP за 10 минут
 LIST_LIMIT = 200
 WEEK = 7 * 86400
-# «Кого ждём» (update_task, waiting_for) — первая строка заметок: отдельного поля у задачи нет, а заметки видны
-# и в приложении, и в боте. Метка — на языке аккаунта; заменяем и снимаем строку с любой из двух
-WAITING_MARK = {"ru": "Ждём: ", "en": "Waiting for: "}
-WAITING_RE = re.compile(r"^(?:Ждём|Waiting for): .*(?:\n|$)")
 
 server = MCPServer(
     "gtd",
@@ -52,7 +48,9 @@ server = MCPServer(
         "by their "
         "number (#N), which the user also sees in the app. Capture new thoughts with `capture`; it understands "
         "dates (\"tomorrow 10am\", \"завтра в 10:00\"), #Project and one or more @contexts in the text. "
-        "A finished project can be archived (`archive_project`) and restored (`restore_project`)."),
+        "A finished project can be archived (`archive_project`) and restored (`restore_project`). "
+        "To clear the Inbox, follow the `process_inbox` prompt: one task at a time, oldest first, the GTD questions "
+        "in a fixed order."),
     website_url=A.BASE_URL,
 )
 # Защита от DNS rebinding — для серверов на localhost, которые доверяют сети. Здесь каждый запрос несёт Bearer-токен,
@@ -381,16 +379,6 @@ def parse_due(value: str) -> int:
     return ts
 
 
-def waiting_notes(uid: int, notes: str, who: str) -> str:
-    """Заметки с новой строкой «Ждём: …» (who пустой — без неё)."""
-    rest = WAITING_RE.sub("", notes or "", count=1)
-    if not who:
-        return rest
-    lang = (A.row("select lang from users where id=%s", (uid,)) or {}).get("lang") \
-        or ("ru" if re.search("[а-яё]", who, re.I) else "en")
-    return WAITING_MARK[lang] + who + ("\n" + rest if rest else "")
-
-
 @server.tool(annotations=WRITE)
 def update_task(
     ctx: Context,
@@ -422,7 +410,7 @@ def update_task(
         body["notes"] = notes
     if waiting_for is not None:
         who = " ".join(waiting_for.split())
-        body["notes"] = waiting_notes(uid, body.get("notes", it["notes"]), who)
+        body["notes"] = A.waiting_notes(uid, body.get("notes", it["notes"]), who)
         if who:
             body["status"] = "waiting"
     remind = None if due is None else parse_due(due) if due.strip() else 0
@@ -468,3 +456,30 @@ def weekly_review(ctx: Context) -> dict[str, Any]:
         "upcoming_7_days": [task_out(it) for it in soon],
         "someday_count": counts.get("someday", 0),
     }
+
+
+# ───────────────────────── Подсказки (prompts) ─────────────────────────
+# Разбор Inbox (SERBITO-603): тот же порядок вопросов, что в режиме «Разобрать Inbox» на сайте
+PROCESS_PROMPT = """Help me process my GTD Inbox to zero. Call list_tasks(list="inbox") and take the tasks one at a \
+time, oldest first. For each task, ask me these questions in this order and stop at the first answer that \
+decides it:
+
+1. Is it actionable? If not: trash (move_task list="trash"), Someday/Maybe (list="someday") or Reference \
+(list="reference").
+2. Does it take less than 2 minutes? Then I do it now; when I say it is done, call complete_task.
+3. Am I the right person to do it? If not: update_task with waiting_for (who) and, if I give one, a follow-up due \
+date.
+4. Is it more than one step? Then it is a project: pick an existing one (list_projects) or name a new one, and ask \
+me for the first next action. Do not create a project without a next action. Use move_task with project and \
+list="next", then update_task with the next action as the title.
+5. Does it have a fixed date? Then update_task with due and move_task list="next". Otherwise move_task \
+list="next", with an @context if I give one.
+
+I can say "skip" to leave a task in the Inbox. Show progress like "3 of 12". At the end, say how many tasks \
+were processed and how many are left."""
+
+
+@server.prompt(name="process_inbox", title="Process the Inbox",
+               description="Clear the GTD Inbox step by step: actionable? 2 minutes? who? project? date?")
+def process_inbox() -> str:
+    return PROCESS_PROMPT

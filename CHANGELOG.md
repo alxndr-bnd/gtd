@@ -16,6 +16,13 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- Process your Inbox step by step: the app shows one task at a time and asks the GTD questions in order — is it actionable, does it take under 2 minutes, is it yours, is it more than one step, does it have a date. Each answer sends the task to the right list. A new project asks for its first next action. Desktop has keyboard shortcuts.
+  - RU: Inbox можно разобрать по шагам: приложение показывает задачи по одной и задаёт вопросы GTD по порядку — нужно ли действие, займёт ли меньше 2 минут, делать ли тебе, больше ли одного шага, есть ли дата. Каждый ответ отправляет задачу в нужный список. Новый проект сразу просит первое следующее действие. На компьютере работают клавиши.
+- The "How GTD works" page shows the processing questions as a short diagram. AI assistants get a `process_inbox` prompt with the same order.
+  - RU: На странице «Как работает GTD» — короткая схема этих вопросов. AI-ассистенты получили подсказку `process_inbox` с тем же порядком.
+
 ## [0.49.0] - 2026-10-11
 
 ### Added

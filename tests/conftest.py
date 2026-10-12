@@ -109,7 +109,8 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 TABLES = ("users, sessions, user_sessions, login_tokens, projects, items, email_codes, tg_logins, merge_offers, "
-          "tg_email_links, activity, auth_limits, api_tokens, oauth_clients, oauth_grants, oauth_codes, oauth_tokens")
+          "tg_email_links, activity, auth_limits, api_tokens, oauth_clients, oauth_grants, oauth_codes, oauth_tokens, "
+          "process_runs")
 
 
 @pytest.fixture(autouse=True)

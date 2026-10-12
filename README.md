@@ -17,6 +17,8 @@ FastAPI + PostgreSQL, one container. English and Russian.
 - **Quick capture** with natural dates: `call mom tomorrow at 10am #Family @phone` → task, reminder, project, context.
 - **GTD lists:** Inbox · Next (filter by @context) · Waiting · Calendar/reminders · Projects (⚠ without a next
   action, archive) · Someday · Reference · Done · Weekly Review.
+- **Process Inbox step by step:** one task at a time, the GTD questions in order (actionable? under 2 minutes? mine?
+  more than one step? a fixed date?), with large buttons, progress and keyboard shortcuts.
 - **Telegram bot:** send a message — it lands in the Inbox; reminders come with ✅ Done / 💤 +1h / ⏭ Next buttons.
 - **Sign-in** by email code, Google or Telegram; methods link into one account, accounts can be merged.
 - **AI assistants:** connect Claude, ChatGPT, Cursor or VS Code with sign-in (OAuth, no token), or any MCP client
@@ -103,6 +105,9 @@ Ask, for example: “add ‘call the bank tomorrow 10am’ to my inbox”, “wh
 | `archive_project` | Archives a project: with its open tasks (`tasks="archive"`) or only the project (`tasks="keep"`) |
 | `restore_project` | Brings an archived project back with its archived tasks; past reminders are dropped |
 | `weekly_review` | Read-only summary: Inbox count, projects without a next action, empty projects, overdue, Waiting, next 7 days, Someday count |
+
+The prompt `process_inbox` tells the assistant to clear the Inbox in the same order as the app: one task at a time,
+oldest first, the five GTD questions.
 
 ### Security
 
