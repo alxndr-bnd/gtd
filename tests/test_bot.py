@@ -300,7 +300,7 @@ def test_email_bad_address(tg, mail):
 
 def test_email_of_existing_account_merges_on_confirm(tg, mail, login, new_client):
     web = new_client()
-    alice = login(web, "alice@example.com")
+    login(web, "alice@example.com")
     web.post("/api/capture", json={"text": "с сайта #Дом"})
     bot_message("из бота #дом")
 
@@ -409,7 +409,9 @@ def test_local_polling_leaves_prod_webhook_alone(monkeypatch):
 
 def current_profile():
     """Ответы Telegram, когда профиль уже совпадает с кодом."""
-    lang = lambda p: A.profile_lang(p["language_code"])
+    def lang(p):
+        return A.profile_lang(p["language_code"])
+
     return {"getMe": {"username": "gtdsrbot"}, "getMyCommands": lambda p: A.BOT_COMMANDS[lang(p)],
             "getMyDescription": lambda p: {"description": A.BOT_PROFILE[lang(p)][0]},
             "getMyShortDescription": lambda p: {"short_description": A.BOT_PROFILE[lang(p)][1]},

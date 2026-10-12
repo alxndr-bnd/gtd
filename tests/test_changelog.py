@@ -1,6 +1,7 @@
 """CHANGELOG.md и релиз (SERBITO-329): формат разбирается, у каждого пункта есть английский и русский текст,
 версии идут сверху вниз, у каждого тега vX.Y.Z есть запись с его датой, а релизный скрипт без записи не выпускает.
 Ничего не пропускается: тесты гоняются в git-checkout репозитория, и теги там есть."""
+import json
 import os
 import re
 import shutil
@@ -14,6 +15,9 @@ import pytest
 import changelog as C
 
 ROOT = Path(__file__).resolve().parent.parent
+# Зелёный прогон CI на main, как его отдаёт `gh run list --json` (гейт CI, SERBITO-613)
+GREEN_CI = {"workflowName": "CI", "status": "completed", "conclusion": "success",
+            "createdAt": "2026-10-12T10:00:00Z", "url": "https://github.com/x/y/actions/runs/1"}
 TEXT = C.PATH.read_text(encoding="utf-8")
 CYR = re.compile("[а-яё]", re.I)
 
@@ -133,11 +137,15 @@ def repo(tmp_path):
     (work / "tests").mkdir()
     bin_.mkdir()
     shutil.copy(ROOT / "scripts" / "release_minor.sh", work / "scripts")
+    shutil.copy(ROOT / "scripts" / "ci_gate.sh", work / "scripts")
     shutil.copy(ROOT / "changelog.py", work)
     (work / "CHANGELOG.md").write_text(C.with_links(GOOD, C.parse(GOOD)), encoding="utf-8")
     (work / "tests" / "test_ok.py").write_text("def test_ok():\n    pass\n")
     gh = bin_ / "gh"
-    gh.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "{tmp_path}/gh-args"\n')
+    # `gh run list` (гейт CI, SERBITO-613) отвечает содержимым gh-runs.json; остальное пишет аргументы в gh-args
+    (tmp_path / "gh-runs.json").write_text(json.dumps([GREEN_CI]))
+    gh.write_text(f'#!/bin/sh\nif [ "$1" = run ]; then cat "{tmp_path}/gh-runs.json"; exit 0; fi\n'
+                  f'printf "%s\\n" "$@" > "{tmp_path}/gh-args"\n')
     gh.chmod(0o755)
     # Без унаследованных GIT_*: в git-хуке GIT_DIR и GIT_INDEX_FILE указывают на настоящий репозиторий,
     # и git init --bare перевёл бы его в core.bare = true (SERBITO-389)
@@ -181,6 +189,7 @@ def test_release_script_dates_the_entry_and_uses_it_for_github_release(repo):
     log = work / "CHANGELOG.md"
     log.write_text(log.read_text().replace("## [Unreleased]\n", "## [Unreleased]\n\n### Added\n- Three\n  - RU: Три\n"))
     git("commit", "-qam", "entry", cwd=work, env=env)
+    git("push", "-q", "origin", "main", cwd=work, env=env)  # гейт CI: релизится только то, что уже в main
     r = release()
     assert r.returncode == 0, r.stdout + r.stderr
     assert "1 worker [1 item]" in r.stdout  # гейт параллельный: pytest-xdist (SERBITO-553)
@@ -191,6 +200,51 @@ def test_release_script_dates_the_entry_and_uses_it_for_github_release(repo):
     args = gh_args.read_text().splitlines()
     assert args[:6] == ["release", "create", "v0.3.0", "--verify-tag", "--title", "v0.3.0"]
     assert args[6] == "--notes" and "\n".join(args[7:]).startswith("### Added\n- Three") and "Три" not in gh_args.read_text()
+
+
+# ── SERBITO-613: гейт CI — релиз только с зелёного CI на main для HEAD ──
+
+def _refused_before_changelog(r, work, env, head):
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "release refused (SERBITO-613)" in r.stderr
+    assert "==> CHANGELOG.md" not in r.stdout and "==> pytest" not in r.stdout
+    assert git("rev-parse", "HEAD", cwd=work, env=env) == head and "v0.3.0" not in git("tag", cwd=work, env=env)
+
+
+@pytest.mark.parametrize("run, why", [
+    ({"conclusion": "failure"}, "CI: failure"),
+    ({"conclusion": "cancelled"}, "CI: cancelled"),
+    ({"workflowName": "Deploy to Cloud Run"}, 'no "CI" run'),
+])
+def test_release_refuses_when_ci_on_main_is_not_green(repo, run, why):
+    work, remote, env, release, gh_args = repo
+    (work.parent / "gh-runs.json").write_text(json.dumps([{**GREEN_CI, **run}]))
+    env.update(CI_GATE_NO_RUN_GRACE="0")
+    head = git("rev-parse", "HEAD", cwd=work, env=env)
+    r = release()
+    _refused_before_changelog(r, work, env, head)
+    assert why in r.stderr and not gh_args.exists()
+
+
+def test_release_refuses_when_head_is_not_origin_main(repo):
+    work, remote, env, release, gh_args = repo
+    (work / "x.txt").write_text("x")
+    git("add", "x.txt", cwd=work, env=env)
+    git("commit", "-qm", "local only", cwd=work, env=env)
+    head = git("rev-parse", "HEAD", cwd=work, env=env)
+    r = release()
+    _refused_before_changelog(r, work, env, head)
+    assert "is not origin/main" in r.stderr
+
+
+def test_release_waits_for_a_running_ci(repo):
+    work, remote, env, release, gh_args = repo
+    (work.parent / "gh-runs.json").write_text(json.dumps([{**GREEN_CI, "status": "in_progress", "conclusion": ""}]))
+    env.update(CI_GATE_TIMEOUT="0", CI_GATE_INTERVAL="0")
+    head = git("rev-parse", "HEAD", cwd=work, env=env)
+    r = release()
+    _refused_before_changelog(r, work, env, head)
+    assert "CI still running" in r.stderr and "CI (in_progress)" in r.stderr
 
 
 # ── SERBITO-389: деплой тега без секции в CHANGELOG.md падает до сборки ──

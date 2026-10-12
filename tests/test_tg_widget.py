@@ -1,4 +1,5 @@
 """Вход и привязка через Telegram Login Widget (SERBITO-292): проверка подписи и пути входа/привязки/объединения."""
+from pathlib import Path
 import hashlib
 import hmac
 import time
@@ -181,7 +182,7 @@ def test_widget_merge_offer_in_english(new_client, login, tg):
 # ── Фронт ──
 
 def test_spa_uses_widget_with_fallback():
-    html = open(A.os.path.join(A.os.path.dirname(A.__file__), "static", "index.html"), encoding="utf-8").read()
+    html = Path(A.os.path.join(A.os.path.dirname(A.__file__), "static", "index.html")).read_text(encoding="utf-8")
     assert "https://telegram.org/js/telegram-widget.js?22" in html
     assert "location.hostname === 'gtd.serbito.rs'" in html and "pointer: coarse" in html  # где виджет не работает
     assert "authPost('tg/widget'" in html and "data-act=\"tglogin\"" in html  # и запасной путь через бота
@@ -189,7 +190,7 @@ def test_spa_uses_widget_with_fallback():
 
 def test_spa_widget_redirects_instead_of_eval_callback():
     """SERBITO-316: data-onauth виджет компилирует через eval (GTD-2) — только data-auth-url, ответ во фрагменте."""
-    html = open(A.os.path.join(A.os.path.dirname(A.__file__), "static", "index.html"), encoding="utf-8").read()
+    html = Path(A.os.path.join(A.os.path.dirname(A.__file__), "static", "index.html")).read_text(encoding="utf-8")
     assert "onauth:" not in html and "onTelegramAuth" not in html  # ни data-onauth, ни глобального колбэка
     assert "authUrl:back" in html and "'#tgw?_s='" in html
     assert "'unsafe-eval'" not in A.CSP_REPORT_ONLY

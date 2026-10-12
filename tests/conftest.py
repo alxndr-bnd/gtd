@@ -244,3 +244,12 @@ def bot_callback(data, tg_id=777, message=True, lang=None):
     asyncio.run(A.handle_callback({"id": "cb", "from": tg_from(tg_id, "Tom", lang), "data": data,
                                    "message": {"chat": {"id": tg_id, "type": "private"}, "message_id": 1}
                                    if message else {}}))
+
+
+@pytest.fixture
+def alice(new_client, login):
+    """Вошедшая в браузере Алиса и её токен; MCP-запросы — с отдельного клиента без cookie."""
+    from test_mcp import new_token
+    web = new_client()
+    uid = login(web, "alice@example.com")
+    return {"web": web, "uid": uid, "tok": new_token(web), "mcp": new_client()}

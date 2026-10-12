@@ -1,5 +1,6 @@
 """Публичные страницы: лендинг, «Как это работает», политика конфиденциальности, «Что нового», страница бота (/bot),
 чек-лист Weekly Review (/weekly-review), SEO-теги, robots.txt, sitemap.xml, noindex для /i/N."""
+from pathlib import Path
 import json
 import os
 import re
@@ -255,7 +256,7 @@ def test_self_host_doc_exists():
 
 
 def test_app_menu_links_to_about():
-    page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+    page = Path(f"{A.STATIC}/index.html").read_text(encoding="utf-8")
     # ссылка в меню — из словаря интерфейса: /about по-русски, /en/about по-английски
     assert "<a href=\"${t('about_url')}\"" in page
     assert '"about_url": "/about"' in page and '"about_url": "/en/about"' in page
@@ -462,7 +463,7 @@ def test_version_comes_from_deploy_env(monkeypatch):
     finally:
         monkeypatch.delenv("APP_VERSION", raising=False)
         importlib.reload(P)
-    deploy = open(os.path.join(os.path.dirname(P.__file__), ".github", "workflows", "deploy.yml")).read()
+    deploy = Path(os.path.join(os.path.dirname(P.__file__), ".github", "workflows", "deploy.yml")).read_text(encoding="utf-8")
     # Версия — из тега, который деплоится (пересборка по расписанию — тоже его тег, SERBITO-401)
     assert 'echo "APP_VERSION: \\"${RELEASE_TAG#v}\\""' in deploy
 
@@ -483,7 +484,7 @@ def test_config_reports_version(client, monkeypatch):
 def test_app_menu_links_to_changes():
     """Ссылка, точка новой версии и ключ localStorage — в браузере (test_menu_whats_new_and_version, RU);
     здесь — только адреса для обоих языков."""
-    page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+    page = Path(f"{A.STATIC}/index.html").read_text(encoding="utf-8")
     assert '"changes_url": "/changes"' in page and '"changes_url": "/en/changes"' in page
 
 
@@ -555,7 +556,7 @@ def test_bot_page_capture_examples_work(client, lang):
 
 def app_review_steps() -> dict:
     """Шаги раздела Weekly Review в приложении — из словаря интерфейса index.html (review.s1…s6), по языкам."""
-    page = open(f"{A.STATIC}/index.html", encoding="utf-8").read()
+    page = Path(f"{A.STATIC}/index.html").read_text(encoding="utf-8")
     steps = re.findall(r'"s\d": "\d\. ([^"]+)"', page)
     assert len(steps) == 12  # шесть шагов, русский и английский словарь
     return {"ru": steps[:6], "en": steps[6:]}

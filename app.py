@@ -20,7 +20,6 @@ from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
-import psycopg
 import sentry_sdk
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -2338,10 +2337,16 @@ def admin_stats(uid: int = Depends(current_user)):
     if uid not in ADMIN_USER_IDS:
         raise HTTPException(404)
     today = datetime.now(TZ).date()
-    one = lambda sql, *a: row(sql, a)["n"]
-    active = lambda days: one("select count(distinct user_id) n from activity where day > %s",
-                              today - timedelta(days=days))
-    since = lambda days: int((datetime.now(TZ) - timedelta(days=days)).timestamp())
+
+    def one(sql, *a):
+        return row(sql, a)["n"]
+
+    def active(days):
+        return one("select count(distinct user_id) n from activity where day > %s", today - timedelta(days=days))
+
+    def since(days):
+        return int((datetime.now(TZ) - timedelta(days=days)).timestamp())
+
     daily = {r["day"]: r for r in rows(
         "select day, count(distinct user_id) users, sum(actions) actions from activity where day > %s group by day",
         (today - timedelta(days=30),))}

@@ -22,12 +22,16 @@ if [[ "$branch" != "main" ]]; then
   exit 1
 fi
 
+# --- гейт CI (SERBITO-613): красный конвейер останавливает линию. HEAD = origin/main, и CI на main
+# для этого коммита зелёный; идущий прогон ждём до 20 минут. Иначе — отказ до CHANGELOG, тестов и тега ---
+scripts/ci_gate.sh
+
 latest_tag="$(git tag --list 'v*.*.*' --sort=-v:refname | head -n 1)"
 if [[ -z "$latest_tag" ]]; then
   next_tag="v0.1.0"
 else
   version="${latest_tag#v}"
-  IFS='.' read -r major minor patch <<< "$version"
+  IFS='.' read -r major minor _ <<< "$version"
   next_tag="v${major}.$((minor + 1)).0"
 fi
 
