@@ -189,8 +189,11 @@ scripts/lock.sh --upgrade                  # all packages
 1. With every user-facing change, add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md):
    `### Added` / `Changed` / `Fixed` / `Security`, one line `- English text` and right under it
    `  - RU: Русский текст`. Write what users can now do or what got fixed — not commit messages.
-2. On `main`: `scripts/release_minor.sh "Commit message" [new_file …]`. It picks the next tag `vX.Y.0` and
-   **refuses to release** if `[Unreleased]` has no entries. Otherwise it renames `[Unreleased]` to
+2. On `main`: `scripts/release_minor.sh "Commit message" [new_file …]`. First the CI gate (SERBITO-613,
+   `scripts/ci_gate.sh`): HEAD must be `origin/main` and every GitHub run on main for it must be green; it waits
+   up to 20 min for a running CI and **refuses to release** on red, cancelled or missing CI. A red run on main or
+   on a tag also opens a Highest `ci-red` bug in Jira (`.github/workflows/ci-red.yml`). Then it picks the next
+   tag `vX.Y.0` and **refuses to release** if `[Unreleased]` has no entries. Otherwise it renames `[Unreleased]` to
    `## [X.Y.0] - <today>` (with a fresh empty `[Unreleased]` on top), runs the tests, commits everything
    in one release commit, tags, pushes, and creates the GitHub Release with that version's English entries.
 3. The tag deploys ([docs/deploy-gcp.md](docs/deploy-gcp.md)) with `APP_VERSION` from the tag: the footer,
