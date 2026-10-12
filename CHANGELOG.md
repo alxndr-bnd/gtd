@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-12
+
 ### Added
 
 - Process your Inbox step by step: the app shows one task at a time and asks the GTD questions in order — is it actionable, does it take under 2 minutes, is it yours, is it more than one step, does it have a date. Each answer sends the task to the right list. A new project asks for its first next action. Desktop has keyboard shortcuts.
@@ -498,7 +500,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.49.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.50.0...HEAD
+[0.50.0]: https://github.com/alxndr-bnd/gtd/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/alxndr-bnd/gtd/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/alxndr-bnd/gtd/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/alxndr-bnd/gtd/compare/v0.46.0...v0.47.0
