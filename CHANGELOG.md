@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- A date with a two-digit year, like 24.10.26, sets the reminder again. The whole date is removed from the task title. A time range like 10:00-11:00 or 10:00/11:00 sets the reminder at the start time.
+  - RU: Дата с годом из двух цифр, например 24.10.26, снова ставит напоминание и целиком уходит из названия задачи. Диапазон времени, например 10:00-11:00 или 10:00/11:00, ставит напоминание на время начала.
+
 ## [0.58.0] - 2026-10-14
 
 ### Fixed
