@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-10-14
+
 ### Changed
 
 - The Telegram bot now has the name Serbito GTD too: "Serbito GTD — Tasks & Todo" in English, and the same name with Russian words in other languages.
@@ -547,7 +549,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.56.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.57.0...HEAD
+[0.57.0]: https://github.com/alxndr-bnd/gtd/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/alxndr-bnd/gtd/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/alxndr-bnd/gtd/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/alxndr-bnd/gtd/compare/v0.53.0...v0.54.0
