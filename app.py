@@ -712,6 +712,23 @@ def _parse_when(text: str, now: datetime):
     return _parse_at(text, now)[:2]
 
 
+DATE_MARKERS = {"к", "до", "на", "в", "с", "по", "by", "on", "until", "till"}
+
+
+def _date_marker_before(prefix: str) -> bool:
+    """Перед датой признак: начало текста или предлог и пробел («до 1.10»). Без регулярного выражения: «.*…\\s+»
+    на каждом кандидате даты — полиномиальный ReDoS (CodeQL py/polynomial-redos)."""
+    s = prefix.rstrip()
+    if not s:
+        return True
+    if s == prefix:
+        return False  # дата приклеена к слову без пробела
+    i = len(s)
+    while i and (s[i - 1].isalnum() or s[i - 1] == "_"):
+        i -= 1
+    return s[i:].lower() in DATE_MARKERS
+
+
 def _parse_at(text: str, now: datetime):
     """parse_when без срока «через N …»: (очищенный_текст, epoch|None, есть ли явная дата)."""
     found = False
@@ -764,8 +781,7 @@ def _parse_at(text: str, now: datetime):
                                          text)
                   if not (m.group(3) and len(m.group(3)) == 2 and VERSION_BEFORE.search(text[: m.start()]))
                   and (len(m.group(1)) == 2 or (m.group(3) and len(m.group(3)) == 4) or m.start() == timed_dm
-                       or re.fullmatch(r"(?s)\s*|.*\b(?:к|до|на|в|с|по|by|on|until|till)\s+", text[: m.start()],
-                                       re.I))),
+                       or _date_marker_before(text[: m.start()]))),
                  None)
         if m:
             try:
