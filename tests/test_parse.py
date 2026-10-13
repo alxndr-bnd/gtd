@@ -227,3 +227,53 @@ def test_duration_with_date_english(text, title, when):
 ])
 def test_duration_with_date_serbian(text, title, when):
     assert A.parse_when(text, NOW) == (title, when)
+
+
+# ── Дата внутри пути или ссылки — не срок (SERBITO-620) ──
+REPRO_620 = "SERBITO-443: подать заявку (факты в ~/claude-handoff/2026-10-14/443-outreach.md) 27.01.2027 10:00"
+
+
+@pytest.mark.parametrize("text, title, when", [
+    # Пример из тикета: дата в пути остаётся в заголовке, срок — явная дата в конце
+    (REPRO_620, "SERBITO-443: подать заявку (факты в ~/claude-handoff/2026-10-14/443-outreach.md)",
+     at(2027, 1, 27, 10, 0)),
+    # Ссылка с датой и явная дата рядом
+    ("прочитать https://example.com/2026/10/14/post завтра в 10:00",
+     "прочитать https://example.com/2026/10/14/post", at(2026, 9, 26, 10, 0)),
+    ("read https://example.com/2026/10/14/post tomorrow 10am",
+     "read https://example.com/2026/10/14/post", at(2026, 9, 26, 10, 0)),
+    ("read https://example.com/2026-10-14/post on 2026-10-24",
+     "read https://example.com/2026-10-14/post", at(2026, 10, 24, 9, 0)),
+    ("see https://example.com/news/24.10/12:00 24 oct 3pm",
+     "see https://example.com/news/24.10/12:00", at(2026, 10, 24, 15, 0)),
+    # Путь с датой и явная дата: две даты в одном тексте
+    ("проверить ~/logs/2026-10-14/run.txt 24.10 в 12:00", "проверить ~/logs/2026-10-14/run.txt",
+     at(2026, 10, 24, 12, 0)),
+    ("check /var/log/2026-10-14.log on friday", "check /var/log/2026-10-14.log", at(2026, 10, 2, 9, 0)),
+    (r"открыть C:\reports\2026-10-14\a.xlsx в пятницу", r"открыть C:\reports\2026-10-14\a.xlsx",
+     at(2026, 10, 2, 9, 0)),
+    ("отчёт 2026-10-24 (черновик в docs/2026-10-14/draft.md)", "отчёт (черновик в docs/2026-10-14/draft.md)",
+     at(2026, 10, 24, 9, 0)),
+])
+def test_date_in_path_or_url_is_not_due(text, title, when):
+    assert A.parse_when(text, NOW) == (title, when)
+
+
+@pytest.mark.parametrize("text", [
+    "прочитать https://example.com/2026/10/14/post",
+    "read https://example.com/2026-10-14/post",
+    "файл ~/claude-handoff/2026-10-14/443-outreach.md",
+    "see https://example.com/24.10/at/10:00",
+    "release build-2026-10-14 notes",
+    "версия v1.24.10 вышла",
+    "ticket id:2026-10-14 closed",
+])
+def test_only_path_date_gives_no_due(text):
+    assert A.parse_when(text, NOW) == (text, None)
+
+
+def test_capture_repro_620():
+    """Через parse_task — общий разбор приложения, бота и MCP."""
+    p = A.parse_task(0, REPRO_620)  # без #проекта база не нужна
+    assert p["title"] == "SERBITO-443: подать заявку (факты в ~/claude-handoff/2026-10-14/443-outreach.md)"
+    assert datetime.fromtimestamp(p["remind_at"], A.TZ).replace(tzinfo=None) == datetime(2027, 1, 27, 10, 0)

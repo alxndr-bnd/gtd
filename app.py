@@ -652,7 +652,32 @@ def _duration(n: int, unit: str) -> timedelta:
     return timedelta(weeks=n)
 
 
+# Путь или ссылка — слово с «/» или «\» («~/handoff/2026-10-14/a.md», «https://x.com/2026/10/14/post»,
+# «C:\logs\2026-10-14»). Даты и время внутри них — часть имени, не срок (SERBITO-620)
+PATH_TOKEN = re.compile(r"(?<!\S)(?=[^\s/\\]*[/\\])\S+")
+# Дата не продолжает другое слово: «v1.24.10», «build-2026-10-14», «id:2026-10-14», «2026-10-14-1» — не даты
+NOT_GLUED_L = r"(?<![\w.\-:])"
+NOT_GLUED_R = r"(?![.\-:]\d)"
+_MASK = "\ue000"  # символ частной области: не буква, не цифра — ни одно правило разбора его не задевает
+
+
 def parse_when(text: str, now: datetime):
+    """parse_when с путями и ссылками: они на время разбора заменены метками и возвращаются в текст как были."""
+    tokens: list[str] = []
+
+    def mask(m):
+        if len(tokens) >= 0x17FF:  # метки кончились (область U+E100…U+F8FF) — дальше слово как есть
+            return m.group(0)
+        tokens.append(m.group(0))
+        return _MASK + chr(0xE100 + len(tokens) - 1) + _MASK
+
+    rest, ts = _parse_when(PATH_TOKEN.sub(mask, text), now)
+    for i, t in enumerate(tokens):
+        rest = rest.replace(_MASK + chr(0xE100 + i) + _MASK, t)
+    return rest, ts
+
+
+def _parse_when(text: str, now: datetime):
     """Возвращает (очищенный_текст, epoch|None). Понимает рус/англ: «через 2 часа» / «in 2 hours»,
     «завтра в 10:00» / «tomorrow 10am», «в пятницу» / «on friday», «next monday», «24.10 12:00» / «24 oct 12:00»,
     «22 октября 10:00» / «22. oktobra u 10:00», «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow»,
@@ -710,7 +735,7 @@ def _parse_at(text: str, now: datetime):
         cut(tm)
 
     base, explicit_dm = None, False
-    m = re.search(ON + r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
+    m = re.search(ON + NOT_GLUED_L + r"\b(\d{4})-(\d{2})-(\d{2})\b" + NOT_GLUED_R, text)
     if m:
         try:
             base = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
@@ -719,7 +744,7 @@ def _parse_at(text: str, now: datetime):
             pass
     if base is None:
         # Месяц — две цифры, однозначный день — только с признаком даты (правило — в docstring)
-        m = next((m for m in re.finditer(r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b", text)
+        m = next((m for m in re.finditer(NOT_GLUED_L + r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b" + NOT_GLUED_R, text)
                   if len(m.group(1)) == 2 or m.group(3) or m.start() == timed_dm
                   or re.fullmatch(r"(?s)\s*|.*\b(?:к|до|на|в|с|по|by|on|until|till)\s+", text[: m.start()], re.I)),
                  None)
