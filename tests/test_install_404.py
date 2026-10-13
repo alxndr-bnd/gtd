@@ -16,7 +16,7 @@ def test_manifest(client, accept_language, lang):
     assert r.status_code == 200 and r.headers["content-type"] == "application/manifest+json"
     assert r.headers["vary"] == "Accept-Language"
     m = json.loads(r.content.decode("utf-8"))
-    assert m["name"] == m["short_name"] == "GTD" and m["description"] == P.MANIFEST_DESC[lang] and m["lang"] == lang
+    assert m["name"] == m["short_name"] == "Serbito GTD" and m["description"] == P.MANIFEST_DESC[lang] and m["lang"] == lang
     assert (m["start_url"], m["scope"], m["display"]) == ("/", "/", "standalone")
     assert m["background_color"] == "#f6f7f9" and m["theme_color"] == P.BRAND == "#0F766E"
     icons = {i["src"]: (i["sizes"], i["purpose"]) for i in m["icons"]}
@@ -36,7 +36,7 @@ def test_manifest_and_ios_meta_on_every_page(client, login):
         assert '<meta name="apple-mobile-web-app-capable" content="yes">' in h
         assert '<meta name="mobile-web-app-capable" content="yes">' in h
         assert '<meta name="apple-mobile-web-app-status-bar-style" content="default">' in h
-        assert '<meta name="apple-mobile-web-app-title" content="GTD">' in h
+        assert '<meta name="apple-mobile-web-app-title" content="Serbito GTD">' in h
 
 
 def test_about_install_section_last(client):

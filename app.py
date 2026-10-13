@@ -104,7 +104,7 @@ SMTP_HOST = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-EMAIL_FROM = os.getenv("EMAIL_FROM", '"GTD" <info@serbito.rs>')
+EMAIL_FROM = os.getenv("EMAIL_FROM", '"Serbito GTD" <info@serbito.rs>')
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 # Google Analytics 4: поток данных для gtd.serbito.rs. Пусто — GA не подключается
 GA_ID = os.getenv("GA_MEASUREMENT_ID", "")
@@ -430,7 +430,7 @@ TEXTS = {
                 "/login — ссылка для входа в веб-интерфейс\n"
                 "/email you@example.com — привязать почту: входить на сайте по коду или через Google\n"
                 "/about — что такое GTD",
-        "ready": "GTD-бот готов.\n\n",
+        "ready": "Бот Serbito GTD готов.\n\n",
         "start": "Пришли любую мысль — она попадёт в Inbox, а разберёшь потом.\n\n"
                  "• «позвонить маме завтра в 10:00» → напомню\n"
                  "• «отчёт #Работа @комп» → сразу в проект и контекст\n\n"
@@ -456,8 +456,8 @@ TEXTS = {
         "archive_ok": "🗄 Проект #{p} в архиве. Вернуть его можно на сайте: Projects → Архив",
         "archive_later": "Хорошо, проект #{p} остаётся в Projects",
         "tg_link_stale": "Ссылка устарела — нажми кнопку на сайте ещё раз",
-        "tg_confirm_link": "привязать этот Telegram к аккаунту GTD {who}",
-        "tg_confirm_login": "войти в GTD в браузере",
+        "tg_confirm_link": "привязать этот Telegram к аккаунту Serbito GTD {who}",
+        "tg_confirm_login": "войти в Serbito GTD в браузере",
         "tg_confirm": "Подтвердить: {what}?\n\nЗапрос из браузера: {device}, IP {ip}.{merge}\n\nНажми число, которое "
                       "показано на сайте. Если ты сам сейчас не нажимал кнопку на сайте — ничего не нажимай: "
                       "это чужая попытка войти в твой аккаунт.",
@@ -506,8 +506,8 @@ TEXTS = {
         "token_name": "Дай токену название — например, «Claude на ноутбуке»",
         "tokens_max": "Токенов уже {n} — отзови ненужный, чтобы создать новый",
         # Письмо с кодом
-        "mail_subject": "Код входа в GTD: {code}",
-        "mail_body": "Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.",
+        "mail_subject": "Код входа в Serbito GTD: {code}",
+        "mail_body": "Код входа в Serbito GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.",
     },
     "en": {
         "help": "Just send me a thought — it lands in your Inbox.\n\n"
@@ -520,7 +520,7 @@ TEXTS = {
                 "/login — a sign-in link for the website\n"
                 "/email you@example.com — link an email to sign in on the site with a code or Google\n"
                 "/about — what GTD is",
-        "ready": "The GTD bot is ready.\n\n",
+        "ready": "The Serbito GTD bot is ready.\n\n",
         "start": "Send me any thought — it lands in your Inbox, and you sort it out later.\n\n"
                  "• “call mom tomorrow at 10:00” → I'll remind you\n"
                  "• “report #Work @computer” → straight into a project and a context\n\n"
@@ -548,8 +548,8 @@ TEXTS = {
         "archive_ok": "🗄 Project #{p} is archived. To restore it, open Projects → Archive on the website",
         "archive_later": "OK, project #{p} stays in Projects",
         "tg_link_stale": "This link has expired — press the button on the website again",
-        "tg_confirm_link": "link this Telegram to the GTD account {who}",
-        "tg_confirm_login": "sign in to GTD in your browser",
+        "tg_confirm_link": "link this Telegram to the Serbito GTD account {who}",
+        "tg_confirm_login": "sign in to Serbito GTD in your browser",
         "tg_confirm": "Confirm: {what}?\n\nRequested from: {device}, IP {ip}.{merge}\n\nTap the number shown on the "
                       "website. If you didn't just press the button on the website yourself, don't tap anything: "
                       "someone else is trying to get into your account.",
@@ -596,8 +596,8 @@ TEXTS = {
         "task_missing": "Task not found",
         "token_name": "Give the token a name — for example, “Claude on my laptop”",
         "tokens_max": "You already have {n} tokens — revoke one you don't use to create a new one",
-        "mail_subject": "Your GTD sign-in code: {code}",
-        "mail_body": "Your GTD sign-in code: {code}\n\nIt's valid for 10 minutes. If you didn't try to sign in, "
+        "mail_subject": "Your Serbito GTD sign-in code: {code}",
+        "mail_body": "Your Serbito GTD sign-in code: {code}\n\nIt's valid for 10 minutes. If you didn't try to sign in, "
                      "just ignore this email.",
     },
 }
@@ -944,16 +944,16 @@ def tg_known(frm: dict):
 # Язык текста → (описание ≤512, короткое ≤120). Telegram показывает вариант по language_code клиента, а ""
 # — всем прочим; поэтому "" — английский, а языки, которым по правилу pages.lang_of положен русский, — явно
 BOT_PROFILE = {
-    "ru": ("GTD-бот для задач и списка дел (todo). Пиши мысль обычным сообщением — она попадёт в Inbox. "
+    "ru": ("Serbito GTD — бот для задач и списка дел (todo). Пиши мысль обычным сообщением — она попадёт в Inbox. "
            "Бот понимает сроки и напоминает: «позвонить маме завтра в 10:00». #Проект и @контекст — сразу в Next, "
            "контекстов может быть несколько. Команды: /inbox, /next, /done 12. По методу GTD (Getting Things Done) "
            "Дэвида Аллена. Один аккаунт с сайтом gtd.serbito.rs. Бесплатно.",
-           "GTD: задачи и список дел (todo) в Telegram — Inbox, напоминания, проекты. Сайт: gtd.serbito.rs"),
-    "en": ("GTD bot for tasks and your to-do list. Send a thought as a plain message, and it lands in your Inbox. "
+           "Serbito GTD: задачи и список дел (todo) в Telegram — Inbox, напоминания, проекты. Сайт: gtd.serbito.rs"),
+    "en": ("Serbito GTD bot for tasks and your to-do list. Send a thought as a plain message, and it lands in your Inbox. "
            "The bot understands dates and sends reminders: “call mom tomorrow at 10am”. Add #Project and @context to "
            "go straight to Next; a task can have several contexts. Commands: /inbox, /next, /done 12. Built on David "
            "Allen's GTD (Getting Things Done) method. One account with the website gtd.serbito.rs. Free.",
-           "GTD tasks and to-do list in Telegram: Inbox, reminders, projects. Website: gtd.serbito.rs"),
+           "Serbito GTD: tasks and to-do list in Telegram — Inbox, reminders, projects. Website: gtd.serbito.rs"),
 }
 # Имя бота с поисковыми словами (SERBITO-422): поиск в Telegram ранжирует по имени и username. Глобальный
 # поиск видит только имя по умолчанию (""), а это "en" — поэтому в нём и русские слова
@@ -3263,7 +3263,7 @@ def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLR
     page = spa_shell()[0].replace("<!--GA-->", ga_snippet(request)).replace("<!--ICONS-->", pages.ICONS)
     page = page.replace('<html lang="ru">', f'<html lang="{lang}">')  # SPA потом поставит язык интерфейса
     if landing:
-        page = (page.replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
+        page = (page.replace("<title>Serbito GTD</title>", pages.head(BASE_URL, lang, "home"))
                 .replace("<!--LANDING-->", pages.landing(lang, consent=bool(GA_ID), signin=signin_methods(), dev=DEV)))
     return HTMLResponse(page)
 

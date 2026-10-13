@@ -8,7 +8,7 @@ Jira: SERBITO-297 (Closed — gtd v0.14.0) · tracked by SERBITO-261 · listing 
 
 | Field | Value |
 |---|---|
-| Name | GTD |
+| Name | Serbito GTD (renamed from GTD, SERBITO-447) |
 | Website | https://gtd.serbito.rs/en/ |
 | Tagline | Free, open-source GTD task manager on the web and in Telegram |
 | Icon | `docs/listing/alternativeto-icon-280.png` (280×280, transparent) |
@@ -21,7 +21,7 @@ Jira: SERBITO-297 (Closed — gtd v0.14.0) · tracked by SERBITO-261 · listing 
 
 ## Description
 
-GTD is a free task manager built around David Allen's Getting Things Done method. Capture anything in a second, on the website or by sending a message to the Telegram bot, and clarify it later.
+Serbito GTD is a free task manager built around David Allen's Getting Things Done method. Capture anything in a second, on the website or by sending a message to the Telegram bot, and clarify it later.
 
 Tasks land in the Inbox. From there you move them to Next actions (filtered by @context), Waiting for, Calendar/reminders, Projects, Someday/maybe or Reference, and a Weekly Review page shows stalled projects and old waiting items. Quick capture understands natural dates, projects and contexts: "call mom tomorrow at 10am #Family @phone" becomes a task with a reminder, a project and a context.
 

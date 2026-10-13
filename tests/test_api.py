@@ -285,7 +285,7 @@ def test_item_link_by_number(new_client, login):
     assert bob.get(f"/api/items/n/{it['num']}").status_code == 404  # у Боба своя #1 не существует
     assert new_client().get(f"/api/items/n/{it['num']}").status_code == 401
     page = new_client().get(f"/i/{it['num']}")  # страницу отдаём всем, данные — только владельцу
-    assert page.status_code == 200 and "<title>GTD</title>" in page.text
+    assert page.status_code == 200 and "<title>Serbito GTD</title>" in page.text
 
 
 def test_merge_renumbers_moved_tasks(new_client, login, mail):
