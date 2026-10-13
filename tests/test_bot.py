@@ -236,8 +236,12 @@ def test_bot_profile_texts_fit_telegram_limits():
     for desc, short in A.BOT_PROFILE.values():
         assert 0 < len(desc) <= 512 and 0 < len(short) <= 120 and "gtd.serbito.rs" in short
     assert A.BOT_PROFILE["ru"][0].startswith("Serbito GTD — бот для задач")
-    # имя с поисковыми словами (SERBITO-422), лимит Telegram — 64 символа
-    assert set(A.BOT_NAMES) == {"ru", "en"} and all("GTD" in n and 0 < len(n) <= 64 for n in A.BOT_NAMES.values())
+    # имя с поисковыми словами (SERBITO-422, 447) по language_code, лимит Telegram — 64 символа.
+    # По умолчанию ("") и ru/uk/be/sr — русское, "en" — английское
+    assert set(A.BOT_NAMES) == {"", "en", *A.RU_LANGS}
+    assert all(n.startswith("Serbito GTD — ") and len(n) <= 64 for n in A.BOT_NAMES.values())
+    assert A.BOT_NAMES[""] == A.BOT_NAMES["ru"] == A.BOT_NAMES["sr"] == "Serbito GTD — задачи, список дел"
+    assert A.BOT_NAMES["en"] == "Serbito GTD — Tasks & Todo"
     # меню команд на обоих языках — одни и те же команды, описания в пределах лимита Telegram
     ru, en = ([c["command"] for c in A.BOT_COMMANDS[lg]] for lg in ("ru", "en"))
     assert ru == en and "about" in ru
@@ -415,7 +419,7 @@ def current_profile():
     return {"getMe": {"username": "gtdsrbot"}, "getMyCommands": lambda p: A.BOT_COMMANDS[lang(p)],
             "getMyDescription": lambda p: {"description": A.BOT_PROFILE[lang(p)][0]},
             "getMyShortDescription": lambda p: {"short_description": A.BOT_PROFILE[lang(p)][1]},
-            "getMyName": lambda p: {"name": A.BOT_NAMES[lang(p)]}}
+            "getMyName": lambda p: {"name": A.BOT_NAMES[p["language_code"]]}}
 
 
 def profile_tg(monkeypatch, answers):
@@ -438,8 +442,9 @@ def test_bot_setup_sets_profile_when_it_differs(monkeypatch):
         assert ("setMyCommands", {"commands": A.BOT_COMMANDS[lang], "language_code": code}) in sets
         assert ("setMyDescription", {"description": desc, "language_code": code}) in sets
         assert ("setMyShortDescription", {"short_description": short, "language_code": code}) in sets
-        assert ("setMyName", {"name": A.BOT_NAMES[lang], "language_code": code}) in sets
-    assert len(sets) == 4 * len(A.PROFILE_CODES)
+    for code, name in A.BOT_NAMES.items():
+        assert ("setMyName", {"name": name, "language_code": code}) in sets
+    assert len(sets) == 3 * len(A.PROFILE_CODES) + len(A.BOT_NAMES)
     assert ("setMyCommands", {"commands": A.BOT_COMMANDS["en"], "language_code": ""}) in sets  # всем прочим — английское
 
 
@@ -509,4 +514,29 @@ def test_bot_setup_garbage_answers(monkeypatch):
     calls = profile_tg(monkeypatch, {"getMe": None, "getMyCommands": None, "getMyDescription": "??",
                                      "getMyShortDescription": [1], "getMyName": 7})
     asyncio.run(A.bot_setup())  # непонятный ответ — считаем, что текста нет, и ставим заново
-    assert A.BOT_USERNAME == "" and len(profile_sets(calls)) == 4 * len(A.PROFILE_CODES)
+    assert A.BOT_USERNAME == "" and len(profile_sets(calls)) == 3 * len(A.PROFILE_CODES) + len(A.BOT_NAMES)
+
+
+def test_bot_setup_survives_set_my_name_rate_limit(monkeypatch, caplog):
+    """setMyName Telegram ограничивает строго: 429 — только запись в лог, остальной профиль и вебхук ставятся."""
+    calls = []
+
+    class Api:  # настоящий tg(), Telegram отвечает 429 на смену имени
+        async def post(self, url, json=None, **kw):
+            method = url.rsplit("/", 1)[1]
+            calls.append(method)
+
+            class R:
+                @staticmethod
+                def json():
+                    if method == "setMyName":
+                        return {"ok": False, "error_code": 429, "description": "Too Many Requests: retry after 600",
+                                "parameters": {"retry_after": 600}}
+                    return {"ok": True, "result": {"name": "GTD"} if method == "getMyName" else True}
+            return R()
+    monkeypatch.setattr(A, "_client", Api())
+    monkeypatch.setattr(A, "TOKEN", "test-token")
+    monkeypatch.setattr(A, "WEBHOOK", True)
+    asyncio.run(A.bot_setup())  # не падает
+    assert calls.count("setMyName") == len(A.BOT_NAMES) and "setWebhook" in calls and "setMyDescription" in calls
+    assert "tg setMyName" in caplog.text and "429" in caplog.text and "test-token" not in caplog.text

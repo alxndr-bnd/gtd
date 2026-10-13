@@ -955,9 +955,11 @@ BOT_PROFILE = {
            "Allen's GTD (Getting Things Done) method. One account with the website gtd.serbito.rs. Free.",
            "Serbito GTD: tasks and to-do list in Telegram — Inbox, reminders, projects. Website: gtd.serbito.rs"),
 }
-# Имя бота с поисковыми словами (SERBITO-422): поиск в Telegram ранжирует по имени и username. Глобальный
-# поиск видит только имя по умолчанию (""), а это "en" — поэтому в нём и русские слова
-BOT_NAMES = {"ru": "GTD — задачи и Inbox", "en": "GTD — Tasks & Todo · задачи, список дел"}
+# Имя бота с поисковыми словами (SERBITO-422, 447) — по language_code, а не по языку текста, как профиль выше:
+# глобальный поиск Telegram видит только имя по умолчанию (""), и по решению владельца (2026-10-14) оно русское.
+# Английское — только клиентам с language_code "en"; ru/uk/be/sr — русское, как и их описание
+BOT_NAME_RU, BOT_NAME_EN = "Serbito GTD — задачи, список дел", "Serbito GTD — Tasks & Todo"
+BOT_NAMES = {"": BOT_NAME_RU, "en": BOT_NAME_EN, **dict.fromkeys(pages.RU_LANGS, BOT_NAME_RU)}
 BOT_COMMANDS = {
     "ru": [{"command": "inbox", "description": "Что в Inbox"}, {"command": "next", "description": "Что в Next"},
            {"command": "done", "description": "Закрыть задачу: /done 12"},
@@ -1373,10 +1375,10 @@ async def bot_profile():
     Холодных стартов много (Cloud Run спит без трафика), поэтому сначала читаем текущее — параллельно,
     по каждому language_code из PROFILE_CODES, — и ставим только то, что разошлось. Не прочиталось (None) —
     просто ставим: вызовы идемпотентны."""
-    codes, n = PROFILE_CODES, len(PROFILE_CODES)
+    codes, n, names = PROFILE_CODES, len(PROFILE_CODES), list(BOT_NAMES)
     cur = await asyncio.gather(*(tg(m, language_code=c) for m in ("getMyCommands", "getMyDescription",
-                                                                   "getMyShortDescription", "getMyName")
-                                 for c in codes))
+                                                                   "getMyShortDescription") for c in codes),
+                               *(tg("getMyName", language_code=c) for c in names))
     sets = []
     for i, code in enumerate(codes):
         lang = profile_lang(code)
@@ -1387,8 +1389,11 @@ async def bot_profile():
             sets.append(tg("setMyDescription", description=desc, language_code=code))
         if _field(cur[2 * n + i], "short_description") != short:
             sets.append(tg("setMyShortDescription", short_description=short, language_code=code))
-        if _field(cur[3 * n + i], "name") != BOT_NAMES[lang]:
-            sets.append(tg("setMyName", name=BOT_NAMES[lang], language_code=code))
+    # setMyName Telegram ограничивает строже прочих (429 с retry_after): tg() пишет отказ в лог и не падает,
+    # а несовпавшее имя поставит следующий холодный старт — ставим только разошедшиеся
+    for i, code in enumerate(names):
+        if _field(cur[3 * n + i], "name") != BOT_NAMES[code]:
+            sets.append(tg("setMyName", name=BOT_NAMES[code], language_code=code))
     await asyncio.gather(*sets)
 
 

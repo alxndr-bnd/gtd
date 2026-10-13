@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- The Telegram bot now has the name Serbito GTD too: "Serbito GTD — Tasks & Todo" in English, and the same name with Russian words in other languages.
+  - RU: У бота в Telegram теперь тоже имя Serbito GTD: «Serbito GTD — задачи, список дел» по-русски и на других языках, «Serbito GTD — Tasks & Todo» по-английски.
+
 ## [0.56.0] - 2026-10-13
 
 ### Changed
