@@ -654,7 +654,13 @@ def _duration(n: int, unit: str) -> timedelta:
 
 # Путь или ссылка — слово с «/» или «\» («~/handoff/2026-10-14/a.md», «https://x.com/2026/10/14/post»,
 # «C:\logs\2026-10-14»). Даты и время внутри них — часть имени, не срок (SERBITO-620)
-PATH_TOKEN = re.compile(r"(?<!\S)(?=[^\s/\\]*[/\\])\S+")
+# Диапазон времени через «/» («10:00/11:00») — не путь: срок по первому времени, как до v0.58.0 (SERBITO-621)
+PATH_TOKEN = re.compile(r"(?<!\S)(?!\d{1,2}:\d{2}/\d{1,2}:\d{2}(?![^\s,.;:!?)]))(?=[^\s/\\]*[/\\])\S+")
+# Диапазон времени: «10:00-11:00», «10:00 – 11:00», «10:00/11:00». Срок — по началу; диапазон остаётся в тексте,
+# чтобы не потерять время конца (SERBITO-621)
+TIME_RANGE = r"(?:\b(?:в|с|at|from|u|у|od)\s+)?\b(\d{1,2}):(\d{2})\s*[-–—/]\s*\d{1,2}:\d{2}\b"
+# Перед датой с двузначным годом — номер версии: «версия 1.10.26», «ver 12.10.26» — не дата (SERBITO-621)
+VERSION_BEFORE = re.compile(r"\b(?:v|ver|version|верси[яиюей]|вер)\.?\s*$", re.I)
 # Дата не продолжает другое слово: «v1.24.10», «build-2026-10-14», «id:2026-10-14», «2026-10-14-1» — не даты
 NOT_GLUED_L = r"(?<![\w.\-:])"
 NOT_GLUED_R = r"(?![.\-:]\d)"
@@ -690,7 +696,12 @@ def _parse_when(text: str, now: datetime):
     («5.10.2026») — всегда дата. С однозначным днём («1.10») — только если рядом признак даты: начало
     текста («1.02 оплата»), предлог перед ней («к», «до», «на», «в», «с», «по», «by», «on», «until»,
     «till») или время сразу после («1.10 12:00», «1.10 в 12:00»). Иначе это число: «версия 1.05»,
-    «курс 1.10» напоминаний не ставят."""
+    «курс 1.10» напоминаний не ставят.
+
+    Год из двух цифр — 20yy: «24.10.26» — 24 октября 2026, токен уходит из текста целиком. Однозначный день
+    с таким годом — по тому же правилу признака, что и без года; после «v», «ver», «version», «версия» это номер
+    версии, не дата (SERBITO-621). Диапазон времени «10:00-11:00» / «10:00/11:00» — срок по началу,
+    диапазон остаётся в тексте."""
     m = re.search(r"\b(?:через|in)\s+(\d+)\s*" + DUR_UNITS + r"\b", text, re.I)
     if m:
         rest, ts, calendar = _parse_at(text, now)
@@ -725,14 +736,19 @@ def _parse_at(text: str, now: datetime):
     m = re.search(r"(?:\bat\s+)?\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?", text, re.I)
     if m and 1 <= int(m.group(1)) <= 12 and int(m.group(2) or 0) < 60:
         hm, tm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0)), m
+    span = False  # диапазон «10:00-11:00»: срок по началу, сам диапазон остаётся в тексте
+    m = None if hm else re.search(TIME_RANGE, text, re.I)
+    if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
+        hm, tm, span = (int(m.group(1)), int(m.group(2))), m, True
     m = None if hm else re.search(r"(?:\b(?:в|at|к|u|у)\s+)?\b(\d{1,2}):(\d{2})\b", text, re.I)
     if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
         hm, tm = (int(m.group(1)), int(m.group(2))), m
     timed_dm = None  # позиция «1.10» прямо перед временем: текст до вырезанного времени не сдвигается
     if tm:
-        p = re.search(r"\b\d\.\d{2}\s+$", text[: tm.start()])
+        p = re.search(r"\b\d\.\d{2}(?:\.\d{2})?\s+$", text[: tm.start()])
         timed_dm = p and p.start()
-        cut(tm)
+        if not span:
+            cut(tm)
 
     base, explicit_dm = None, False
     m = re.search(ON + NOT_GLUED_L + r"\b(\d{4})-(\d{2})-(\d{2})\b" + NOT_GLUED_R, text)
@@ -744,13 +760,16 @@ def _parse_at(text: str, now: datetime):
             pass
     if base is None:
         # Месяц — две цифры, однозначный день — только с признаком даты (правило — в docstring)
-        m = next((m for m in re.finditer(NOT_GLUED_L + r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b" + NOT_GLUED_R, text)
-                  if len(m.group(1)) == 2 or m.group(3) or m.start() == timed_dm
-                  or re.fullmatch(r"(?s)\s*|.*\b(?:к|до|на|в|с|по|by|on|until|till)\s+", text[: m.start()], re.I)),
+        m = next((m for m in re.finditer(NOT_GLUED_L + r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}|\d{2}))?\b" + NOT_GLUED_R,
+                                         text)
+                  if not (m.group(3) and len(m.group(3)) == 2 and VERSION_BEFORE.search(text[: m.start()]))
+                  and (len(m.group(1)) == 2 or (m.group(3) and len(m.group(3)) == 4) or m.start() == timed_dm
+                       or re.fullmatch(r"(?s)\s*|.*\b(?:к|до|на|в|с|по|by|on|until|till)\s+", text[: m.start()],
+                                       re.I))),
                  None)
         if m:
             try:
-                y = int(m.group(3)) if m.group(3) else now.year
+                y = (2000 + int(m.group(3)) if len(m.group(3)) == 2 else int(m.group(3))) if m.group(3) else now.year
                 base = date(y, int(m.group(2)), int(m.group(1)))
                 explicit_dm = not m.group(3)
                 cut_date(m)
