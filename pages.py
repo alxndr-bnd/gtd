@@ -23,7 +23,8 @@ SELF_HOST_URL = REPO_URL + "/blob/main/docs/self-host.md"
 ALTERNATIVETO_URL = "https://alternativeto.net/software/gtd/"
 # Контактная почта в подвале. Пусто — строки нет: владелец ещё не выбрал адрес
 CONTACT_EMAIL = ""
-SITE_NAME = "GTD"
+SITE_NAME = "Serbito GTD"  # имя продукта (SERBITO-447); «GTD» — метод и alternateName
+ALT_NAME = "GTD"
 BRAND = "#0F766E"  # бирюзовый из логотипа «Входящие»; он же --ac светлой темы в index.html
 
 # Знак: лоток «Входящие» с галочкой. Один источник для шапки, favicon и иконок (scripts/icons.py)
@@ -92,15 +93,15 @@ def product_href(name: str, url: str) -> str:
 
 T = {
     "ru": {
-        "home_title": "GTD онлайн бесплатно — Getting Things Done приложение и Telegram-бот",
+        "home_title": "GTD онлайн бесплатно — Getting Things Done приложение и Telegram-бот — Serbito GTD",
         # Описания — не длиннее 155 знаков: длиннее Google обрезает (SERBITO-442, SERBITO-470)
         "home_desc": "Бесплатное GTD-приложение с открытым кодом: задачи через Telegram-бот, Inbox, проекты, "
                      "@контексты и Weekly Review. На сайте и в Telegram.",
-        "about_title": "Как работает GTD: 5 шагов метода Getting Things Done — GTD онлайн",
-        "about_desc": "Что такое GTD и приложение GTD: пять шагов метода Дэвида Аллена, где они в приложении, "
+        "about_title": "Как работает GTD: 5 шагов метода Getting Things Done — Serbito GTD",
+        "about_desc": "Что такое GTD и приложение Serbito GTD: пять шагов метода Дэвида Аллена, где они в приложении, "
                       "Telegram-бот и быстрый захват. Бесплатно, код открыт.",
-        "og_alt": "GTD — Записал → Разобрал → Сделал. Бесплатно, на сайте и в Telegram",
-        "locale": "ru_RU", "how": "Как это работает", "other_lang": "English", "open": "Открыть GTD",
+        "og_alt": "Serbito GTD — Записал → Разобрал → Сделал. Бесплатно, на сайте и в Telegram",
+        "locale": "ru_RU", "how": "Как это работает", "other_lang": "English", "open": "Открыть",
         "other": "Другие проекты", "made": "Сделано",
         "oss": "Открытый код (MIT)", "oss_note": "Бесплатно и с открытым кодом (MIT)",
         "reviews": "Отзывы на AlternativeTo",
@@ -108,14 +109,15 @@ T = {
               "Сервис независимый и не связан с автором метода.",
     },
     "en": {
-        "home_title": "GTD online for free — Getting Things Done app and Telegram bot",
+        "home_title": "GTD online for free — Getting Things Done app and Telegram bot — Serbito GTD",
         "home_desc": "Free, open-source GTD app with a Telegram bot: send tasks as messages, clear your Inbox, track "
                      "projects and contexts, do a weekly review.",
-        "about_title": "How GTD works: the 5 steps of Getting Things Done — GTD online",
-        "about_desc": "What GTD is and how the GTD app works: David Allen's five steps, where each one lives in the app, "
+        "about_title": "How GTD works: the 5 steps of Getting Things Done — Serbito GTD",
+        "about_desc": "What GTD is and how the Serbito GTD app works: David Allen's five steps, where each one lives in "
+                      "the app, "
                       "the Telegram bot. Free and open source.",
-        "og_alt": "GTD — Capture → Clarify → Do. Free, on the web and in Telegram",
-        "locale": "en_US", "how": "How it works", "other_lang": "Русский", "open": "Open GTD",
+        "og_alt": "Serbito GTD — Capture → Clarify → Do. Free, on the web and in Telegram",
+        "locale": "en_US", "how": "How it works", "other_lang": "Русский", "open": "Open the app",
         "other": "Other projects", "made": "Made by",
         "oss": "Open source (MIT)", "oss_note": "Free and open source (MIT)",
         "reviews": "Reviews on AlternativeTo",
@@ -180,7 +182,9 @@ PUBLIC_CSS = """<style>
 /* Телефон (SERBITO-520): плотнее шапка, зазор колонок и h1 — кнопка Telegram над баннером cookie, даже если
    h1 из SERBITO-442 в широком шрифте (DejaVu/Verdana) занимает четыре строки */
 @media(max-width:700px){.pub .top{margin-bottom:16px}.pub .intro{grid-template-columns:minmax(0,1fr);gap:20px}
-  .pub h1{font-size:24px;line-height:1.15}}
+  .pub h1{font-size:24px;line-height:1.15}
+  /* Имя «Serbito GTD» (SERBITO-447) — одной строкой: шапка из трёх ссылок влезает в 390 px и в широком шрифте */
+  .pub .top{gap:12px}.pub .top .brand{font-size:16px;white-space:nowrap}}
 /* Читается и нажимается на телефоне (SERBITO-448). Текст — не мельче 14 px (подпись, «или» и сообщения блока входа
    в приложении — 13 px), серый --mut — контраст от 7:1. Ссылки шапки, строк под текстом и подвала — зона нажатия
    не меньше 44×44 px: поля внутри ссылки и такие же отрицательные снаружи, поэтому строки не раздвигаются */
@@ -219,11 +223,11 @@ if(location.hostname==='gtd.serbito.rs'){
 CONSENT_KEY = "gtd-consent"
 CONSENT_DAYS = 365
 CONSENT = {
-    "ru": {"text": "GTD использует cookie Google Analytics, чтобы понимать, какие разделы полезны, — "
+    "ru": {"text": "Serbito GTD использует cookie Google Analytics, чтобы понимать, какие разделы полезны, — "
                    "без текста задач.",
            "short": "Cookie Google Analytics — без текста задач",
            "more": "Подробнее", "yes": "Принять", "no": "Отклонить", "label": "Cookie", "settings": "Настройки cookie"},
-    "en": {"text": "GTD uses Google Analytics cookies to learn which sections are useful — never your task text.",
+    "en": {"text": "Serbito GTD uses Google Analytics cookies to learn which sections are useful — never your task text.",
            "short": "Google Analytics cookies, never your task text",
            "more": "Details", "yes": "Accept", "no": "Decline", "label": "Cookies", "settings": "Cookie settings"},
 }
@@ -367,7 +371,7 @@ def structured_data(base: str, lang: str, page: str, img: str) -> dict:
     t, me, home = T[lang], url(base, lang, page), url(base, "ru", "home")
     org, site, app = home + "#org", home + "#website", home + "#app"
     application = {
-        "@type": "WebApplication", "@id": app, "name": SITE_NAME, "url": home, "description": t["home_desc"],
+        "@type": "WebApplication", "@id": app, "name": SITE_NAME, "alternateName": ALT_NAME, "url": home, "description": t["home_desc"],
         "applicationCategory": "ProductivityApplication", "operatingSystem": "Web, Telegram", "inLanguage": list(LANGS),
         "isAccessibleForFree": True, "license": "https://opensource.org/licenses/MIT", "image": img,
         "author": {"@id": org}, "publisher": {"@id": org},
@@ -387,7 +391,7 @@ def structured_data(base: str, lang: str, page: str, img: str) -> dict:
     graph = [
         {"@type": "Organization", "@id": org, "name": "No Handoff", "url": NOHANDOFF_URL,
          "sameAs": [NOHANDOFF_URL, REPO_URL.rsplit("/", 1)[0]]},
-        {"@type": "WebSite", "@id": site, "url": home, "name": SITE_NAME, "inLanguage": list(LANGS),
+        {"@type": "WebSite", "@id": site, "url": home, "name": SITE_NAME, "alternateName": ALT_NAME, "inLanguage": list(LANGS),
          "publisher": {"@id": org}},
         application, source, webpage]
     if page != "home":
@@ -547,12 +551,12 @@ def landing(lang: str, consent: bool = False, signin: list[str] = (), dev: bool 
 
 ABOUT = {
     "ru": """<h1>Как работает GTD</h1>
-<p class="lead">GTD — бесплатное приложение для тех, кто ведёт дела по методу Getting Things Done: сайт
+<p class="lead">Serbito GTD — бесплатное приложение для тех, кто ведёт дела по методу Getting Things Done: сайт
 и Telegram-бот @gtdsrbot с одним аккаунтом. Записываешь задачу в один тап, потом разбираешь Inbox и делаешь
 следующие шаги. Платных тарифов и рекламы нет, код открыт (MIT).</p>
 <p class="note">{updated}</p>
-<h2>Что такое приложение GTD?</h2>
-<p>GTD — бесплатный менеджер задач по методу Getting Things Done Дэвида Аллена. Он работает в браузере на компьютере
+<h2>Что такое приложение Serbito GTD?</h2>
+<p>Serbito GTD — бесплатный менеджер задач по методу Getting Things Done Дэвида Аллена. Он работает в браузере на компьютере
 и на телефоне, а ещё в Telegram: бот @gtdsrbot принимает задачи обычными сообщениями и присылает напоминания. Сайт
 и бот — один аккаунт. Войти можно через Google, по коду из письма или через Telegram, пароль не нужен. В приложении
 есть все списки метода: Inbox, Next, Waiting, Projects, Someday, Reference и календарь напоминаний. У задачи может
@@ -608,7 +612,7 @@ AI-ассистентов есть MCP-сервер: они умеют запи�
 она видна в Next и под @телефон, и под @комп.</li>
 <li>Сроки понимаются и так: <q>через 2 часа</q>, <q>в пятницу</q>, <q>24.10 12:00</q>.</li>
 </ul>
-<h2>Есть ли у GTD Telegram-бот?</h2>
+<h2>Есть ли у Serbito GTD Telegram-бот?</h2>
 <p>Да. <a href="https://t.me/gtdsrbot">@gtdsrbot</a> принимает задачи обычными сообщениями — с тем же синтаксисом —
 и присылает напоминания с кнопками ✅ Готово, 💤 +1ч и ⏭ Next. Бот и сайт — один аккаунт: войди на сайте
 через Telegram или привяжи бота в «Аккаунте». Все примеры, команды и подключение Claude —
@@ -623,14 +627,14 @@ AI-ассистентов есть MCP-сервер: они умеют запи�
 <li><kbd>↑</kbd> <kbd>↓</kbd> — по задачам, <kbd>Enter</kbd> — открыть задачу</li>
 <li><kbd>←</kbd> — в меню, <kbd>→</kbd> — обратно к задачам, <kbd>Esc</kbd> — сбросить выбор</li>
 </ul>
-<p><a class="btn" href="/">Открыть GTD</a></p>""",
+<p><a class="btn" href="/">Открыть Serbito GTD</a></p>""",
     "en": """<h1>How GTD works</h1>
-<p class="lead">GTD is a free app for people who run their tasks with the Getting Things Done method: a website
+<p class="lead">Serbito GTD is a free app for people who run their tasks with the Getting Things Done method: a website
 and the Telegram bot @gtdsrbot with one account. Capture a task in one tap, then clear the Inbox and do the next
 steps. No paid plans, no ads, and the code is open source (MIT).</p>
 <p class="note">{updated}</p>
-<h2>What is the GTD app?</h2>
-<p>GTD is a free task manager built on David Allen's Getting Things Done method. It runs in the browser on your
+<h2>What is the Serbito GTD app?</h2>
+<p>Serbito GTD is a free task manager built on David Allen's Getting Things Done method. It runs in the browser on your
 computer and phone, and in Telegram: the bot @gtdsrbot takes tasks as plain messages and sends reminders. The website
 and the bot share one account. You sign in with Google, with a code from an email, or with Telegram. The app has all the lists of the method: Inbox, Next, Waiting, Projects, Someday, Reference and a calendar
 of reminders. A task can have a project and several @contexts, and you can filter Next by context. Once a week, the
@@ -691,7 +695,7 @@ with ✅ Done, 💤 +1h and ⏭ Next buttons. The bot and the site share one acc
 or link the bot under “Account”. All examples, commands and how to connect Claude are
 <a href="/en/bot">on the bot page</a>.</p>
 <p><a class="btn" href="https://t.me/gtdsrbot">Open @gtdsrbot</a></p>
-<h2>Can I use GTD from the keyboard?</h2>
+<h2>Can I use Serbito GTD from the keyboard?</h2>
 <p>Yes, you can work through your lists without a mouse. C or N jumps to the capture field, the arrow keys move
 between tasks and the menu, Enter opens a task and Esc clears the selection. C and N work in any keyboard layout,
 so you do not need to switch it first.</p>
@@ -700,37 +704,37 @@ so you do not need to switch it first.</p>
 <li><kbd>↑</kbd> <kbd>↓</kbd> — move between tasks, <kbd>Enter</kbd> — open a task</li>
 <li><kbd>←</kbd> — to the menu, <kbd>→</kbd> — back to the tasks, <kbd>Esc</kbd> — clear the selection</li>
 </ul>
-<p><a class="btn" href="/en/">Open GTD</a></p>""",
+<p><a class="btn" href="/en/">Open Serbito GTD</a></p>""",
 }
 
 
 # Последний раздел /about: как поставить сайт на экран телефона (манифест — /manifest.webmanifest)
 INSTALL = {
-    "ru": """<h2>Можно ли поставить GTD на телефон?</h2>
+    "ru": """<h2>Можно ли поставить Serbito GTD на телефон?</h2>
 <p>Да, сайт ставится как приложение, без магазина: на iPhone — «Поделиться» → «На экран «Домой»»,
-на Android — меню ⋮ → «Установить приложение». Иконка на экране откроет GTD без адресной строки браузера,
+на Android — меню ⋮ → «Установить приложение». Иконка на экране откроет Serbito GTD без адресной строки браузера,
 а напоминания по-прежнему придут от бота в Telegram. Обновлять ничего не нужно: всегда открывается последняя
 версия.</p>""",
-    "en": """<h2>Can I install GTD on my phone?</h2>
+    "en": """<h2>Can I install Serbito GTD on my phone?</h2>
 <p>Yes, the website installs like an app, no store needed: on iPhone, Share → Add to Home Screen;
-on Android, the ⋮ menu → Install app. The icon opens GTD without the browser's address bar, and your reminders
+on Android, the ⋮ menu → Install app. The icon opens Serbito GTD without the browser's address bar, and your reminders
 still come from the bot in Telegram.</p>""",
 }
 
 # Раздел /about про открытый код; инструкция по self-hosting — только на английском
 OSS = {
-    "ru": f"""<h2>GTD бесплатный? Где открытый код?</h2>
-<p>Да, GTD бесплатный: платных тарифов нет. Код открыт под лицензией MIT и лежит на <a href="{REPO_URL}">GitHub</a>
+    "ru": f"""<h2>Serbito GTD бесплатный? Где открытый код?</h2>
+<p>Да, Serbito GTD бесплатный: платных тарифов нет. Код открыт под лицензией MIT и лежит на <a href="{REPO_URL}">GitHub</a>
 вместе с историей изменений. Можно посмотреть, как всё устроено, предложить правку или поднять свою копию —
 <a href="{SELF_HOST_URL}">инструкция по self-hosting</a> (на английском). Что менялось в каждой версии —
-на странице <a href="/changes">«Что нового»</a>. Отзывы о GTD и похожие приложения — на
+на странице <a href="/changes">«Что нового»</a>. Отзывы о Serbito GTD и похожие приложения — на
 <a href="{ALTERNATIVETO_URL}">AlternativeTo</a>.</p>""",
-    "en": f"""<h2>Is GTD free? Where is the source code?</h2>
-<p>Yes, GTD is free: there are no paid plans. The code is open source under the MIT license and lives on
+    "en": f"""<h2>Is Serbito GTD free? Where is the source code?</h2>
+<p>Yes, Serbito GTD is free: there are no paid plans. The code is open source under the MIT license and lives on
 <a href="{REPO_URL}">GitHub</a> with its full history. Read how it works, suggest a fix, or run your own copy —
-see the <a href="{SELF_HOST_URL}">self-hosting guide</a>. Reviews of GTD and similar apps are on
+see the <a href="{SELF_HOST_URL}">self-hosting guide</a>. Reviews of Serbito GTD and similar apps are on
 <a href="{ALTERNATIVETO_URL}">AlternativeTo</a>.</p>
-<p>How GTD compares with Todoist, feature by feature: see the
+<p>How Serbito GTD compares with Todoist, feature by feature: see the
 <a href="/en/todoist-alternative-open-source">open-source Todoist alternative</a> page.</p>""",
 }
 # Редакция текста /about (SERBITO-470): дата «Обновлено» на странице, dateModified и lastmod в sitemap.
@@ -753,11 +757,11 @@ def about(base: str, lang: str, ga: str) -> str:
 # хранится или куда уходит, правь и этот текст. Адрес для запросов о данных — только здесь, больше нигде
 PRIVACY_EMAIL = "alexander.bondarchuk@gmail.com"
 PRIVACY_DAY = "2026-09-29"  # редакция политики: дата в тексте, dateModified и lastmod в sitemap
-T["ru"].update(privacy="Конфиденциальность", privacy_title="Политика конфиденциальности — GTD онлайн",
-               privacy_desc="Какие данные хранит GTD онлайн, что получает аналитика, как дать или отозвать "
+T["ru"].update(privacy="Конфиденциальность", privacy_title="Политика конфиденциальности — Serbito GTD",
+               privacy_desc="Какие данные хранит Serbito GTD, что получает аналитика, как дать или отозвать "
                             "согласие на cookie, кто обрабатывает данные и как удалить аккаунт.")
-T["en"].update(privacy="Privacy", privacy_title="Privacy policy — GTD online",
-               privacy_desc="What data GTD online stores, what analytics receive, how to give or withdraw "
+T["en"].update(privacy="Privacy", privacy_title="Privacy policy — Serbito GTD",
+               privacy_desc="What data Serbito GTD stores, what analytics receive, how to give or withdraw "
                             "cookie consent, who processes it and how to delete your account.")
 # Строка о боте на лендинге (SERBITO-422): имя-ссылка и что он делает. Стоит под текстом, над блоком входа
 # (SERBITO-448): под ним на телефоне её закрывал баннер cookie. Тот же текст — на экране входа в приложении
@@ -775,7 +779,7 @@ PRIVACY_NOTE = {
 }
 PRIVACY = {
     "ru": """<h1>Политика конфиденциальности</h1>
-<p class="lead">GTD — бесплатный менеджер задач от No Handoff. Храним только то, без чего приложение не работает;
+<p class="lead">Serbito GTD — бесплатный менеджер задач от No Handoff. Храним только то, без чего приложение не работает;
 данные не продаём, рекламы нет.</p>
 <p class="note">Обновлено {date}</p>
 <h2>Что мы храним</h2>
@@ -836,7 +840,7 @@ PRIVACY = {
 <p>Оператор — No Handoff. Вопросы о данных и запросы на удаление:
 <a href="mailto:{email}">{email}</a>.</p>""",
     "en": """<h1>Privacy policy</h1>
-<p class="lead">GTD is a free task manager by No Handoff. We keep only what the app needs to work;
+<p class="lead">Serbito GTD is a free task manager by No Handoff. We keep only what the app needs to work;
 we don't sell data, and there are no ads.</p>
 <p class="note">Updated {date}</p>
 <h2>What we store</h2>
@@ -923,25 +927,25 @@ def modified(page: str) -> str | None:
             "bot": GUIDES_DAY, "weekly": GUIDES_DAY, "about": ABOUT_DAY,
             "alt": COMPARE_DAY, "freeapps": COMPARE_DAY, "beginners": COMPARE_DAY}.get(page)
 SEEN_KEY = "gtd-seen-version"  # localStorage: версия, которую человек уже видел на /changes (точка в меню SPA)
-T["ru"].update(changes="Что нового", changes_title="Что нового в GTD — история версий приложения Getting Things Done",
-               changes_desc="Что появилось и что исправлено в GTD онлайн: все версии приложения и Telegram-бота, "
+T["ru"].update(changes="Что нового", changes_title="Что нового в Serbito GTD — история версий приложения Getting Things Done",
+               changes_desc="Что появилось и что исправлено в Serbito GTD: все версии приложения и Telegram-бота, "
                             "новые сверху.")
-T["en"].update(changes="What's new", changes_title="What's new in GTD — release history of the Getting Things Done app",
-               changes_desc="What's new and what got fixed in GTD online: every version of the app and the Telegram "
+T["en"].update(changes="What's new", changes_title="What's new in Serbito GTD — release history of the Getting Things Done app",
+               changes_desc="What's new and what got fixed in Serbito GTD: every version of the app and the Telegram "
                             "bot, newest first.")
 CHANGES = {
     # Вступление под заголовком (SERBITO-448): что это за страница и как часто выходят версии
-    "ru": {"intro": "Здесь — всё, что менялось в GTD для пользователей: новые возможности и исправления на сайте "
+    "ru": {"intro": "Здесь — всё, что менялось в Serbito GTD для пользователей: новые возможности и исправления на сайте "
                     "и в Telegram-боте. Новые версии выходят несколько раз в неделю.",
-           "lead": "Изменения GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
+           "lead": "Изменения Serbito GTD по версиям, новые сверху.", "now": "Сейчас работает {v}.",
            "dev": "Это локальная сборка (dev).", "older": "Более ранние версии ({n})",
            "src": f'Тот же список на английском — <a href="{CHANGELOG_URL}">CHANGELOG.md</a> на GitHub.',
            "sections": {"Added": "Новое", "Changed": "Изменено", "Fixed": "Исправлено", "Security": "Безопасность"},
            "months": ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
                       "октября", "ноября", "декабря")},
-    "en": {"intro": "This page lists every change in GTD that users can see: new features and fixes on the site "
+    "en": {"intro": "This page lists every change in Serbito GTD that users can see: new features and fixes on the site "
                     "and in the Telegram bot. New versions come out several times a week.",
-           "lead": "What changed in GTD, version by version, newest first.", "now": "You are using {v}.",
+           "lead": "What changed in Serbito GTD, version by version, newest first.", "now": "You are using {v}.",
            "dev": "This is a local build (dev).", "older": "Older versions ({n})",
            "src": f'Also on GitHub: <a href="{CHANGELOG_URL}">CHANGELOG.md</a>.',
            "sections": {"Added": "Added", "Changed": "Changed", "Fixed": "Fixed", "Security": "Security"},
@@ -1422,7 +1426,7 @@ T["en"].update(
              "plans, and who should not switch.",
     freeapps="Free GTD apps",
     freeapps_title=f"Free GTD apps compared: what the free plans include in 2026 — {SITE_NAME}",
-    freeapps_desc="Free GTD apps compared, as of October 2026: what the free plans of GTD, Nirvana, Todoist, "
+    freeapps_desc="Free GTD apps compared, as of October 2026: what the free plans of Serbito GTD, Nirvana, Todoist, "
                   "TickTick and Things include. With sources.")
 # Справочные страницы в подвале каждой публичной страницы — по языку
 GUIDE_PAGES = {"ru": ("about", "bot", "weekly", "beginners", "alt"), "en": ("about", "bot", "weekly", "freeapps", "alt")}
@@ -1461,10 +1465,10 @@ APPS = {
 CMP = {
     "ru": {"head": ("Приложение", "Бесплатно", "Платно", "Где работает"),
            "src": "Данные о других приложениях — с их официальных сайтов, на октябрь 2026:",
-           "only": "Telegram-бот и открытый код есть только у GTD: на официальных страницах {others} мы их не нашли."},
+           "only": "Telegram-бот и открытый код есть только у Serbito GTD: на официальных страницах {others} мы их не нашли."},
     "en": {"head": ("App", "Free plan", "Paid plan", "Platforms"),
            "src": "Facts about other apps come from their official websites, as of October 2026:",
-           "only": "Only GTD has a Telegram bot and open source code: we did not find either on the official pages "
+           "only": "Only Serbito GTD has a Telegram bot and open source code: we did not find either on the official pages "
                    "of {others}."},
 }
 
@@ -1490,18 +1494,18 @@ def compare_table(lang: str, apps) -> str:
 # Кому GTD не подойдёт — сверено с кодом: повторов, общих проектов, импорта, подзадач, приоритетов и вложений
 # в app.py нет; service worker нет (без сети не работает); напоминания шлёт только бот (send_due_reminders)
 WHO_NOT = {
-    "ru": ["Нужны повторяющиеся задачи — в GTD их пока нет.",
+    "ru": ["Нужны повторяющиеся задачи — в Serbito GTD их пока нет.",
            "Работаешь в команде: общих проектов и задач для других людей нет.",
-           "Нужно приложение из App Store или Google Play и работа без интернета. GTD — это сайт (его можно поставить "
+           "Нужно приложение из App Store или Google Play и работа без интернета. Serbito GTD — это сайт (его можно поставить "
            "на экран телефона) и бот, без сети он не работает.",
-           "Напоминания нужны не в Telegram: push-уведомлений и писем с напоминаниями GTD не шлёт.",
+           "Напоминания нужны не в Telegram: push-уведомлений и писем с напоминаниями Serbito GTD не шлёт.",
            "Нужны подзадачи, приоритеты или вложения.",
            "Нужно перенести задачи одной кнопкой: импорта из других приложений нет."],
-    "en": ["You need recurring tasks — GTD does not have them yet.",
+    "en": ["You need recurring tasks — Serbito GTD does not have them yet.",
            "You work in a team: there are no shared projects and no tasks for other people.",
-           "You need an app from the App Store or Google Play that works offline. GTD is a website (you can install it "
+           "You need an app from the App Store or Google Play that works offline. Serbito GTD is a website (you can install it "
            "on your phone home screen) and a bot; it does not work without a connection.",
-           "You want reminders outside Telegram: GTD sends no push notifications and no reminder emails.",
+           "You want reminders outside Telegram: Serbito GTD sends no push notifications and no reminder emails.",
            "You need subtasks, priorities or attachments.",
            "You want to move your tasks in one click: there is no import from other apps."],
 }
@@ -1518,14 +1522,14 @@ SHOT_VIEWS = ("inbox", "next", "review")
 SHOT_SIZE = (600, 1077)
 SHOT_FILES = {f"{v}-{lg}.webp" for v in SHOT_VIEWS for lg in LANGS}
 SHOTS = {
-    "ru": {"h": "Как выглядит GTD", "lead": "Три экрана на телефоне. Задачи на них — демо.",
+    "ru": {"h": "Как выглядит Serbito GTD", "lead": "Три экрана на телефоне. Задачи на них — демо.",
            "inbox": ("Inbox на телефоне: поле захвата и новые задачи с кнопками Next, Project, Waiting, Someday и Ref",
                      "Inbox: записал — потом разобрал кнопками"),
            "next": ("Список Next с фильтром по контексту @магазин: две задачи, одна из них — в проекте «Ремонт кухни»",
                     "Next по контексту: только то, что можно сделать в магазине"),
            "review": ("Weekly Review: шесть шагов обзора, у каждого — данные из списков задач",
                       "Weekly Review: шесть шагов по твоим спискам")},
-    "en": {"h": "What GTD looks like", "lead": "Three screens on a phone. The tasks are demo data.",
+    "en": {"h": "What Serbito GTD looks like", "lead": "Three screens on a phone. The tasks are demo data.",
            "inbox": ("The Inbox on a phone: the capture field and new tasks with Next, Project, Waiting, Someday and "
                      "Ref buttons", "Inbox: capture now, sort later with one tap"),
            "next": ("The Next list filtered by the @store context: two tasks, one of them in the “Kitchen renovation” "
@@ -1546,7 +1550,7 @@ def shots(lang: str) -> str:
 # Ответы — 40–60 слов: их удобно цитировать AI-ассистентам (SERBITO-442)
 FAQ = {
     "ru": [
-        ("GTD правда бесплатный?",
+        ("Serbito GTD правда бесплатный?",
          "Да. Платных тарифов и рекламы нет, банковская карта не нужна. Все функции, которые описаны на этой странице, "
          "доступны сразу после входа. Код открыт под лицензией MIT: если не хочешь зависеть от нашего сервера, "
          "подними свою копию по инструкции на GitHub. Задачи при этом останутся только у тебя."),
@@ -1572,7 +1576,7 @@ FAQ = {
          "в одном Inbox и не тащить за собой старое."),
     ],
     "en": [
-        ("Is GTD really free?",
+        ("Is Serbito GTD really free?",
          "Yes. There are no paid plans and no ads, and you do not need a credit card. Every feature on this page is "
          "available right after you sign in. The code is open source under the MIT license: if you do not want to "
          "depend on our server, run your own copy with the guide on GitHub."),
@@ -1600,47 +1604,47 @@ FAQ = {
     ],
 }
 LANDING_TEXT = {
-    "ru": {"cmp_h": "Чем GTD отличается от Todoist, TickTick и Things",
-           "cmp_lead": "Коротко: GTD бесплатный целиком и сделан под один метод, а у других больше платформ "
+    "ru": {"cmp_h": "Чем Serbito GTD отличается от Todoist, TickTick и Things",
+           "cmp_lead": "Коротко: Serbito GTD бесплатный целиком и сделан под один метод, а у других больше платформ "
                        "и функций.",
            "not_h": "Кому не стоит переходить",
            "cmp_more": "Подробное сравнение с Todoist →",
            "faq_h": "Частые вопросы",
            "dev_h": "Для разработчиков: свой сервер и MCP",
-           "dev": f"""<p>Код GTD открыт под лицензией MIT. Свою копию можно поднять одной командой через Docker Compose:
+           "dev": f"""<p>Код Serbito GTD открыт под лицензией MIT. Свою копию можно поднять одной командой через Docker Compose:
 приложение и PostgreSQL 17. Вход — по почте, через Google или своего Telegram-бота. Всё описано
 в <a href="{SELF_HOST_URL}">инструкции по self-hosting</a> (на английском).</p>
-<p>У GTD есть MCP-сервер. Подключи его к Claude, ChatGPT, Cursor или VS Code — и ассистент запишет задачу, покажет
+<p>У Serbito GTD есть MCP-сервер. Подключи его к Claude, ChatGPT, Cursor или VS Code — и ассистент запишет задачу, покажет
 списки, закроет задачу или проведёт Weekly Review. Адрес сервера и шаги подключения —
 <a href="/bot#claude">на странице бота</a>.</p>""",
-           "who_h": "Кто делает GTD",
-           "who": """<p>GTD делает <a href="{org}">No Handoff</a>. Другие проекты No Handoff — Planning Poker, Javi
+           "who_h": "Кто делает Serbito GTD",
+           "who": """<p>Serbito GTD делает <a href="{org}">No Handoff</a>. Другие проекты No Handoff — Planning Poker, Javi
 и Serbito — перечислены внизу страницы. Права на код — у Alexander Bondarchuk, код открыт по лицензии MIT, её
 текст лежит <a href="{license}">в репозитории на GitHub</a>. Первая версия вышла {first}, всего версий — {count}: всё, что
 менялось, есть на странице <a href="{changes}">«Что нового»</a>. Вопросы и идеи пишите
 в <a href="{issues}">Issues на GitHub</a>.</p>"""},
-    "en": {"cmp_h": "How GTD differs from Todoist, TickTick and Things",
-           "cmp_lead": "In short: GTD is free in full and built for one method; the others run on more devices "
+    "en": {"cmp_h": "How Serbito GTD differs from Todoist, TickTick and Things",
+           "cmp_lead": "In short: Serbito GTD is free in full and built for one method; the others run on more devices "
                        "and do more.",
            "not_h": "Who should not switch",
            "cmp_more": "Open-source Todoist alternative: full comparison →",
            "faq_h": "Questions and answers",
            "dev_h": "For developers: self-hosting and MCP",
-           "dev": f"""<p>The GTD code is open source under the MIT license. Run your own copy with one Docker Compose
+           "dev": f"""<p>The Serbito GTD code is open source under the MIT license. Run your own copy with one Docker Compose
 command: the app and PostgreSQL 17. Sign-in works by email, with Google or with your own Telegram bot. The
 <a href="{SELF_HOST_URL}">self-hosting guide</a> has all the steps.</p>
-<p>GTD has an MCP server. Connect it to Claude, ChatGPT, Cursor or VS Code, and the assistant can capture a task,
+<p>Serbito GTD has an MCP server. Connect it to Claude, ChatGPT, Cursor or VS Code, and the assistant can capture a task,
 show your lists, complete a task or run the weekly review. The server address and the setup steps are
 <a href="/en/bot#claude">on the bot page</a>.</p>""",
-           "who_h": "Who makes GTD",
-           "who": """<p>GTD is made by <a href="{org}">No Handoff</a>. Its other projects — Planning Poker, Javi and
+           "who_h": "Who makes Serbito GTD",
+           "who": """<p>Serbito GTD is made by <a href="{org}">No Handoff</a>. Its other projects — Planning Poker, Javi and
 Serbito — are listed at the bottom of this page. The copyright holder is Alexander Bondarchuk, and the code is open
 under the MIT license: the license text is <a href="{license}">in the GitHub repository</a>. The first version came out on
 {first}, and there have been {count} versions so far: every change is on the <a href="{changes}">What's new</a> page.
 Send questions and ideas to <a href="{issues}">GitHub Issues</a>.</p>"""},
 }
 # «Почему я это сделал» — история владельца (SERBITO-442). Публично её ещё нет нигде, поэтому и на сайте её нет:
-# TODO(владелец): впиши 2–3 предложения на каждом языке — блок появится в «Кто делает GTD» сам
+# TODO(владелец): впиши 2–3 предложения на каждом языке — блок появится в «Кто делает Serbito GTD» сам
 WHY = {"ru": "", "en": ""}
 
 
@@ -1687,61 +1691,61 @@ ALT_ROWS = {
            ("Open source", "MIT, you can self-host it", "Not found on the official pages")],
 }
 ALT = {
-    "ru": """<h1>Альтернатива Todoist с открытым кодом: GTD с Telegram-ботом</h1>
-<p class="lead">GTD — бесплатная альтернатива Todoist для тех, кто ведёт дела по методу Getting Things Done. Код
+    "ru": """<h1>Альтернатива Todoist с открытым кодом: Serbito GTD с Telegram-ботом</h1>
+<p class="lead">Serbito GTD — бесплатная альтернатива Todoist для тех, кто ведёт дела по методу Getting Things Done. Код
 открыт (MIT), задачи можно записывать сообщением Telegram-боту, а списки метода — Inbox, Next, Waiting, Someday —
 готовы с первого входа. Зато у Todoist больше платформ и функций. Ниже — честное сравнение.</p>
 <p class="note">{updated}</p>
-<h2>Чем GTD отличается от Todoist?</h2>
-<p>Подходом. GTD сделан под один метод и бесплатен целиком: код открыт, задачи можно слать боту в Telegram.
+<h2>Чем Serbito GTD отличается от Todoist?</h2>
+<p>Подходом. Serbito GTD сделан под один метод и бесплатен целиком: код открыт, задачи можно слать боту в Telegram.
 Todoist — универсальный менеджер задач с бесплатным тарифом, платными Pro и Business и приложениями почти для всех
 устройств.</p>
 {table}
 <h2>Кому не стоит переходить с Todoist?</h2>
-<p>Если тебе важно что-то из списка ниже, оставайся в Todoist: в GTD этого нет.</p>
+<p>Если тебе важно что-то из списка ниже, оставайся в Todoist: в Serbito GTD этого нет.</p>
 {who_not}
 <h2>Как перенести задачи из Todoist?</h2>
 <p>Импорта нет. Перенеси только активные задачи: вставь их в поле захвата на сайте или напиши боту, по одной.
 Срок, #проект и @контекст пиши прямо в тексте: <q>выбрать плитку #Ремонт_кухни @магазин</q>. Старое и ненужное
 можно не переносить — это и есть шаг «Собрать» в GTD.</p>
-<h2>Можно ли поднять GTD на своём сервере?</h2>
+<h2>Можно ли поднять Serbito GTD на своём сервере?</h2>
 <p>Да. Код открыт под лицензией MIT, а свою копию можно поднять одной командой через Docker Compose: приложение
 и PostgreSQL 17. Вход — по почте, через Google или своего Telegram-бота. Подробно — в
 <a href="{self_host}">инструкции по self-hosting</a> (на английском).</p>
-<h2>Как попробовать GTD?</h2>
+<h2>Как попробовать Serbito GTD?</h2>
 <p>Войди на сайте через Google, по коду из письма или через Telegram — аккаунт создастся сам. Или сразу напиши
 задачу боту <a href="{bot_url}">@{bot}</a>. Как устроен метод — на странице <a href="{about}">«Как это работает»</a>,
 с чего начать — в разделе <a href="{beginners}">«GTD для начинающих»</a>.</p>
-<p><a class="btn" href="{home}">Открыть GTD</a></p>""",
+<p><a class="btn" href="{home}">Открыть Serbito GTD</a></p>""",
     "en": """<h1>Open-source Todoist alternative for GTD, with a Telegram bot</h1>
-<p class="lead">GTD is a free, open-source Todoist alternative for people who use the Getting Things Done method.
+<p class="lead">Serbito GTD is a free, open-source Todoist alternative for people who use the Getting Things Done method.
 The code is under the MIT license, you can send tasks to a Telegram bot, and the GTD lists — Inbox, Next, Waiting,
 Someday — are ready from the first sign-in. Todoist runs on more devices and has more features. Here is an honest
 comparison.</p>
 <p class="note">{updated}</p>
-<h2>How is GTD different from Todoist?</h2>
-<p>In its approach. GTD is built for one method and is free in full: the code is open, and you can send tasks to
+<h2>How is Serbito GTD different from Todoist?</h2>
+<p>In its approach. Serbito GTD is built for one method and is free in full: the code is open, and you can send tasks to
 a bot in Telegram. Todoist is a general task manager with a free plan, paid Pro and Business plans, and apps for
 almost every device.</p>
-<p>GTD also has a Weekly Review view that walks you through all your lists, step by step. See the
+<p>Serbito GTD also has a Weekly Review view that walks you through all your lists, step by step. See the
 <a href="{weekly}">GTD weekly review checklist</a>.</p>
 {table}
 <h2>Who should not switch from Todoist?</h2>
-<p>If anything in this list matters to you, stay with Todoist: GTD does not have it.</p>
+<p>If anything in this list matters to you, stay with Todoist: Serbito GTD does not have it.</p>
 {who_not}
 <h2>How do I move my tasks from Todoist?</h2>
 <p>There is no import. Move only your active tasks: paste them into the capture field on the website or send them to
 the bot, one by one. Put the date, #Project and @context right in the text: <q>choose tiles #Kitchen_renovation
 @store</q>. Leave the old stuff behind — that is the “capture” step of GTD.</p>
-<h2>Can I self-host GTD?</h2>
+<h2>Can I self-host Serbito GTD?</h2>
 <p>Yes. The code is under the MIT license, and one Docker Compose command runs your own copy: the app and
 PostgreSQL 17. Sign-in works by email, with Google or with your own Telegram bot. See the
 <a href="{self_host}">self-hosting guide</a>.</p>
-<h2>How do I try GTD?</h2>
+<h2>How do I try Serbito GTD?</h2>
 <p>Sign in on the website with Google, with a code from an email or with Telegram — the account is created for you.
 Or send a task to <a href="{bot_url}">@{bot}</a> right away. The method is explained on
 <a href="{about}">How it works</a>, and other free options are in <a href="{freeapps}">Free GTD apps</a>.</p>
-<p><a class="btn" href="{home}">Open GTD</a></p>""",
+<p><a class="btn" href="{home}">Open Serbito GTD</a></p>""",
 }
 
 
@@ -1765,8 +1769,8 @@ def alt(base: str, lang: str, ga: str) -> str:
 
 # ── Бесплатные GTD-приложения (SERBITO-470): только английский — запрос «free GTD apps» ──
 FREEAPPS = """<h1>Free GTD apps: what the free plans include in 2026</h1>
-<p class="lead">We compared five apps people use for GTD (Getting Things Done): GTD (this site), Nirvana, Todoist,
-TickTick and Things. GTD has no paid plan at all and is open source. Nirvana has the GTD lists built in. Todoist and
+<p class="lead">We compared five apps people use for GTD (Getting Things Done): Serbito GTD (this site), Nirvana, Todoist,
+TickTick and Things. Serbito GTD has no paid plan at all and is open source. Nirvana has the GTD lists built in. Todoist and
 TickTick limit their free plans. Things has no free plan.</p>
 <p class="note">{updated}</p>
 <h2>What do the free plans include?</h2>
@@ -1776,22 +1780,22 @@ unlimited projects for Pro, and Things offers a trial instead of a free plan.</p
 <h2>Which free GTD app should I choose?</h2>
 <p>Choose by where you capture tasks and which devices you use.</p>
 <ul>
-<li><b>You capture in Telegram and want everything free:</b> GTD.</li>
+<li><b>You capture in Telegram and want everything free:</b> Serbito GTD.</li>
 <li><b>You want the GTD lists and native apps on many devices:</b> Nirvana. Its free plan has basic projects
 and areas.</li>
 <li><b>You want a general to-do app with apps for every device:</b> Todoist or TickTick, within the limits of their
 free plans.</li>
 <li><b>You only use Apple devices and are fine with a paid app:</b> Things.</li>
 </ul>
-<h2>When is GTD the wrong choice?</h2>
-<p>GTD is small on purpose. Pick another app if any of these is true for you.</p>
+<h2>When is Serbito GTD the wrong choice?</h2>
+<p>Serbito GTD is small on purpose. Pick another app if any of these is true for you.</p>
 {who_not}
-<h2>How do I start with GTD?</h2>
+<h2>How do I start with Serbito GTD?</h2>
 <p>Sign in with Google, with a code from an email or with Telegram, or send a task to <a href="{bot_url}">@{bot}</a>.
 The method in a minute is on <a href="{about}">How it works</a>, and a 30-minute checklist is on
-<a href="{weekly}">GTD weekly review</a>. How GTD compares with Todoist in detail:
+<a href="{weekly}">GTD weekly review</a>. How Serbito GTD compares with Todoist in detail:
 <a href="{alt}">open-source Todoist alternative</a>.</p>
-<p><a class="btn" href="/en/">Open GTD</a></p>"""
+<p><a class="btn" href="/en/">Open Serbito GTD</a></p>"""
 
 
 def freeapps(base: str, ga: str) -> str:
@@ -1895,7 +1899,7 @@ def llms(base: str) -> str:
     page = lambda lang, p, name: f"- [{name}]({url(base, lang, p)})"  # noqa: E731
     return "\n".join([
         f"# {SITE_NAME}", "",
-        "> GTD is a free app for David Allen's Getting Things Done method. Capture tasks on the web or in the "
+        "> Serbito GTD is a free app for David Allen's Getting Things Done method. Capture tasks on the web or in the "
         f"Telegram bot @{BOT_NAME}, clear the Inbox, track next actions, projects and reminders. Open source (MIT), "
         "in English and Russian.", "",
         "## Pages", "",
@@ -1912,13 +1916,13 @@ def llms(base: str) -> str:
         page("en", "alt", "Open-source Todoist alternative (English)") + ": an honest comparison with Todoist and "
         "who should not switch",
         page("ru", "alt", "Todoist alternative (Russian)"),
-        page("en", "freeapps", "Free GTD apps (English)") + ": what the free plans of GTD, Nirvana, Todoist, TickTick "
+        page("en", "freeapps", "Free GTD apps (English)") + ": what the free plans of Serbito GTD, Nirvana, Todoist, TickTick "
         "and Things include",
         page("ru", "beginners", "GTD for beginners (Russian)") + ": lists, contexts, the Inbox and the weekly review", "",
         "## Elsewhere", "",
         f"- [Telegram bot @{BOT_NAME}]({BOT_URL}): send a task as a message, get reminders in the chat",
         f"- [Source code on GitHub]({REPO_URL}): MIT license, self-hosting guide",
-        f"- [GTD on AlternativeTo]({ALTERNATIVETO_URL}): user reviews and similar apps", ""])
+        f"- [Serbito GTD on AlternativeTo]({ALTERNATIVETO_URL}): user reviews and similar apps", ""])
 
 
 def sitemap(base: str) -> str:
@@ -1987,9 +1991,9 @@ def manifest(lang: str) -> dict:
 # Страница 404 для браузера (неизвестный адрес вне /api/): заголовок, пояснение, «на главную», «как это работает»
 NOT_FOUND = {
     "ru": ("Страница не найдена", "Такой страницы нет — возможно, ссылка устарела или в ней опечатка.",
-           "Открыть GTD", "Как это работает"),
+           "Открыть Serbito GTD", "Как это работает"),
     "en": ("Page not found", "There is no page at this address — the link may be outdated or mistyped.",
-           "Open GTD", "How it works"),
+           "Open Serbito GTD", "How it works"),
 }
 
 
@@ -2014,11 +2018,11 @@ def auth_stale(lang: str, bot: str = "") -> str:
 
 # Вход по ссылке из бота — только кнопкой (SERBITO-360, GTD-7): видно, в чей аккаунт, и чужую ссылку можно узнать
 AUTH_CONFIRM = {
-    "ru": ("Вход в GTD", "Войти в аккаунт <b>{who}</b>? Ссылку присылает бот на команду /login. Если ты её "
+    "ru": ("Вход в Serbito GTD", "Войти в аккаунт <b>{who}</b>? Ссылку присылает бот на команду /login. Если ты её "
            "не запрашивал — закрой страницу: кто-то пытается подсунуть тебе свой аккаунт.",
            "Сейчас в этом браузере открыт другой аккаунт — <b>{cur}</b>. Вход переключит на <b>{who}</b>.",
            "Войти", "Отмена"),
-    "en": ("Sign in to GTD", "Sign in to the account <b>{who}</b>? The bot sends this link in reply to /login. "
+    "en": ("Sign in to Serbito GTD", "Sign in to the account <b>{who}</b>? The bot sends this link in reply to /login. "
            "If you didn't ask for it, close this page: someone may be trying to slip you their account.",
            "Another account is signed in in this browser — <b>{cur}</b>. Signing in switches to <b>{who}</b>.",
            "Sign in", "Cancel"),
@@ -2044,7 +2048,7 @@ def auth_confirm(lang: str, who: str, token: str, link_lang: str = "", current: 
 {PUBLIC_CSS}
 </head>
 <body>
-<div class="pub"><header class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></header><main>
+<div class="pub"><header class="top"><a class="brand" href="{home}">{mark(28)} {SITE_NAME}</a></header><main>
 <h1>{h}</h1>
 <p class="lead">{text.format(who=who)}</p>
 {note}
@@ -2071,7 +2075,7 @@ def notice(lang: str, h: str, text: str, go: str, link: tuple | None) -> str:
 {PUBLIC_CSS}
 </head>
 <body>
-<div class="pub"><header class="top"><a class="brand" href="{home}">{mark(28)} GTD</a></header><main>
+<div class="pub"><header class="top"><a class="brand" href="{home}">{mark(28)} {SITE_NAME}</a></header><main>
 <h1>{h}</h1>
 <p class="lead">{text}</p>
 <p><a class="btn" href="{home}">{go}</a>{extra}</p></main></div>

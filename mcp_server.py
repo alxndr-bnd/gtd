@@ -41,7 +41,7 @@ WEEK = 7 * 86400
 
 server = MCPServer(
     "gtd",
-    title="GTD",
+    title="Serbito GTD",
     instructions=(
         "GTD task manager (Getting Things Done). Lists: inbox (unprocessed), next (next actions), waiting, someday, "
         "reference, done, trash. A task belongs to at most one project and can have several @contexts. Refer to tasks "

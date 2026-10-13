@@ -35,11 +35,11 @@ def fit(text, path, size, width):
 def draw(name, headline, sub):
     im = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(im)
-    # Логотип: знак «Входящие» в обратных цветах (на бирюзовом фоне — белая плашка) + «GTD»
+    # Логотип: знак «Входящие» в обратных цветах (на бирюзовом фоне — белая плашка) + имя продукта (SERBITO-447)
     inverse = pages.mark().replace(f'fill="{pages.BRAND}"', 'fill="X"').replace("#fff", pages.BRAND).replace('"X"', '"#fff"')
     logo = Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=inverse, width=88, height=88))))
     im.paste(logo, (PAD, PAD), logo.convert("RGBA"))
-    d.text((PAD + 112, PAD + 44), "GTD", font=ImageFont.truetype(BOLD, 72), fill=FG, anchor="lm")
+    d.text((PAD + 112, PAD + 44), pages.SITE_NAME, font=ImageFont.truetype(BOLD, 72), fill=FG, anchor="lm")
     d.text((PAD, 300), headline, font=fit(headline, BOLD, 76, W - 2 * PAD), fill=FG, anchor="ls")
     d.text((PAD, 380), sub, font=fit(sub, REG, 40, W - 2 * PAD), fill=MUT, anchor="ls")
     d.text((PAD, H - PAD), "gtd.serbito.rs  ·  @gtdsrbot", font=ImageFont.truetype(BOLD, 36), fill=FG, anchor="ls")

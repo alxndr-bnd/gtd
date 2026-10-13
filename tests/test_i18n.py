@@ -84,12 +84,12 @@ def test_sign_in_email_in_english(client, mail):
     assert client.post("/api/auth/email/start", json={"email": "bob@example.com"}, headers=EN).status_code == 200
     to, subject, body = mail[-1]
     code = last_code(mail)
-    assert to == "bob@example.com" and subject == f"Your GTD sign-in code: {code}"
-    assert body.startswith(f"Your GTD sign-in code: {code}") and "valid for 10 minutes" in body
+    assert to == "bob@example.com" and subject == f"Your Serbito GTD sign-in code: {code}"
+    assert body.startswith(f"Your Serbito GTD sign-in code: {code}") and "valid for 10 minutes" in body
     assert not CYR.search(subject + body)
     A.run("delete from email_codes")
     client.post("/api/auth/email/start", json={"email": "bob@example.com"})  # без заголовка — по-русски
-    assert mail[-1][1].startswith("Код входа в GTD")
+    assert mail[-1][1].startswith("Код входа в Serbito GTD")
 
 
 def test_merge_offer_in_english(new_client, login, mail):
@@ -148,11 +148,11 @@ def test_bot_start_and_help_in_both_languages(tg, monkeypatch):
     assert tg[-1][1]["text"] == A.tr("ru", "start")
     assert tg[-1][1]["reply_markup"]["inline_keyboard"][1][0]["url"] == "https://gtd.serbito.rs"
     bot_message("/help", tg_id=3, lang="de")  # прочие языки — английский
-    assert texts(tg)[-1].startswith("The GTD bot is ready.") and "/done 12 — complete task #12" in texts(tg)[-1]
+    assert texts(tg)[-1].startswith("The Serbito GTD bot is ready.") and "/done 12 — complete task #12" in texts(tg)[-1]
     bot_message("/help", tg_id=4)  # клиент не прислал язык — русский
-    assert texts(tg)[-1].startswith("GTD-бот готов.")
+    assert texts(tg)[-1].startswith("Бот Serbito GTD готов.")
     bot_message("/help", tg_id=5, lang="uk")
-    assert texts(tg)[-1].startswith("GTD-бот готов.")
+    assert texts(tg)[-1].startswith("Бот Serbito GTD готов.")
 
 
 def test_bot_about_and_callbacks_in_english(tg):
@@ -203,7 +203,7 @@ def test_bot_email_flow_in_english(tg, mail):
     assert texts(tg)[-1] == "Invalid email address"
     bot_message("/email tom@example.com", lang="en")
     assert texts(tg)[-1] == "Code sent to tom@example.com. Send it here — 6 digits."
-    assert mail[-1][1].startswith("Your GTD sign-in code")  # письмо — на языке бота
+    assert mail[-1][1].startswith("Your Serbito GTD sign-in code")  # письмо — на языке бота
     bot_message("000000" if last_code(mail) != "000000" else "111111", lang="en")
     assert texts(tg)[-1] == "Wrong code"
     bot_message(last_code(mail), lang="en")
@@ -213,7 +213,7 @@ def test_bot_email_flow_in_english(tg, mail):
 def test_bot_tg_login_confirm_in_english(client, tg):
     d = tg_start(client)
     bot_message(f"/start {d['nonce']}", tg_id=555, lang="en")
-    assert texts(tg)[-1].startswith("Confirm: sign in to GTD in your browser?")
+    assert texts(tg)[-1].startswith("Confirm: sign in to Serbito GTD in your browser?")
     assert "Tap the number shown on the website" in texts(tg)[-1]
     assert str(d["code"]) in [b["text"] for b in tg[-1][1]["reply_markup"]["inline_keyboard"][0]]
     tg_confirm(d, tg_id=555, lang="en")
@@ -227,10 +227,10 @@ def test_explicit_lang_beats_telegram_language(tg, client, login):
     A.run("update users set tg_id=777 where id=%s", (uid,))
     client.patch("/api/me", json={"lang": "en"})
     bot_message("/help", lang="ru")
-    assert texts(tg)[-1].startswith("The GTD bot is ready.")
+    assert texts(tg)[-1].startswith("The Serbito GTD bot is ready.")
     client.patch("/api/me", json={"lang": None})  # снова авто — по Telegram
     bot_message("/help", lang="ru")
-    assert texts(tg)[-1].startswith("GTD-бот готов.")
+    assert texts(tg)[-1].startswith("Бот Serbito GTD готов.")
 
 
 def test_reminder_buttons_follow_last_telegram_language(tg):

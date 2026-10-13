@@ -235,7 +235,7 @@ def test_bot_profile_texts_fit_telegram_limits():
     assert set(A.BOT_PROFILE) == set(A.BOT_COMMANDS) == {"ru", "en"}
     for desc, short in A.BOT_PROFILE.values():
         assert 0 < len(desc) <= 512 and 0 < len(short) <= 120 and "gtd.serbito.rs" in short
-    assert A.BOT_PROFILE["ru"][0].startswith("GTD-бот для задач")
+    assert A.BOT_PROFILE["ru"][0].startswith("Serbito GTD — бот для задач")
     # имя с поисковыми словами (SERBITO-422), лимит Telegram — 64 символа
     assert set(A.BOT_NAMES) == {"ru", "en"} and all("GTD" in n and 0 < len(n) <= 64 for n in A.BOT_NAMES.values())
     # меню команд на обоих языках — одни и те же команды, описания в пределах лимита Telegram
@@ -261,7 +261,7 @@ def test_add_email_button_flow(tg, mail):
 
 def test_old_keyboard_buttons_answer_and_remove_keyboard(tg):
     bot_message(A.BTN_START)  # у старых пользователей клавиатура ещё на экране
-    assert tg[-1][1]["reply_markup"] == {"remove_keyboard": True} and "GTD-бот готов" in texts(tg)[-1]
+    assert tg[-1][1]["reply_markup"] == {"remove_keyboard": True} and "Бот Serbito GTD готов" in texts(tg)[-1]
     bot_message(A.BTN_EMAIL)
     assert tg[-1][1]["reply_markup"] == {"remove_keyboard": True} and "Пришли адрес почты" in texts(tg)[-1]
     assert A.row("select count(*) n from items")["n"] == 0  # нажатия не стали задачами

@@ -107,7 +107,7 @@ CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET
 def resource_metadata() -> dict:
     return ProtectedResourceMetadata(
         resource=RESOURCE, authorization_servers=[ISSUER], scopes_supported=[SCOPE], bearer_methods_supported=["header"],
-        resource_name="GTD", resource_documentation=DOCS_URL).model_dump(mode="json", exclude_none=True)
+        resource_name=pages.SITE_NAME, resource_documentation=DOCS_URL).model_dump(mode="json", exclude_none=True)
 
 
 def server_metadata() -> dict:
@@ -319,38 +319,38 @@ async def register(request: Request):
 
 TEXTS = {
     "ru": {
-        "consent_h": "Подключить {client} к GTD?",
+        "consent_h": "Подключить {client} к Serbito GTD?",
         "consent_text": "{client} сможет читать, добавлять и менять задачи аккаунта <b>{who}</b>.",
         "consent_where": "После ответа вы вернётесь на <b>{host}</b>.",
         "consent_local": "После ответа вы вернётесь в программу на этом компьютере (<b>{host}</b>).",
         "consent_app": "После ответа откроется программа {app} на этом компьютере (<b>{host}</b>).",
-        "warn_web": "Название «{client}» прислало само приложение, GTD его не проверяет. Разрешайте, только если "
+        "warn_web": "Название «{client}» прислало само приложение, Serbito GTD его не проверяет. Разрешайте, только если "
                     "вы сами начали подключение и доверяете <b>{host}</b>.",
-        "warn_local": "Название «{client}» прислало само приложение, GTD его не проверяет. Ответ получит любая "
+        "warn_local": "Название «{client}» прислало само приложение, Serbito GTD его не проверяет. Ответ получит любая "
                       "программа на этом компьютере. Разрешайте, только если вы сами только что начали подключение.",
         "consent_note": "Отключить можно в любой момент: «👤 Аккаунт → 🤖 AI-ассистенты».",
         "allow": "Разрешить", "deny": "Отказать",
         "signin_h": "Войдите, чтобы подключить {client}",
-        "signin_text": "{client} просит доступ к вашим задачам в GTD. Сначала войдите, потом подтвердите доступ.",
+        "signin_text": "{client} просит доступ к вашим задачам в Serbito GTD. Сначала войдите, потом подтвердите доступ.",
         "signin_go": "Войти",
         "bad_h": "Ссылка подключения не работает",
         "bad_text": "Приложение прислало неверный запрос. Начните подключение заново в самом приложении.",
         "home": "На главную",
     },
     "en": {
-        "consent_h": "Connect {client} to GTD?",
+        "consent_h": "Connect {client} to Serbito GTD?",
         "consent_text": "{client} will be able to read, add and change tasks in the account <b>{who}</b>.",
         "consent_where": "After you answer, you return to <b>{host}</b>.",
         "consent_local": "After you answer, you return to an app on this computer (<b>{host}</b>).",
         "consent_app": "After you answer, the {app} app opens on this computer (<b>{host}</b>).",
-        "warn_web": "The app itself sent the name “{client}”. GTD does not check it. Allow only if you started "
+        "warn_web": "The app itself sent the name “{client}”. Serbito GTD does not check it. Allow only if you started "
                     "this connection yourself and you trust <b>{host}</b>.",
-        "warn_local": "The app itself sent the name “{client}”. GTD does not check it. Any program on this computer "
+        "warn_local": "The app itself sent the name “{client}”. Serbito GTD does not check it. Any program on this computer "
                       "can get the answer. Allow only if you started this connection yourself just now.",
         "consent_note": "You can disconnect at any time: “👤 Account → 🤖 AI assistants”.",
         "allow": "Allow", "deny": "Deny",
         "signin_h": "Sign in to connect {client}",
-        "signin_text": "{client} asks for access to your tasks in GTD. Sign in first, then confirm the access.",
+        "signin_text": "{client} asks for access to your tasks in Serbito GTD. Sign in first, then confirm the access.",
         "signin_go": "Sign in",
         "bad_h": "This connection link does not work",
         "bad_text": "The app sent an invalid request. Start the connection again in the app.",
@@ -411,7 +411,7 @@ def page(lang: str, title: str, body: str, status: int = 200) -> HTMLResponse:
 <style>.oauth .btn.alt{{background:none;color:inherit;border:1px solid currentColor}}.oauth .note{{opacity:.8}}.oauth .warn{{border-left:3px solid #d97706;padding-left:.6em}}</style>
 </head>
 <body>
-<div class="pub oauth"><header class="top"><a class="brand" href="{home}">{pages.mark(28)} GTD</a></header><main>
+<div class="pub oauth"><header class="top"><a class="brand" href="{home}">{pages.mark(28)} {pages.SITE_NAME}</a></header><main>
 <h1>{html.escape(title)}</h1>
 {body}
 </main></div>

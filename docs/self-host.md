@@ -1,6 +1,6 @@
 # Self-hosting
 
-Run your own GTD with Docker Compose: the app and PostgreSQL 17, one command.
+Run your own copy of Serbito GTD with Docker Compose: the app and PostgreSQL 17, one command.
 The hosted version is free at [gtd.serbito.rs](https://gtd.serbito.rs) if you'd rather not.
 
 ## Quick try (local)

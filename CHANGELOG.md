@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in GTD for its users, version by version, newest first. The same list, in Russian or English,
+What changed in Serbito GTD for its users, version by version, newest first. The same list, in Russian or English,
 is on the site: [gtd.serbito.rs/en/changes](https://gtd.serbito.rs/en/changes).
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are the release tags
@@ -15,6 +15,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Write for users: what they can now do or what got fixed, 1–5 short lines per release, no internal jargon.
 
 ## [Unreleased]
+
+### Changed
+
+- The app now has a full name: Serbito GTD. You find it by this name in search, on the home screen icon and in emails. The address gtd.serbito.rs and the bot @gtdsrbot stay the same.
+  - RU: У приложения теперь полное имя — Serbito GTD. По нему его находят в поиске, оно стоит под иконкой на экране и в письмах. Адрес gtd.serbito.rs и бот @gtdsrbot не меняются.
 
 ## [0.55.0] - 2026-10-12
 

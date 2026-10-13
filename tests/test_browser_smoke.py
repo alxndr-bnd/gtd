@@ -480,7 +480,7 @@ def test_oauth_consent_screen(watch, server, lang):
     w.page.click('#signin a[href="/dev-login"]')
     w.wait("form#consent", f"[{lang}] OAuth: экран согласия после входа")
     text = w.page.inner_text("main")
-    assert ("Connect Claude to GTD?" if lang == "en" else "Подключить Claude к GTD?") in text
+    assert ("Connect Claude to Serbito GTD?" if lang == "en" else "Подключить Claude к Serbito GTD?") in text
     assert "127.0.0.1" in text
     with w.page.expect_navigation(url=lambda u: u.startswith(callback)):
         w.page.click('form#consent button[value="allow"]')
