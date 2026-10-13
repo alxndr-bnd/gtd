@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-10-14
+
 ### Fixed
 
 - A date with a two-digit year, like 24.10.26, sets the reminder again. The whole date is removed from the task title. A time range like 10:00-11:00 or 10:00/11:00 sets the reminder at the start time.
@@ -561,7 +563,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.58.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.59.0...HEAD
+[0.59.0]: https://github.com/alxndr-bnd/gtd/compare/v0.58.0...v0.59.0
 [0.58.0]: https://github.com/alxndr-bnd/gtd/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/alxndr-bnd/gtd/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/alxndr-bnd/gtd/compare/v0.55.0...v0.56.0
