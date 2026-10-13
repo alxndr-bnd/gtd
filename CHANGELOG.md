@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Fixed
+
+- A date inside a link or a file path no longer becomes the reminder. The date you write in the text sets the reminder, and the link stays in the task as you typed it.
+  - RU: Дата внутри ссылки или пути к файлу больше не становится напоминанием. Напоминание ставит дата, которую вы написали в тексте, а ссылка остаётся в задаче как есть.
+
 ## [0.57.0] - 2026-10-14
 
 ### Changed
