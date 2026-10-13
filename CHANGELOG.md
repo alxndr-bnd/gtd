@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-10-13
+
 ### Changed
 
 - The app now has a full name: Serbito GTD. You find it by this name in search, on the home screen icon and in emails. The address gtd.serbito.rs and the bot @gtdsrbot stay the same.
@@ -540,7 +542,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.55.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.56.0...HEAD
+[0.56.0]: https://github.com/alxndr-bnd/gtd/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/alxndr-bnd/gtd/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/alxndr-bnd/gtd/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/alxndr-bnd/gtd/compare/v0.52.0...v0.53.0
