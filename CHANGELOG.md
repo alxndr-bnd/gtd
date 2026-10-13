@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-10-14
+
 ### Fixed
 
 - A date inside a link or a file path no longer becomes the reminder. The date you write in the text sets the reminder, and the link stays in the task as you typed it.
@@ -554,7 +556,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.57.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.58.0...HEAD
+[0.58.0]: https://github.com/alxndr-bnd/gtd/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/alxndr-bnd/gtd/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/alxndr-bnd/gtd/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/alxndr-bnd/gtd/compare/v0.54.0...v0.55.0
