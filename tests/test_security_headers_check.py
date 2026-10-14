@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -51,7 +52,7 @@ def test_all_headers_pass_with_one_request_without_redirects(tmp_path):
     r = _check(tmp_path, FULL)
     assert r.returncode == 0, r.stdout + r.stderr
     args = (tmp_path / "curl.log").read_text()
-    assert args.count("\n") == 1 and "https://gtd.example/" in args.split()
+    assert args.count("\n") == 1 and args.split()[-1] == "https://gtd.example/"  # адрес — последний аргумент
     assert "-L" not in args.split() and "--max-time 30" in args
 
 
@@ -112,7 +113,8 @@ def test_step_runs_after_the_smoke_on_every_deploy_and_checks_the_candidate_url(
     assert "if" not in STEPS[STEP] and not STEPS[STEP].get("continue-on-error")
     r = _run_step(tmp_path, FULL)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "https://candidate---gtd-x.a.run.app/" in (tmp_path / "curl.log").read_text().split()
+    hosts = {urlsplit(w).hostname for w in (tmp_path / "curl.log").read_text().split() if w.startswith("https:")}
+    assert hosts == {"candidate---gtd-x.a.run.app"}
 
 
 def test_step_fails_without_rollback_when_a_header_is_missing(tmp_path):

@@ -360,7 +360,7 @@ def ru_surfaces(client):
            + "\n".join(c["description"] for c in A.BOT_COMMANDS["ru"])}
     for path in ("/", "/about", "/privacy", "/changes", "/bot", "/weekly-review"):
         # Без комментариев и кода (строки SPA проверены выше по словарю), но с JSON-LD и мета-тегами
-        out[path] = re.sub(r"<!--.*?--!?>|<style\b.*?</style\s*>|<script\b(?! type=\"application/ld\+json\").*?</script\s*>",
+        out[path] = re.sub(r"<!--.*?--!?>|<style\b.*?</style[^>]*>|<script\b(?! type=\"application/ld\+json\").*?</script[^>]*>",
                            "", client.get(path).text, flags=re.S | re.I)
     # Исключение — страница под запрос «еженедельный обзор gtd» (SERBITO-446): запрос стоит в <head> (title,
     # description, JSON-LD) и в h1. Остальной текст — по правилу: список называется Weekly Review
