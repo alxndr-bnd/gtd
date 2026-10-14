@@ -154,6 +154,12 @@ def new_secret(prefix: str = "") -> str:
     return prefix + secrets.token_urlsafe(32)
 
 
+def new_client_id() -> str:
+    """client_id — публичное имя клиента (RFC 7591 §3.2.1), не секрет: его видно в адресе /oauth/authorize, и
+    в журнал его писать можно. Секреты (коды, токены) — только new_secret, и в журнал они не идут (SERBITO-628)."""
+    return CLIENT_PREFIX + secrets.token_urlsafe(32)
+
+
 def oauth_error(error: str, desc: str = "", status: int = 400, headers: dict | None = None) -> JSONResponse:
     return JSONResponse({"error": error, **({"error_description": desc} if desc else {})}, status,
                         headers={**NO_STORE, **(headers or {})})
@@ -301,7 +307,7 @@ async def register(request: Request):
         return oauth_error("invalid_client_metadata", f"scope: {SCOPE}")
     name = body.get("client_name")
     name = " ".join(name.split())[:NAME_MAX] if isinstance(name, str) else ""
-    cid, ts = new_secret(CLIENT_PREFIX), now()
+    cid, ts = new_client_id(), now()
     # Секрет публичному клиенту ни к чему (PKCE его заменяет): метод — всегда none, даже если просили другой
     # (RFC 7591 §3.2.1 разрешает серверу заменить значения)
     A.run("delete from oauth_clients c where coalesce(c.last_used, c.created) < %s "

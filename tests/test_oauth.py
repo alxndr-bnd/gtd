@@ -670,3 +670,16 @@ def test_official_client_oauth(web, mode):
     assert [t["title"] for t in listed.structured_content["tasks"]] == ["found via oauth"]
     assert storage.tokens.access_token.startswith("gtdo_") and storage.client.client_id.startswith("gtdc_")
     assert A.row("select name from oauth_clients")["name"] == "SDK test"
+
+
+def test_log_never_holds_codes_or_tokens(web, client, caplog):
+    """py/clear-text-logging-sensitive-data (SERBITO-628): в журнал идут client_id и номера грантов, но не код
+    и не токены. client_id — публичный (RFC 7591), его делает new_client_id, а не new_secret."""
+    caplog.set_level(logging.INFO, logger="gtd")
+    cid = client_id(client)
+    code, verifier = get_code(web, cid)
+    t = exchange(client, cid, code, verifier).json()
+    t2 = refresh(client, cid, t["refresh_token"]).json()
+    assert cid in caplog.text and "oauth client registered" in caplog.text
+    for secret in (code, verifier, t["access_token"], t["refresh_token"], t2["access_token"], t2["refresh_token"]):
+        assert secret not in caplog.text

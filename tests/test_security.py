@@ -180,7 +180,8 @@ def test_security_headers_on_every_response(client, path):
     # Боевая CSP (SERBITO-548) — один заголовок; до неё — report-only и отдельный боевой frame-ancestors
     csp = h["content-security-policy"] if A.CSP_ENFORCE else h["content-security-policy-report-only"]
     assert "frame-ancestors 'none'" in h["content-security-policy"]
-    assert "default-src 'self'" in csp and "https://accounts.google.com" in csp and "https://oauth.telegram.org" in csp
+    sources = set(re.split(r"[\s;]+", csp))  # источники CSP — целыми словами, а не подстрокой
+    assert "default-src 'self'" in csp and {"https://accounts.google.com", "https://oauth.telegram.org"} <= sources
     assert " https://www.google.com " in csp.split("connect-src", 1)[1].split(";")[0] + " "  # GA4 /g/collect (GTD-6)
     assert "strict-transport-security" not in h  # http: HSTS не отдаём
 
@@ -338,3 +339,54 @@ def test_deploy_config_has_no_smtp_login_or_admin_ids():
 def test_attach_rejects_a_field_outside_the_whitelist():
     with pytest.raises(ValueError):
         A.attach(1, "id=id; drop table users; --", "x")
+
+
+# ── SERBITO-628: находки CodeQL на main ──
+
+XSS = '"><script>alert(1)</script>'
+
+
+def test_auth_pages_never_echo_lang_from_url(tg, client):
+    """py/reflective-xss: lang из адреса в HTML не попадает — только ru/en из своего списка."""
+    r = client.get("/auth", params={"t": "nope", "lang": XSS})
+    assert r.status_code == 400 and "<script>alert" not in r.text and re.search(r'<html lang="(ru|en)">', r.text)
+    bot_message("/login")
+    tok = re.search(r"/auth\?t=(\S+)", texts(tg)[-1]).group(1)
+    r = client.get("/auth", params={"t": tok, "lang": XSS})
+    assert r.status_code == 200 and "<script>alert" not in r.text and "alert(1)" not in r.text
+    assert re.search(r'<html lang="(ru|en)">', r.text) and '<input type="hidden" name="lang" value="">' in r.text
+    assert f'name="t" value="{tok}"' in r.text  # токен в форме — из базы, тот же
+    assert A.known_lang("en") == "en" and A.known_lang("EN") == "" and A.known_lang(None) == ""
+
+
+def test_screenshot_paths_come_from_the_list():
+    """py/path-injection: путь к скриншоту — из SHOT_PATHS, имя из адреса в путь не попадает."""
+    shots = os.path.join(A.STATIC, "shots")
+    assert set(A.SHOT_PATHS) == set(A.pages.SHOT_FILES)
+    assert all(os.path.dirname(p) == shots and os.path.basename(p) == n for n, p in A.SHOT_PATHS.items())
+
+
+def test_email_regex_is_linear():
+    """py/polynomial-redos: «!@!.» и много «!.» — прежний EMAIL_RE разбирал такую строку квадратично
+    (20 000 повторов — секунды). Текст из бота доходит до EMAIL_RE без ограничения длины."""
+    evil = "!@!." + "!." * 20_000 + "@"
+    start = time.perf_counter()
+    assert not A.EMAIL_RE.match(evil)
+    assert time.perf_counter() - start < 0.05
+    for ok in ("a@b.co", "x.y+z@mail.example.co.uk", "ivan@почта.рф"):
+        assert A.EMAIL_RE.match(ok), ok
+    for bad in ("a@b", "a@.b", "a@b..c", "a@b.c.", "a b@c.d", "a@b@c.d", "@b.c"):
+        assert not A.EMAIL_RE.match(bad), bad
+
+
+@pytest.mark.parametrize("bad", ['x"; Path=/', "guess", "a" * 23, "a" * 21 + "!"])
+def test_tg_start_does_not_echo_a_foreign_cookie(tg, client, bad):
+    """py/cookie-injection: чужое значение cookie tgl в Set-Cookie не повторяем — выдаём новое; своё — оставляем."""
+    client.cookies.set("tgl", bad, path="/api/auth/tg")
+    r = client.post("/api/auth/tg/start", json={})
+    new = re.search(r"tgl=([^;]*)", r.headers["set-cookie"]).group(1)
+    assert r.status_code == 200 and new != bad and A.TG_BROWSER_RE.fullmatch(new)
+    client.cookies.clear()
+    client.cookies.set("tgl", new, path="/api/auth/tg")
+    r = client.post("/api/auth/tg/start", json={})
+    assert re.search(r"tgl=([^;]*)", r.headers["set-cookie"]).group(1) == new

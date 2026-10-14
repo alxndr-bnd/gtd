@@ -403,6 +403,12 @@ def track(uid, channel: str, n: int = 1):
 LANGS, RU_LANGS = pages.LANGS, pages.RU_LANGS
 
 
+def known_lang(lang) -> str:
+    """Язык из запроса — только как своя константа из LANGS, иначе "" (SERBITO-628): строку из адреса в HTML не
+    несём даже после проверки."""
+    return next((lg for lg in LANGS if lg == lang), "")
+
+
 def req_lang(request: Request, uid: int | None = None) -> str:
     """Язык ответа сервера: явная настройка пользователя > Accept-Language (SPA шлёт в нём выбранный язык)."""
     uid = uid or session_user(request)
@@ -1881,7 +1887,9 @@ def start_session(uid: int) -> RedirectResponse:
 # Один аккаунт = одна строка users; способы входа — её колонки tg_id / email / google_sub.
 # Google и код на почту с одинаковым адресом попадают в один аккаунт; Telegram привязывается из «Аккаунта».
 IDENTITIES = ("tg_id", "email", "google_sub")
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Части домена — без точек, точка только между ними (SERBITO-628): у прежнего [^@\s]+\.[^@\s]+ точку можно было
+# отнести к любой из частей, и длинная строка из «!.» (текст из бота — до 4096 знаков) разбиралась квадратично
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$")
 # Лимиты входа по коду (SERBITO-346). Код — 6 цифр, 10⁶ вариантов: без общего бюджета на адрес его можно
 # подобрать, перезапрашивая код и угадывая снова. «Отправитель» — IP на сайте или Telegram-аккаунт в боте
 DAY = 86400
@@ -2286,6 +2294,7 @@ def auth_merge(body: dict, request: Request, uid: int = Depends(current_user)):
 # Вход через бота по ссылке (GTD-3). Браузер, начавший вход, получает cookie tgl (в базе — её хеш): забрать
 # сессию опросом может только он, даже если nonce из ссылки попал к кому-то ещё
 TG_COOKIE = "tgl"
+TG_BROWSER_RE = re.compile(r"[A-Za-z0-9_-]{22}")  # secrets.token_urlsafe(16)
 TG_STARTS = (20, 600)  # начатых входов через бота от одного IP за 10 минут
 
 
@@ -2313,7 +2322,10 @@ def auth_tg_start(body: dict, request: Request):
     now = int(time.time())
     run("delete from tg_logins where expires<%s", (now,))
     link_uid = session_user(request) if body.get("link") else None
-    browser = request.cookies.get(TG_COOKIE) or secrets.token_urlsafe(16)
+    # Свою прежнюю cookie браузер получает обратно, только если она того же вида, что выдаём мы (SERBITO-628):
+    # чужое значение в Set-Cookie не повторяем — выдаём новое
+    browser = request.cookies.get(TG_COOKIE, "")
+    browser = browser if TG_BROWSER_RE.fullmatch(browser) else secrets.token_urlsafe(16)
     run("insert into tg_logins(nonce,link_user_id,expires,code,ip,ua,browser) values(%s,%s,%s,%s,%s,%s,%s)",
         (nonce, link_uid, now + 600, code, ip, device_label(request.headers.get("user-agent", "")), token_hash(browser)))
     resp = JSONResponse({"nonce": nonce, "code": code, "url": f"https://t.me/{BOT_USERNAME}?start={nonce}"})
@@ -2489,7 +2501,7 @@ AUTH_HEADERS = {"X-Robots-Tag": "noindex", "Cache-Control": "no-store", "Referre
 
 def auth_stale_page(request: Request, lang: str) -> HTMLResponse:
     """Ссылку открывают в браузере из Telegram — страница с выходом, а не сырой JSON."""
-    page = pages.auth_stale(lang if lang in LANGS else req_lang(request), BOT_USERNAME)
+    page = pages.auth_stale(known_lang(lang) or req_lang(request), BOT_USERNAME)
     return HTMLResponse(page, status_code=400, headers=AUTH_HEADERS)
 
 
@@ -2499,12 +2511,14 @@ def auth(t: str, request: Request, lang: str = ""):
     подсунуть, и человек незаметно окажется в аккаунте злоумышленника и будет записывать задачи ему. Страница
     показывает, в чей аккаунт вход, и входит только по кнопке (POST). Заодно превью ссылок и префетч не сжигают
     одноразовый токен."""
-    r = row("select user_id from login_tokens where token=%s and expires>%s", (t, int(time.time())))
+    r = row("select user_id, token from login_tokens where token=%s and expires>%s", (t, int(time.time())))
     if not r:
         return auth_stale_page(request, lang)
     cur = session_user(request)
-    page_lang = lang if lang in LANGS else req_lang(request, r["user_id"])
-    return HTMLResponse(pages.auth_confirm(page_lang, account_label(r["user_id"]), t, lang if lang in LANGS else "",
+    link_lang = known_lang(lang)
+    page_lang = link_lang or req_lang(request, r["user_id"])
+    # В форму — токен из базы, а не строка из адреса (SERBITO-628): они равны, но в HTML идёт только своё
+    return HTMLResponse(pages.auth_confirm(page_lang, account_label(r["user_id"]), r["token"], link_lang,
                                            account_label(cur) if cur and cur != r["user_id"] else ""),
                         headers=AUTH_HEADERS)
 
@@ -3410,12 +3424,16 @@ def gtd_beginners_page(request: Request):
     return HTMLResponse(pages.beginners(BASE_URL, ga_snippet(request)))
 
 
+SHOT_PATHS = {n: os.path.join(STATIC, "shots", n) for n in pages.SHOT_FILES}
+
+
 @app.get("/shots/{name}", include_in_schema=False)
 def screenshot(name: str):
     """Скриншоты приложения для лендинга (SERBITO-442, scripts/screenshots.py). Только файлы из списка pages."""
-    if name not in pages.SHOT_FILES:
+    path = SHOT_PATHS.get(name)  # путь — из своего списка, имя из адреса в него не попадает (SERBITO-628)
+    if not path:
         raise HTTPException(404)
-    return FileResponse(os.path.join(STATIC, "shots", name), media_type="image/webp",
+    return FileResponse(path, media_type="image/webp",
                         headers={"Cache-Control": "public, max-age=604800"})
 
 
