@@ -1768,8 +1768,26 @@ CSP = "; ".join([
     "frame-src https://accounts.google.com https://oauth.telegram.org",
     "font-src 'self' data:",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
-    *([f"report-uri {sentry_csp_uri()}"] if sentry_csp_uri() else []),
+    # Отчёты идут к нам, а не прямо в Sentry: /csp-report отсеивает шум и пересылает остальное (GTD-2)
+    *(["report-uri /csp-report"] if sentry_csp_uri() else []),
 ])
+
+# Шум CSP (Sentry GTD-2): наш код не вызывает eval, new Function и setTimeout со строкой, поэтому eval в отчёте —
+# это расширение, бот или инструмент автоматизации (70 отчётов, в основном Chrome 118 с ротацией IP по странам).
+# Его отбрасываем, не добавляя 'unsafe-eval'. Так же — отчёты из расширений браузера и от ботов по User-Agent
+CSP_NOISE_URIS = {"eval", "wasm-eval"}
+CSP_NOISE_SCHEMES = ("chrome-extension:", "moz-extension:", "safari-extension:", "safari-web-extension:",
+                     "ms-browser-extension:")
+CSP_NOISE_UA = re.compile(r"HeadlessChrome|bot\b|crawler|spider|Lighthouse", re.I)
+CSP_REPORT_MAX = 16 * 1024
+
+
+def csp_noise(report: dict, ua: str) -> bool:
+    """True — отчёт CSP не про наш код: eval, расширение браузера или бот."""
+    blocked = str(report.get("blocked-uri") or "")
+    source = str(report.get("source-file") or "")
+    return (blocked in CSP_NOISE_URIS or blocked.startswith(CSP_NOISE_SCHEMES)
+            or source.startswith(CSP_NOISE_SCHEMES) or bool(CSP_NOISE_UA.search(ua)))
 
 
 def csp_headers(enforce: bool) -> list[tuple[bytes, bytes]]:
@@ -2624,6 +2642,33 @@ async def cron_authorized(request: Request) -> bool:
     if reason:
         log.warning("cron call rejected: %s", reason)
     return reason is None
+
+
+@app.post("/csp-report", include_in_schema=False)
+async def csp_report(request: Request):
+    """Отчёт CSP от браузера: шум отбрасываем, остальное — в Sentry (GTD-2). IP посетителя не пересылаем.
+    Всегда 204: браузеру ответ не нужен, а боту незачем знать, что отсеялось."""
+    target = sentry_csp_uri()
+    if not target or int(request.headers.get("content-length") or 0) > CSP_REPORT_MAX:
+        return Response(status_code=204)
+    body = b""
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > CSP_REPORT_MAX:
+            return Response(status_code=204)
+    try:
+        report = json.loads(body).get("csp-report")
+    except (ValueError, AttributeError):
+        return Response(status_code=204)
+    ua = request.headers.get("user-agent", "")
+    if not isinstance(report, dict) or csp_noise(report, ua):
+        return Response(status_code=204)
+    try:
+        await _client.post(target, content=body, timeout=5,
+                           headers={"content-type": "application/csp-report", "user-agent": ua})
+    except httpx.HTTPError as e:
+        log.warning("csp report forward failed: %s", type(e).__name__)
+    return Response(status_code=204)
 
 
 @app.post("/tasks/reminders")

@@ -202,6 +202,82 @@ def test_csp_reports_go_to_sentry(monkeypatch):
     assert A.sentry_csp_uri() == ""
 
 
+class FakeHttp:
+    """Вместо httpx.AsyncClient: копит пересланные отчёты CSP."""
+    def __init__(self):
+        self.sent = []
+
+    async def post(self, url, **kw):
+        self.sent.append((url, kw))
+
+
+CHROME = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
+
+
+def csp_post(client, report, ua=CHROME):
+    return client.post("/csp-report", content=json.dumps({"csp-report": report}),
+                       headers={"content-type": "application/csp-report", "user-agent": ua})
+
+
+@pytest.fixture
+def csp_sink(monkeypatch):
+    fake = FakeHttp()
+    monkeypatch.setattr(A, "SENTRY_DSN", "https://abc123@o42.ingest.de.sentry.io/77")
+    monkeypatch.setattr(A, "_client", fake)
+    return fake.sent
+
+
+def test_csp_report_uri_is_ours():
+    """GTD-2: отчёты CSP идут через /csp-report, а не прямо в Sentry — иначе шум не отсеять."""
+    if A.sentry_csp_uri():
+        assert "report-uri /csp-report" in A.CSP and "sentry" not in A.CSP
+    else:
+        assert "report-uri" not in A.CSP
+
+
+def test_csp_report_forwards_real_violation(client, csp_sink):
+    r = csp_post(client, {"blocked-uri": "https://evil.example/x.js", "violated-directive": "script-src",
+                          "document-uri": "https://gtd.serbito.rs/"})
+    assert r.status_code == 204
+    [(url, kw)] = csp_sink
+    assert url == "https://o42.ingest.de.sentry.io/api/77/security/?sentry_key=abc123"
+    assert json.loads(kw["content"])["csp-report"]["blocked-uri"] == "https://evil.example/x.js"
+    assert kw["headers"] == {"content-type": "application/csp-report", "user-agent": CHROME}  # без IP и cookie
+
+
+@pytest.mark.parametrize("report,ua", [
+    ({"blocked-uri": "eval", "violated-directive": "script-src"}, CHROME),            # Sentry GTD-2
+    ({"blocked-uri": "wasm-eval"}, CHROME),
+    ({"blocked-uri": "chrome-extension://abc/inject.js"}, CHROME),
+    ({"blocked-uri": "inline", "source-file": "moz-extension://abc/content.js"}, CHROME),
+    ({"blocked-uri": "https://evil.example/x.js"}, CHROME.replace("Chrome/", "HeadlessChrome/")),
+    ({"blocked-uri": "https://evil.example/x.js"}, "Mozilla/5.0 (compatible; Googlebot/2.1)"),
+])
+def test_csp_report_drops_noise(client, csp_sink, report, ua):
+    assert csp_post(client, report, ua).status_code == 204
+    assert csp_sink == []
+
+
+@pytest.mark.parametrize("body", [b"not json", b"[]", b'{"csp-report": "x"}', b"{}", b"x" * (A.CSP_REPORT_MAX + 1)])
+def test_csp_report_ignores_garbage(client, csp_sink, body):
+    r = client.post("/csp-report", content=body, headers={"content-type": "application/csp-report"})
+    assert r.status_code == 204 and csp_sink == []
+
+
+def test_csp_report_without_dsn_goes_nowhere(client, csp_sink, monkeypatch):
+    monkeypatch.setattr(A, "SENTRY_DSN", "")
+    assert csp_post(client, {"blocked-uri": "https://evil.example/x.js"}).status_code == 204
+    assert csp_sink == []
+
+
+def test_own_code_has_no_eval():
+    """GTD-2: eval-отчёты отбрасываем, потому что своего eval в страницах нет. Появится — фильтр спрячет нарушение."""
+    root = Path(A.__file__).parent
+    pat = re.compile(r"\beval\(|new Function\(|set(?:Timeout|Interval)\(\s*['\"`]")
+    for f in (root / "static" / "index.html", root / "pages.py"):
+        assert pat.findall(f.read_text()) == [], f
+
+
 def test_api_docs_available_only_in_dev(client):
     assert client.get("/openapi.json").status_code == 200  # тесты — DEV=1
 
