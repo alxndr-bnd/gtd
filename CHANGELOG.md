@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+
+- Security reports from browser extensions and bots no longer reach error tracking, so real problems stay visible.
+  - RU: Отчёты безопасности от расширений браузера и ботов больше не попадают в трекер ошибок — настоящие проблемы видны сразу.
+
 ## [0.60.0] - 2026-10-14
 
 ### Security
