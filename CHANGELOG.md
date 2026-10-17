@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-10-17
+
 ### Security
 
 - Security reports from browser extensions and bots no longer reach error tracking, so real problems stay visible.
@@ -575,7 +577,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.60.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.61.0...HEAD
+[0.61.0]: https://github.com/alxndr-bnd/gtd/compare/v0.60.0...v0.61.0
 [0.60.0]: https://github.com/alxndr-bnd/gtd/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/alxndr-bnd/gtd/compare/v0.58.0...v0.59.0
 [0.58.0]: https://github.com/alxndr-bnd/gtd/compare/v0.57.0...v0.58.0
