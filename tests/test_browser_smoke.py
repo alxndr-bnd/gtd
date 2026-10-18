@@ -1175,12 +1175,14 @@ def hold_move(w, iid):
 
 
 def release(w, iid, held):
+    """Отпускаем задержанные запросы на сервер ровно один раз и только потом снимаем перехват. Порядок важен:
+    unroute на сервере Playwright сам передаёт висящий запрос следующему обработчику (route контекста →
+    continue). Тогда поздний route.abort() падает «Route is already handled!», а клиент Playwright так и не
+    помечает запрос обработанным: его задача висит, и сборщик мусора в одном из следующих тестов даёт
+    предупреждение «no running event loop». abort здесь не годится: живой запрос пишет в консоль net::ERR_FAILED."""
+    while held:
+        held.pop().continue_()
     w.page.unroute(f"**{move(iid)}")
-    for route in held:
-        try:
-            route.abort()  # страница уже оборвала запрос сама — Playwright может отказать
-        except Exception:  # noqa: BLE001
-            pass
 
 
 def test_stalled_move_does_not_block_navigation(watch):
