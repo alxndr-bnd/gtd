@@ -228,7 +228,7 @@ def test_tg_link_prompt_names_account_and_warns_about_merge(new_client, login, t
     d = tg_start(c, link=True)
     bot_message(f"/start {d['nonce']}", tg_id=888)
     text = tg[-1][1]["text"]
-    assert "привязать этот Telegram к аккаунту GTD a***@example.com" in text
+    assert "привязать этот Telegram к аккаунту Serbito GTD a***@example.com" in text
     assert "уже есть свой аккаунт с задачами (1)" in text
 
 

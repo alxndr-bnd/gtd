@@ -180,7 +180,8 @@ def test_security_headers_on_every_response(client, path):
     # Боевая CSP (SERBITO-548) — один заголовок; до неё — report-only и отдельный боевой frame-ancestors
     csp = h["content-security-policy"] if A.CSP_ENFORCE else h["content-security-policy-report-only"]
     assert "frame-ancestors 'none'" in h["content-security-policy"]
-    assert "default-src 'self'" in csp and "https://accounts.google.com" in csp and "https://oauth.telegram.org" in csp
+    sources = set(re.split(r"[\s;]+", csp))  # источники CSP — целыми словами, а не подстрокой
+    assert "default-src 'self'" in csp and {"https://accounts.google.com", "https://oauth.telegram.org"} <= sources
     assert " https://www.google.com " in csp.split("connect-src", 1)[1].split(";")[0] + " "  # GA4 /g/collect (GTD-6)
     assert "strict-transport-security" not in h  # http: HSTS не отдаём
 
@@ -199,6 +200,82 @@ def test_csp_reports_go_to_sentry(monkeypatch):
     assert A.sentry_csp_uri() == "https://o42.ingest.de.sentry.io/api/77/security/?sentry_key=abc123"
     monkeypatch.setattr(A, "SENTRY_DSN", "")
     assert A.sentry_csp_uri() == ""
+
+
+class FakeHttp:
+    """Вместо httpx.AsyncClient: копит пересланные отчёты CSP."""
+    def __init__(self):
+        self.sent = []
+
+    async def post(self, url, **kw):
+        self.sent.append((url, kw))
+
+
+CHROME = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
+
+
+def csp_post(client, report, ua=CHROME):
+    return client.post("/csp-report", content=json.dumps({"csp-report": report}),
+                       headers={"content-type": "application/csp-report", "user-agent": ua})
+
+
+@pytest.fixture
+def csp_sink(monkeypatch):
+    fake = FakeHttp()
+    monkeypatch.setattr(A, "SENTRY_DSN", "https://abc123@o42.ingest.de.sentry.io/77")
+    monkeypatch.setattr(A, "_client", fake)
+    return fake.sent
+
+
+def test_csp_report_uri_is_ours():
+    """GTD-2: отчёты CSP идут через /csp-report, а не прямо в Sentry — иначе шум не отсеять."""
+    if A.sentry_csp_uri():
+        assert "report-uri /csp-report" in A.CSP and "sentry" not in A.CSP
+    else:
+        assert "report-uri" not in A.CSP
+
+
+def test_csp_report_forwards_real_violation(client, csp_sink):
+    r = csp_post(client, {"blocked-uri": "https://evil.example/x.js", "violated-directive": "script-src",
+                          "document-uri": "https://gtd.serbito.rs/"})
+    assert r.status_code == 204
+    [(url, kw)] = csp_sink
+    assert url == "https://o42.ingest.de.sentry.io/api/77/security/?sentry_key=abc123"
+    assert json.loads(kw["content"])["csp-report"]["blocked-uri"] == "https://evil.example/x.js"
+    assert kw["headers"] == {"content-type": "application/csp-report", "user-agent": CHROME}  # без IP и cookie
+
+
+@pytest.mark.parametrize("report,ua", [
+    ({"blocked-uri": "eval", "violated-directive": "script-src"}, CHROME),            # Sentry GTD-2
+    ({"blocked-uri": "wasm-eval"}, CHROME),
+    ({"blocked-uri": "chrome-extension://abc/inject.js"}, CHROME),
+    ({"blocked-uri": "inline", "source-file": "moz-extension://abc/content.js"}, CHROME),
+    ({"blocked-uri": "https://evil.example/x.js"}, CHROME.replace("Chrome/", "HeadlessChrome/")),
+    ({"blocked-uri": "https://evil.example/x.js"}, "Mozilla/5.0 (compatible; Googlebot/2.1)"),
+])
+def test_csp_report_drops_noise(client, csp_sink, report, ua):
+    assert csp_post(client, report, ua).status_code == 204
+    assert csp_sink == []
+
+
+@pytest.mark.parametrize("body", [b"not json", b"[]", b'{"csp-report": "x"}', b"{}", b"x" * (A.CSP_REPORT_MAX + 1)])
+def test_csp_report_ignores_garbage(client, csp_sink, body):
+    r = client.post("/csp-report", content=body, headers={"content-type": "application/csp-report"})
+    assert r.status_code == 204 and csp_sink == []
+
+
+def test_csp_report_without_dsn_goes_nowhere(client, csp_sink, monkeypatch):
+    monkeypatch.setattr(A, "SENTRY_DSN", "")
+    assert csp_post(client, {"blocked-uri": "https://evil.example/x.js"}).status_code == 204
+    assert csp_sink == []
+
+
+def test_own_code_has_no_eval():
+    """GTD-2: eval-отчёты отбрасываем, потому что своего eval в страницах нет. Появится — фильтр спрячет нарушение."""
+    root = Path(A.__file__).parent
+    pat = re.compile(r"\beval\(|new Function\(|set(?:Timeout|Interval)\(\s*['\"`]")
+    for f in (root / "static" / "index.html", root / "pages.py"):
+        assert pat.findall(f.read_text()) == [], f
 
 
 def test_api_docs_available_only_in_dev(client):
@@ -338,3 +415,54 @@ def test_deploy_config_has_no_smtp_login_or_admin_ids():
 def test_attach_rejects_a_field_outside_the_whitelist():
     with pytest.raises(ValueError):
         A.attach(1, "id=id; drop table users; --", "x")
+
+
+# ── SERBITO-628: находки CodeQL на main ──
+
+XSS = '"><script>alert(1)</script>'
+
+
+def test_auth_pages_never_echo_lang_from_url(tg, client):
+    """py/reflective-xss: lang из адреса в HTML не попадает — только ru/en из своего списка."""
+    r = client.get("/auth", params={"t": "nope", "lang": XSS})
+    assert r.status_code == 400 and "<script>alert" not in r.text and re.search(r'<html lang="(ru|en)">', r.text)
+    bot_message("/login")
+    tok = re.search(r"/auth\?t=(\S+)", texts(tg)[-1]).group(1)
+    r = client.get("/auth", params={"t": tok, "lang": XSS})
+    assert r.status_code == 200 and "<script>alert" not in r.text and "alert(1)" not in r.text
+    assert re.search(r'<html lang="(ru|en)">', r.text) and '<input type="hidden" name="lang" value="">' in r.text
+    assert f'name="t" value="{tok}"' in r.text  # токен в форме — из базы, тот же
+    assert A.known_lang("en") == "en" and A.known_lang("EN") == "" and A.known_lang(None) == ""
+
+
+def test_screenshot_paths_come_from_the_list():
+    """py/path-injection: путь к скриншоту — из SHOT_PATHS, имя из адреса в путь не попадает."""
+    shots = os.path.join(A.STATIC, "shots")
+    assert set(A.SHOT_PATHS) == set(A.pages.SHOT_FILES)
+    assert all(os.path.dirname(p) == shots and os.path.basename(p) == n for n, p in A.SHOT_PATHS.items())
+
+
+def test_email_regex_is_linear():
+    """py/polynomial-redos: «!@!.» и много «!.» — прежний EMAIL_RE разбирал такую строку квадратично
+    (20 000 повторов — секунды). Текст из бота доходит до EMAIL_RE без ограничения длины."""
+    evil = "!@!." + "!." * 20_000 + "@"
+    start = time.perf_counter()
+    assert not A.EMAIL_RE.match(evil)
+    assert time.perf_counter() - start < 0.05
+    for ok in ("a@b.co", "x.y+z@mail.example.co.uk", "ivan@почта.рф"):
+        assert A.EMAIL_RE.match(ok), ok
+    for bad in ("a@b", "a@.b", "a@b..c", "a@b.c.", "a b@c.d", "a@b@c.d", "@b.c"):
+        assert not A.EMAIL_RE.match(bad), bad
+
+
+@pytest.mark.parametrize("bad", ['x"; Path=/', "guess", "a" * 23, "a" * 21 + "!"])
+def test_tg_start_does_not_echo_a_foreign_cookie(tg, client, bad):
+    """py/cookie-injection: чужое значение cookie tgl в Set-Cookie не повторяем — выдаём новое; своё — оставляем."""
+    client.cookies.set("tgl", bad, path="/api/auth/tg")
+    r = client.post("/api/auth/tg/start", json={})
+    new = re.search(r"tgl=([^;]*)", r.headers["set-cookie"]).group(1)
+    assert r.status_code == 200 and new != bad and A.TG_BROWSER_RE.fullmatch(new)
+    client.cookies.clear()
+    client.cookies.set("tgl", new, path="/api/auth/tg")
+    r = client.post("/api/auth/tg/start", json={})
+    assert re.search(r"tgl=([^;]*)", r.headers["set-cookie"]).group(1) == new

@@ -1,6 +1,6 @@
-# GTD — free Getting Things Done app
+# Serbito GTD — free Getting Things Done app
 
-A free task manager built around David Allen's GTD method: capture everything in a second, clarify it
+Serbito GTD is a free task manager built around David Allen's GTD method: capture everything in a second, clarify it
 later, do the next action. On the web and in Telegram, one account for both. Hosted at
 **[gtd.serbito.rs](https://gtd.serbito.rs)** · bot [@gtdsrbot](https://t.me/gtdsrbot).
 
@@ -42,16 +42,16 @@ The server address is `https://gtd.serbito.rs/mcp` (on your own server — `BASE
 You need only the address. No token.
 
 1. In Claude, open **Settings → Connectors → Add custom connector**.
-2. Enter a name (for example, `GTD`) and the URL `https://gtd.serbito.rs/mcp`. Leave the OAuth fields empty.
+2. Enter a name (for example, `Serbito GTD`) and the URL `https://gtd.serbito.rs/mcp`. Leave the OAuth fields empty.
    Press **Add**, then **Connect**.
-3. GTD opens. Sign in (Google, email or Telegram) if you are not signed in. Check the app name and the return
+3. Serbito GTD opens. Sign in (Google, email or Telegram) if you are not signed in. Check the app name and the return
    address (`claude.ai`), then press **Allow**.
 4. Claude returns to the chat with the connector on. A connector added on claude.ai also works in Claude Desktop
    and on the phone.
 
 ### ChatGPT, Cursor, VS Code and other clients — sign in (OAuth)
 
-Any MCP client with OAuth sign-in works the same way: give it the address, sign in to GTD, and press **Allow**.
+Any MCP client with OAuth sign-in works the same way: give it the address, sign in to Serbito GTD, and press **Allow**.
 
 - **ChatGPT:** turn on **Developer mode** in the settings, then add an app (connector) with the URL
   `https://gtd.serbito.rs/mcp` and OAuth authentication.
@@ -66,15 +66,15 @@ Any MCP client with OAuth sign-in works the same way: give it the address, sign 
 - **Claude Code:** `claude mcp add --transport http gtd https://gtd.serbito.rs/mcp`, then run `/mcp` and choose
   **Authenticate**.
 
-**Check the consent screen.** The app sends its own name, and GTD does not check it. The screen also shows where the
+**Check the consent screen.** The app sends its own name, and Serbito GTD does not check it. The screen also shows where the
 access goes: a site (`chatgpt.com`), an app on this computer (`localhost`), or a desktop app (`cursor://…`). If you
 did not start the connection yourself, or you do not know that address, press **Deny**.
 
-GTD accepts these return addresses: any `https://` site, `http://localhost`, `127.0.0.1` or `[::1]` on any port,
+Serbito GTD accepts these return addresses: any `https://` site, `http://localhost`, `127.0.0.1` or `[::1]` on any port,
 and the app links `cursor://`, `vscode://` and `vscode-insiders://`.
 
 To disconnect, open **👤 Account → 🤖 AI assistants → Connected apps** and press **Disconnect**. Access stops at
-once. Removing the connector in the client may leave access open in GTD; disconnect it in GTD too.
+once. Removing the connector in the client may leave access open in Serbito GTD; disconnect it in Serbito GTD too.
 
 ### Any client — a personal token
 

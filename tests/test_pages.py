@@ -143,7 +143,7 @@ def test_signed_in_root_serves_app(client, login):
     login(client)
     for path in ("/", "/en/"):
         h = client.get(path).text
-        assert "<title>GTD</title>" in h and "function loginScreen" in app_code(client, h)  # приложение, как раньше
+        assert "<title>Serbito GTD</title>" in h and "function loginScreen" in app_code(client, h)  # приложение, как раньше
         assert 'id="signin"' not in h and "Записал" not in h and 'rel="canonical"' not in h
 
 
@@ -282,7 +282,7 @@ def test_llms_txt(client):
     но файл дешёвый."""
     r = client.get("/llms.txt")
     assert r.status_code == 200 and r.headers["content-type"] == "text/plain; charset=utf-8"
-    assert r.text.startswith("# GTD\n\n> ") and "Getting Things Done" in r.text and "<" not in r.text
+    assert r.text.startswith("# Serbito GTD\n\n> Serbito GTD is ") and "Getting Things Done" in r.text and "<" not in r.text
     for path in PUBLIC:
         if "privacy" not in path:  # политика — не про продукт
             assert f"({BASE}{path})" in r.text, path
@@ -366,12 +366,44 @@ def test_icons_and_name_on_every_page(client, login):
         assert '<link rel="icon" href="/favicon.ico"' in h and '<link rel="apple-touch-icon"' in h
         assert f'<meta name="theme-color" content="{P.BRAND}"' in h and "<!--ICONS-->" not in h
         assert "data:image/svg+xml" not in h and "GTD for free" not in h
-    assert '<meta property="og:site_name" content="GTD">' in pages[0]
+    assert '<meta property="og:site_name" content="Serbito GTD">' in pages[0]
+
+@pytest.mark.parametrize("path, lang", PUBLIC.items())
+def test_product_name_is_serbito_gtd(client, path, lang):
+    """SERBITO-447: продукт называется «Serbito GTD» — «GTD» один не найти брендовым поиском (это метод и знак
+    David Allen). Имя — в title, og:site_name, application-name, apple-mobile-web-app-title, шапке и JSON-LD;
+    «GTD» остаётся alternateName."""
+    h = client.get(path).text
+    title = re.search(r"<title>([^<]+)</title>", h).group(1)
+    assert "Serbito GTD" in title, title
+    assert meta(h, "og:site_name") == "Serbito GTD"
+    assert '<meta name="application-name" content="Serbito GTD">' in h
+    assert '<meta name="apple-mobile-web-app-title" content="Serbito GTD">' in h
+    assert re.search(r'class="brand"[^>]*>.*?</svg> Serbito GTD</a>', h)
+    ld = json.loads(re.search(r'<script type="application/ld\+json">(.+?)</script>', h).group(1))
+    nodes = {n["@type"]: n for n in ld["@graph"]}
+    for kind in ("WebApplication", "WebSite"):
+        assert nodes[kind]["name"] == "Serbito GTD" and nodes[kind]["alternateName"] == "GTD", nodes[kind]
+    assert nodes["SoftwareSourceCode"]["name"] == "Serbito GTD"
+    if "BreadcrumbList" in nodes:
+        assert nodes["BreadcrumbList"]["itemListElement"][0]["name"] == "Serbito GTD"
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_manifest_and_app_carry_product_name(client, login, lang):
+    m = client.get("/manifest.webmanifest", headers={"accept-language": lang}).json()
+    assert m["name"] == m["short_name"] == "Serbito GTD" and len(m["short_name"]) <= 12  # подпись под иконкой
+    login(client)
+    h = client.get("/").text
+    code = app_code(client, h)
+    assert "<title>Serbito GTD</title>" in h
+    assert "— Serbito GTD`" in code and ">Serbito GTD</h1>" in code  # вкладка «(3) Next — Serbito GTD» и меню
+
 
 def test_item_page_noindex(client):
     r = client.get("/i/1")
     assert r.status_code == 200 and r.headers["x-robots-tag"] == "noindex"
-    assert "<title>GTD</title>" in r.text and 'id="signin"' not in r.text  # личная ссылка — не лендинг
+    assert "<title>Serbito GTD</title>" in r.text and 'id="signin"' not in r.text  # личная ссылка — не лендинг
     assert "noindex" not in client.get("/").headers.get("x-robots-tag", "")
 
 
@@ -719,7 +751,7 @@ def test_landing_comparison_is_sourced_and_honest(client, lang):
     есть «кому не стоит переходить» и ссылка на подробное сравнение."""
     body = landing_main(client, lang)
     table = body[body.index('<table class="cmp">'):body.index("</table>")]
-    for name in ("GTD", "Todoist", "TickTick", "Things"):
+    for name in ("Serbito GTD", "Todoist", "TickTick", "Things"):
         assert f"<td>{name}</td>" in table, name
     for app in ("todoist", "ticktick", "things"):
         for u, _ in P.APPS[app]["src"]:
