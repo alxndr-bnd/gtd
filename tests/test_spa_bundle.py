@@ -12,7 +12,8 @@ BUNDLE = re.compile(r'<script defer src="(/app\.([0-9a-f]{12})\.js)"></script>')
 def test_landing_html_is_light_and_has_one_h1(client):
     for path in ("/", "/en/"):
         h = client.get(path).text
-        assert len(h.encode()) < 45_000, len(h.encode())  # было ~160 КБ
+        # было ~160 КБ; 46 КБ — с длинным именем «Serbito GTD» в title, шапке, JSON-LD и тексте (SERBITO-447)
+        assert len(h.encode()) < 46_000, len(h.encode())
         assert "function loginScreen" not in h and 'id="i18n"' not in h
         assert "<!--" not in h  # комментарий к словарю уходит вместе со словарём (SERBITO-611)
         assert h.count("<h1") == 1  # лишние <h1> были в шаблонах кода приложения

@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in GTD for its users, version by version, newest first. The same list, in Russian or English,
+What changed in Serbito GTD for its users, version by version, newest first. The same list, in Russian or English,
 is on the site: [gtd.serbito.rs/en/changes](https://gtd.serbito.rs/en/changes).
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are the release tags
@@ -15,6 +15,48 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Write for users: what they can now do or what got fixed, 1–5 short lines per release, no internal jargon.
 
 ## [Unreleased]
+
+## [0.61.0] - 2026-10-17
+
+### Security
+
+- Security reports from browser extensions and bots no longer reach error tracking, so real problems stay visible.
+  - RU: Отчёты безопасности от расширений браузера и ботов больше не попадают в трекер ошибок — настоящие проблемы видны сразу.
+
+## [0.60.0] - 2026-10-14
+
+### Security
+
+- Sign-in pages, screenshots and e-mail checks are hardened against crafted input.
+  - RU: Страницы входа, скриншоты и проверка e-mail защищены от специально подобранного ввода.
+
+## [0.59.0] - 2026-10-14
+
+### Fixed
+
+- A date with a two-digit year, like 24.10.26, sets the reminder again. The whole date is removed from the task title. A time range like 10:00-11:00 or 10:00/11:00 sets the reminder at the start time.
+  - RU: Дата с годом из двух цифр, например 24.10.26, снова ставит напоминание и целиком уходит из названия задачи. Диапазон времени, например 10:00-11:00 или 10:00/11:00, ставит напоминание на время начала.
+
+## [0.58.0] - 2026-10-14
+
+### Fixed
+
+- A date inside a link or a file path no longer becomes the reminder. The date you write in the text sets the reminder, and the link stays in the task as you typed it.
+  - RU: Дата внутри ссылки или пути к файлу больше не становится напоминанием. Напоминание ставит дата, которую вы написали в тексте, а ссылка остаётся в задаче как есть.
+
+## [0.57.0] - 2026-10-14
+
+### Changed
+
+- The Telegram bot now has the name Serbito GTD too: "Serbito GTD — Tasks & Todo" in English, and the same name with Russian words in other languages.
+  - RU: У бота в Telegram теперь тоже имя Serbito GTD: «Serbito GTD — задачи, список дел» по-русски и на других языках, «Serbito GTD — Tasks & Todo» по-английски.
+
+## [0.56.0] - 2026-10-13
+
+### Changed
+
+- The app now has a full name: Serbito GTD. You find it by this name in search, on the home screen icon and in emails. The address gtd.serbito.rs and the bot @gtdsrbot stay the same.
+  - RU: У приложения теперь полное имя — Serbito GTD. По нему его находят в поиске, оно стоит под иконкой на экране и в письмах. Адрес gtd.serbito.rs и бот @gtdsrbot не меняются.
 
 ## [0.55.0] - 2026-10-12
 
@@ -535,7 +577,13 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.55.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.61.0...HEAD
+[0.61.0]: https://github.com/alxndr-bnd/gtd/compare/v0.60.0...v0.61.0
+[0.60.0]: https://github.com/alxndr-bnd/gtd/compare/v0.59.0...v0.60.0
+[0.59.0]: https://github.com/alxndr-bnd/gtd/compare/v0.58.0...v0.59.0
+[0.58.0]: https://github.com/alxndr-bnd/gtd/compare/v0.57.0...v0.58.0
+[0.57.0]: https://github.com/alxndr-bnd/gtd/compare/v0.56.0...v0.57.0
+[0.56.0]: https://github.com/alxndr-bnd/gtd/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/alxndr-bnd/gtd/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/alxndr-bnd/gtd/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/alxndr-bnd/gtd/compare/v0.52.0...v0.53.0

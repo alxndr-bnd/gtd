@@ -104,7 +104,7 @@ SMTP_HOST = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-EMAIL_FROM = os.getenv("EMAIL_FROM", '"GTD" <info@serbito.rs>')
+EMAIL_FROM = os.getenv("EMAIL_FROM", '"Serbito GTD" <info@serbito.rs>')
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 # Google Analytics 4: поток данных для gtd.serbito.rs. Пусто — GA не подключается
 GA_ID = os.getenv("GA_MEASUREMENT_ID", "")
@@ -403,6 +403,12 @@ def track(uid, channel: str, n: int = 1):
 LANGS, RU_LANGS = pages.LANGS, pages.RU_LANGS
 
 
+def known_lang(lang) -> str:
+    """Язык из запроса — только как своя константа из LANGS, иначе "" (SERBITO-628): строку из адреса в HTML не
+    несём даже после проверки."""
+    return next((lg for lg in LANGS if lg == lang), "")
+
+
 def req_lang(request: Request, uid: int | None = None) -> str:
     """Язык ответа сервера: явная настройка пользователя > Accept-Language (SPA шлёт в нём выбранный язык)."""
     uid = uid or session_user(request)
@@ -430,7 +436,7 @@ TEXTS = {
                 "/login — ссылка для входа в веб-интерфейс\n"
                 "/email you@example.com — привязать почту: входить на сайте по коду или через Google\n"
                 "/about — что такое GTD",
-        "ready": "GTD-бот готов.\n\n",
+        "ready": "Бот Serbito GTD готов.\n\n",
         "start": "Пришли любую мысль — она попадёт в Inbox, а разберёшь потом.\n\n"
                  "• «позвонить маме завтра в 10:00» → напомню\n"
                  "• «отчёт #Работа @комп» → сразу в проект и контекст\n\n"
@@ -456,8 +462,8 @@ TEXTS = {
         "archive_ok": "🗄 Проект #{p} в архиве. Вернуть его можно на сайте: Projects → Архив",
         "archive_later": "Хорошо, проект #{p} остаётся в Projects",
         "tg_link_stale": "Ссылка устарела — нажми кнопку на сайте ещё раз",
-        "tg_confirm_link": "привязать этот Telegram к аккаунту GTD {who}",
-        "tg_confirm_login": "войти в GTD в браузере",
+        "tg_confirm_link": "привязать этот Telegram к аккаунту Serbito GTD {who}",
+        "tg_confirm_login": "войти в Serbito GTD в браузере",
         "tg_confirm": "Подтвердить: {what}?\n\nЗапрос из браузера: {device}, IP {ip}.{merge}\n\nНажми число, которое "
                       "показано на сайте. Если ты сам сейчас не нажимал кнопку на сайте — ничего не нажимай: "
                       "это чужая попытка войти в твой аккаунт.",
@@ -506,8 +512,8 @@ TEXTS = {
         "token_name": "Дай токену название — например, «Claude на ноутбуке»",
         "tokens_max": "Токенов уже {n} — отзови ненужный, чтобы создать новый",
         # Письмо с кодом
-        "mail_subject": "Код входа в GTD: {code}",
-        "mail_body": "Код входа в GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.",
+        "mail_subject": "Код входа в Serbito GTD: {code}",
+        "mail_body": "Код входа в Serbito GTD: {code}\n\nДействует 10 минут. Если ты не входил — просто проигнорируй письмо.",
     },
     "en": {
         "help": "Just send me a thought — it lands in your Inbox.\n\n"
@@ -520,7 +526,7 @@ TEXTS = {
                 "/login — a sign-in link for the website\n"
                 "/email you@example.com — link an email to sign in on the site with a code or Google\n"
                 "/about — what GTD is",
-        "ready": "The GTD bot is ready.\n\n",
+        "ready": "The Serbito GTD bot is ready.\n\n",
         "start": "Send me any thought — it lands in your Inbox, and you sort it out later.\n\n"
                  "• “call mom tomorrow at 10:00” → I'll remind you\n"
                  "• “report #Work @computer” → straight into a project and a context\n\n"
@@ -548,8 +554,8 @@ TEXTS = {
         "archive_ok": "🗄 Project #{p} is archived. To restore it, open Projects → Archive on the website",
         "archive_later": "OK, project #{p} stays in Projects",
         "tg_link_stale": "This link has expired — press the button on the website again",
-        "tg_confirm_link": "link this Telegram to the GTD account {who}",
-        "tg_confirm_login": "sign in to GTD in your browser",
+        "tg_confirm_link": "link this Telegram to the Serbito GTD account {who}",
+        "tg_confirm_login": "sign in to Serbito GTD in your browser",
         "tg_confirm": "Confirm: {what}?\n\nRequested from: {device}, IP {ip}.{merge}\n\nTap the number shown on the "
                       "website. If you didn't just press the button on the website yourself, don't tap anything: "
                       "someone else is trying to get into your account.",
@@ -596,8 +602,8 @@ TEXTS = {
         "task_missing": "Task not found",
         "token_name": "Give the token a name — for example, “Claude on my laptop”",
         "tokens_max": "You already have {n} tokens — revoke one you don't use to create a new one",
-        "mail_subject": "Your GTD sign-in code: {code}",
-        "mail_body": "Your GTD sign-in code: {code}\n\nIt's valid for 10 minutes. If you didn't try to sign in, "
+        "mail_subject": "Your Serbito GTD sign-in code: {code}",
+        "mail_body": "Your Serbito GTD sign-in code: {code}\n\nIt's valid for 10 minutes. If you didn't try to sign in, "
                      "just ignore this email.",
     },
 }
@@ -652,7 +658,38 @@ def _duration(n: int, unit: str) -> timedelta:
     return timedelta(weeks=n)
 
 
+# Путь или ссылка — слово с «/» или «\» («~/handoff/2026-10-14/a.md», «https://x.com/2026/10/14/post»,
+# «C:\logs\2026-10-14»). Даты и время внутри них — часть имени, не срок (SERBITO-620)
+# Диапазон времени через «/» («10:00/11:00») — не путь: срок по первому времени, как до v0.58.0 (SERBITO-621)
+PATH_TOKEN = re.compile(r"(?<!\S)(?!\d{1,2}:\d{2}/\d{1,2}:\d{2}(?![^\s,.;:!?)]))(?=[^\s/\\]*[/\\])\S+")
+# Диапазон времени: «10:00-11:00», «10:00 – 11:00», «10:00/11:00». Срок — по началу; диапазон остаётся в тексте,
+# чтобы не потерять время конца (SERBITO-621)
+TIME_RANGE = r"(?:\b(?:в|с|at|from|u|у|od)\s+)?\b(\d{1,2}):(\d{2})\s*[-–—/]\s*\d{1,2}:\d{2}\b"
+# Перед датой с двузначным годом — номер версии: «версия 1.10.26», «ver 12.10.26» — не дата (SERBITO-621)
+VERSION_BEFORE = re.compile(r"\b(?:v|ver|version|верси[яиюей]|вер)\.?\s*$", re.I)
+# Дата не продолжает другое слово: «v1.24.10», «build-2026-10-14», «id:2026-10-14», «2026-10-14-1» — не даты
+NOT_GLUED_L = r"(?<![\w.\-:])"
+NOT_GLUED_R = r"(?![.\-:]\d)"
+_MASK = "\ue000"  # символ частной области: не буква, не цифра — ни одно правило разбора его не задевает
+
+
 def parse_when(text: str, now: datetime):
+    """parse_when с путями и ссылками: они на время разбора заменены метками и возвращаются в текст как были."""
+    tokens: list[str] = []
+
+    def mask(m):
+        if len(tokens) >= 0x17FF:  # метки кончились (область U+E100…U+F8FF) — дальше слово как есть
+            return m.group(0)
+        tokens.append(m.group(0))
+        return _MASK + chr(0xE100 + len(tokens) - 1) + _MASK
+
+    rest, ts = _parse_when(PATH_TOKEN.sub(mask, text), now)
+    for i, t in enumerate(tokens):
+        rest = rest.replace(_MASK + chr(0xE100 + i) + _MASK, t)
+    return rest, ts
+
+
+def _parse_when(text: str, now: datetime):
     """Возвращает (очищенный_текст, epoch|None). Понимает рус/англ: «через 2 часа» / «in 2 hours»,
     «завтра в 10:00» / «tomorrow 10am», «в пятницу» / «on friday», «next monday», «24.10 12:00» / «24 oct 12:00»,
     «22 октября 10:00» / «22. oktobra u 10:00», «2026-10-24», «в 15:30» / «at 3pm», «day after tomorrow»,
@@ -665,7 +702,12 @@ def parse_when(text: str, now: datetime):
     («5.10.2026») — всегда дата. С однозначным днём («1.10») — только если рядом признак даты: начало
     текста («1.02 оплата»), предлог перед ней («к», «до», «на», «в», «с», «по», «by», «on», «until»,
     «till») или время сразу после («1.10 12:00», «1.10 в 12:00»). Иначе это число: «версия 1.05»,
-    «курс 1.10» напоминаний не ставят."""
+    «курс 1.10» напоминаний не ставят.
+
+    Год из двух цифр — 20yy: «24.10.26» — 24 октября 2026, токен уходит из текста целиком. Однозначный день
+    с таким годом — по тому же правилу признака, что и без года; после «v», «ver», «version», «версия» это номер
+    версии, не дата (SERBITO-621). Диапазон времени «10:00-11:00» / «10:00/11:00» — срок по началу,
+    диапазон остаётся в тексте."""
     m = re.search(r"\b(?:через|in)\s+(\d+)\s*" + DUR_UNITS + r"\b", text, re.I)
     if m:
         rest, ts, calendar = _parse_at(text, now)
@@ -674,6 +716,23 @@ def parse_when(text: str, now: datetime):
         text = text[: m.start()] + " " + text[m.end():]
         return _clean(text), int((now + _duration(int(m.group(1)), m.group(2))).timestamp())
     return _parse_at(text, now)[:2]
+
+
+DATE_MARKERS = {"к", "до", "на", "в", "с", "по", "by", "on", "until", "till"}
+
+
+def _date_marker_before(prefix: str) -> bool:
+    """Перед датой признак: начало текста или предлог и пробел («до 1.10»). Без регулярного выражения: «.*…\\s+»
+    на каждом кандидате даты — полиномиальный ReDoS (CodeQL py/polynomial-redos)."""
+    s = prefix.rstrip()
+    if not s:
+        return True
+    if s == prefix:
+        return False  # дата приклеена к слову без пробела
+    i = len(s)
+    while i and (s[i - 1].isalnum() or s[i - 1] == "_"):
+        i -= 1
+    return s[i:].lower() in DATE_MARKERS
 
 
 def _parse_at(text: str, now: datetime):
@@ -700,17 +759,22 @@ def _parse_at(text: str, now: datetime):
     m = re.search(r"(?:\bat\s+)?\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?", text, re.I)
     if m and 1 <= int(m.group(1)) <= 12 and int(m.group(2) or 0) < 60:
         hm, tm = (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2) or 0)), m
+    span = False  # диапазон «10:00-11:00»: срок по началу, сам диапазон остаётся в тексте
+    m = None if hm else re.search(TIME_RANGE, text, re.I)
+    if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
+        hm, tm, span = (int(m.group(1)), int(m.group(2))), m, True
     m = None if hm else re.search(r"(?:\b(?:в|at|к|u|у)\s+)?\b(\d{1,2}):(\d{2})\b", text, re.I)
     if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
         hm, tm = (int(m.group(1)), int(m.group(2))), m
     timed_dm = None  # позиция «1.10» прямо перед временем: текст до вырезанного времени не сдвигается
     if tm:
-        p = re.search(r"\b\d\.\d{2}\s+$", text[: tm.start()])
+        p = re.search(r"\b\d\.\d{2}(?:\.\d{2})?\s+$", text[: tm.start()])
         timed_dm = p and p.start()
-        cut(tm)
+        if not span:
+            cut(tm)
 
     base, explicit_dm = None, False
-    m = re.search(ON + r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
+    m = re.search(ON + NOT_GLUED_L + r"\b(\d{4})-(\d{2})-(\d{2})\b" + NOT_GLUED_R, text)
     if m:
         try:
             base = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
@@ -719,13 +783,15 @@ def _parse_at(text: str, now: datetime):
             pass
     if base is None:
         # Месяц — две цифры, однозначный день — только с признаком даты (правило — в docstring)
-        m = next((m for m in re.finditer(r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b", text)
-                  if len(m.group(1)) == 2 or m.group(3) or m.start() == timed_dm
-                  or re.fullmatch(r"(?s)\s*|.*\b(?:к|до|на|в|с|по|by|on|until|till)\s+", text[: m.start()], re.I)),
+        m = next((m for m in re.finditer(NOT_GLUED_L + r"\b(\d{1,2})\.(\d{2})(?:\.(\d{4}|\d{2}))?\b" + NOT_GLUED_R,
+                                         text)
+                  if not (m.group(3) and len(m.group(3)) == 2 and VERSION_BEFORE.search(text[: m.start()]))
+                  and (len(m.group(1)) == 2 or (m.group(3) and len(m.group(3)) == 4) or m.start() == timed_dm
+                       or _date_marker_before(text[: m.start()]))),
                  None)
         if m:
             try:
-                y = int(m.group(3)) if m.group(3) else now.year
+                y = (2000 + int(m.group(3)) if len(m.group(3)) == 2 else int(m.group(3))) if m.group(3) else now.year
                 base = date(y, int(m.group(2)), int(m.group(1)))
                 explicit_dm = not m.group(3)
                 cut_date(m)
@@ -944,20 +1010,22 @@ def tg_known(frm: dict):
 # Язык текста → (описание ≤512, короткое ≤120). Telegram показывает вариант по language_code клиента, а ""
 # — всем прочим; поэтому "" — английский, а языки, которым по правилу pages.lang_of положен русский, — явно
 BOT_PROFILE = {
-    "ru": ("GTD-бот для задач и списка дел (todo). Пиши мысль обычным сообщением — она попадёт в Inbox. "
+    "ru": ("Serbito GTD — бот для задач и списка дел (todo). Пиши мысль обычным сообщением — она попадёт в Inbox. "
            "Бот понимает сроки и напоминает: «позвонить маме завтра в 10:00». #Проект и @контекст — сразу в Next, "
            "контекстов может быть несколько. Команды: /inbox, /next, /done 12. По методу GTD (Getting Things Done) "
            "Дэвида Аллена. Один аккаунт с сайтом gtd.serbito.rs. Бесплатно.",
-           "GTD: задачи и список дел (todo) в Telegram — Inbox, напоминания, проекты. Сайт: gtd.serbito.rs"),
-    "en": ("GTD bot for tasks and your to-do list. Send a thought as a plain message, and it lands in your Inbox. "
+           "Serbito GTD: задачи и список дел (todo) в Telegram — Inbox, напоминания, проекты. Сайт: gtd.serbito.rs"),
+    "en": ("Serbito GTD bot for tasks and your to-do list. Send a thought as a plain message, and it lands in your Inbox. "
            "The bot understands dates and sends reminders: “call mom tomorrow at 10am”. Add #Project and @context to "
            "go straight to Next; a task can have several contexts. Commands: /inbox, /next, /done 12. Built on David "
            "Allen's GTD (Getting Things Done) method. One account with the website gtd.serbito.rs. Free.",
-           "GTD tasks and to-do list in Telegram: Inbox, reminders, projects. Website: gtd.serbito.rs"),
+           "Serbito GTD: tasks and to-do list in Telegram — Inbox, reminders, projects. Website: gtd.serbito.rs"),
 }
-# Имя бота с поисковыми словами (SERBITO-422): поиск в Telegram ранжирует по имени и username. Глобальный
-# поиск видит только имя по умолчанию (""), а это "en" — поэтому в нём и русские слова
-BOT_NAMES = {"ru": "GTD — задачи и Inbox", "en": "GTD — Tasks & Todo · задачи, список дел"}
+# Имя бота с поисковыми словами (SERBITO-422, 447) — по language_code, а не по языку текста, как профиль выше:
+# глобальный поиск Telegram видит только имя по умолчанию (""), и по решению владельца (2026-10-14) оно русское.
+# Английское — только клиентам с language_code "en"; ru/uk/be/sr — русское, как и их описание
+BOT_NAME_RU, BOT_NAME_EN = "Serbito GTD — задачи, список дел", "Serbito GTD — Tasks & Todo"
+BOT_NAMES = {"": BOT_NAME_RU, "en": BOT_NAME_EN, **dict.fromkeys(pages.RU_LANGS, BOT_NAME_RU)}
 BOT_COMMANDS = {
     "ru": [{"command": "inbox", "description": "Что в Inbox"}, {"command": "next", "description": "Что в Next"},
            {"command": "done", "description": "Закрыть задачу: /done 12"},
@@ -1373,10 +1441,10 @@ async def bot_profile():
     Холодных стартов много (Cloud Run спит без трафика), поэтому сначала читаем текущее — параллельно,
     по каждому language_code из PROFILE_CODES, — и ставим только то, что разошлось. Не прочиталось (None) —
     просто ставим: вызовы идемпотентны."""
-    codes, n = PROFILE_CODES, len(PROFILE_CODES)
+    codes, n, names = PROFILE_CODES, len(PROFILE_CODES), list(BOT_NAMES)
     cur = await asyncio.gather(*(tg(m, language_code=c) for m in ("getMyCommands", "getMyDescription",
-                                                                   "getMyShortDescription", "getMyName")
-                                 for c in codes))
+                                                                   "getMyShortDescription") for c in codes),
+                               *(tg("getMyName", language_code=c) for c in names))
     sets = []
     for i, code in enumerate(codes):
         lang = profile_lang(code)
@@ -1387,8 +1455,11 @@ async def bot_profile():
             sets.append(tg("setMyDescription", description=desc, language_code=code))
         if _field(cur[2 * n + i], "short_description") != short:
             sets.append(tg("setMyShortDescription", short_description=short, language_code=code))
-        if _field(cur[3 * n + i], "name") != BOT_NAMES[lang]:
-            sets.append(tg("setMyName", name=BOT_NAMES[lang], language_code=code))
+    # setMyName Telegram ограничивает строже прочих (429 с retry_after): tg() пишет отказ в лог и не падает,
+    # а несовпавшее имя поставит следующий холодный старт — ставим только разошедшиеся
+    for i, code in enumerate(names):
+        if _field(cur[3 * n + i], "name") != BOT_NAMES[code]:
+            sets.append(tg("setMyName", name=BOT_NAMES[code], language_code=code))
     await asyncio.gather(*sets)
 
 
@@ -1697,8 +1768,26 @@ CSP = "; ".join([
     "frame-src https://accounts.google.com https://oauth.telegram.org",
     "font-src 'self' data:",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
-    *([f"report-uri {sentry_csp_uri()}"] if sentry_csp_uri() else []),
+    # Отчёты идут к нам, а не прямо в Sentry: /csp-report отсеивает шум и пересылает остальное (GTD-2)
+    *(["report-uri /csp-report"] if sentry_csp_uri() else []),
 ])
+
+# Шум CSP (Sentry GTD-2): наш код не вызывает eval, new Function и setTimeout со строкой, поэтому eval в отчёте —
+# это расширение, бот или инструмент автоматизации (70 отчётов, в основном Chrome 118 с ротацией IP по странам).
+# Его отбрасываем, не добавляя 'unsafe-eval'. Так же — отчёты из расширений браузера и от ботов по User-Agent
+CSP_NOISE_URIS = {"eval", "wasm-eval"}
+CSP_NOISE_SCHEMES = ("chrome-extension:", "moz-extension:", "safari-extension:", "safari-web-extension:",
+                     "ms-browser-extension:")
+CSP_NOISE_UA = re.compile(r"HeadlessChrome|bot\b|crawler|spider|Lighthouse", re.I)
+CSP_REPORT_MAX = 16 * 1024
+
+
+def csp_noise(report: dict, ua: str) -> bool:
+    """True — отчёт CSP не про наш код: eval, расширение браузера или бот."""
+    blocked = str(report.get("blocked-uri") or "")
+    source = str(report.get("source-file") or "")
+    return (blocked in CSP_NOISE_URIS or blocked.startswith(CSP_NOISE_SCHEMES)
+            or source.startswith(CSP_NOISE_SCHEMES) or bool(CSP_NOISE_UA.search(ua)))
 
 
 def csp_headers(enforce: bool) -> list[tuple[bytes, bytes]]:
@@ -1816,7 +1905,9 @@ def start_session(uid: int) -> RedirectResponse:
 # Один аккаунт = одна строка users; способы входа — её колонки tg_id / email / google_sub.
 # Google и код на почту с одинаковым адресом попадают в один аккаунт; Telegram привязывается из «Аккаунта».
 IDENTITIES = ("tg_id", "email", "google_sub")
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Части домена — без точек, точка только между ними (SERBITO-628): у прежнего [^@\s]+\.[^@\s]+ точку можно было
+# отнести к любой из частей, и длинная строка из «!.» (текст из бота — до 4096 знаков) разбиралась квадратично
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$")
 # Лимиты входа по коду (SERBITO-346). Код — 6 цифр, 10⁶ вариантов: без общего бюджета на адрес его можно
 # подобрать, перезапрашивая код и угадывая снова. «Отправитель» — IP на сайте или Telegram-аккаунт в боте
 DAY = 86400
@@ -2221,6 +2312,7 @@ def auth_merge(body: dict, request: Request, uid: int = Depends(current_user)):
 # Вход через бота по ссылке (GTD-3). Браузер, начавший вход, получает cookie tgl (в базе — её хеш): забрать
 # сессию опросом может только он, даже если nonce из ссылки попал к кому-то ещё
 TG_COOKIE = "tgl"
+TG_BROWSER_RE = re.compile(r"[A-Za-z0-9_-]{22}")  # secrets.token_urlsafe(16)
 TG_STARTS = (20, 600)  # начатых входов через бота от одного IP за 10 минут
 
 
@@ -2248,7 +2340,10 @@ def auth_tg_start(body: dict, request: Request):
     now = int(time.time())
     run("delete from tg_logins where expires<%s", (now,))
     link_uid = session_user(request) if body.get("link") else None
-    browser = request.cookies.get(TG_COOKIE) or secrets.token_urlsafe(16)
+    # Свою прежнюю cookie браузер получает обратно, только если она того же вида, что выдаём мы (SERBITO-628):
+    # чужое значение в Set-Cookie не повторяем — выдаём новое
+    browser = request.cookies.get(TG_COOKIE, "")
+    browser = browser if TG_BROWSER_RE.fullmatch(browser) else secrets.token_urlsafe(16)
     run("insert into tg_logins(nonce,link_user_id,expires,code,ip,ua,browser) values(%s,%s,%s,%s,%s,%s,%s)",
         (nonce, link_uid, now + 600, code, ip, device_label(request.headers.get("user-agent", "")), token_hash(browser)))
     resp = JSONResponse({"nonce": nonce, "code": code, "url": f"https://t.me/{BOT_USERNAME}?start={nonce}"})
@@ -2424,7 +2519,7 @@ AUTH_HEADERS = {"X-Robots-Tag": "noindex", "Cache-Control": "no-store", "Referre
 
 def auth_stale_page(request: Request, lang: str) -> HTMLResponse:
     """Ссылку открывают в браузере из Telegram — страница с выходом, а не сырой JSON."""
-    page = pages.auth_stale(lang if lang in LANGS else req_lang(request), BOT_USERNAME)
+    page = pages.auth_stale(known_lang(lang) or req_lang(request), BOT_USERNAME)
     return HTMLResponse(page, status_code=400, headers=AUTH_HEADERS)
 
 
@@ -2434,12 +2529,14 @@ def auth(t: str, request: Request, lang: str = ""):
     подсунуть, и человек незаметно окажется в аккаунте злоумышленника и будет записывать задачи ему. Страница
     показывает, в чей аккаунт вход, и входит только по кнопке (POST). Заодно превью ссылок и префетч не сжигают
     одноразовый токен."""
-    r = row("select user_id from login_tokens where token=%s and expires>%s", (t, int(time.time())))
+    r = row("select user_id, token from login_tokens where token=%s and expires>%s", (t, int(time.time())))
     if not r:
         return auth_stale_page(request, lang)
     cur = session_user(request)
-    page_lang = lang if lang in LANGS else req_lang(request, r["user_id"])
-    return HTMLResponse(pages.auth_confirm(page_lang, account_label(r["user_id"]), t, lang if lang in LANGS else "",
+    link_lang = known_lang(lang)
+    page_lang = link_lang or req_lang(request, r["user_id"])
+    # В форму — токен из базы, а не строка из адреса (SERBITO-628): они равны, но в HTML идёт только своё
+    return HTMLResponse(pages.auth_confirm(page_lang, account_label(r["user_id"]), r["token"], link_lang,
                                            account_label(cur) if cur and cur != r["user_id"] else ""),
                         headers=AUTH_HEADERS)
 
@@ -2545,6 +2642,33 @@ async def cron_authorized(request: Request) -> bool:
     if reason:
         log.warning("cron call rejected: %s", reason)
     return reason is None
+
+
+@app.post("/csp-report", include_in_schema=False)
+async def csp_report(request: Request):
+    """Отчёт CSP от браузера: шум отбрасываем, остальное — в Sentry (GTD-2). IP посетителя не пересылаем.
+    Всегда 204: браузеру ответ не нужен, а боту незачем знать, что отсеялось."""
+    target = sentry_csp_uri()
+    if not target or int(request.headers.get("content-length") or 0) > CSP_REPORT_MAX:
+        return Response(status_code=204)
+    body = b""
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > CSP_REPORT_MAX:
+            return Response(status_code=204)
+    try:
+        report = json.loads(body).get("csp-report")
+    except (ValueError, AttributeError):
+        return Response(status_code=204)
+    ua = request.headers.get("user-agent", "")
+    if not isinstance(report, dict) or csp_noise(report, ua):
+        return Response(status_code=204)
+    try:
+        await _client.post(target, content=body, timeout=5,
+                           headers={"content-type": "application/csp-report", "user-agent": ua})
+    except httpx.HTTPError as e:
+        log.warning("csp report forward failed: %s", type(e).__name__)
+    return Response(status_code=204)
 
 
 @app.post("/tasks/reminders")
@@ -3263,7 +3387,7 @@ def app_page(request: Request, lang: str = "ru", landing: bool = False) -> HTMLR
     page = spa_shell()[0].replace("<!--GA-->", ga_snippet(request)).replace("<!--ICONS-->", pages.ICONS)
     page = page.replace('<html lang="ru">', f'<html lang="{lang}">')  # SPA потом поставит язык интерфейса
     if landing:
-        page = (page.replace("<title>GTD</title>", pages.head(BASE_URL, lang, "home"))
+        page = (page.replace("<title>Serbito GTD</title>", pages.head(BASE_URL, lang, "home"))
                 .replace("<!--LANDING-->", pages.landing(lang, consent=bool(GA_ID), signin=signin_methods(), dev=DEV)))
     return HTMLResponse(page)
 
@@ -3345,12 +3469,16 @@ def gtd_beginners_page(request: Request):
     return HTMLResponse(pages.beginners(BASE_URL, ga_snippet(request)))
 
 
+SHOT_PATHS = {n: os.path.join(STATIC, "shots", n) for n in pages.SHOT_FILES}
+
+
 @app.get("/shots/{name}", include_in_schema=False)
 def screenshot(name: str):
     """Скриншоты приложения для лендинга (SERBITO-442, scripts/screenshots.py). Только файлы из списка pages."""
-    if name not in pages.SHOT_FILES:
+    path = SHOT_PATHS.get(name)  # путь — из своего списка, имя из адреса в него не попадает (SERBITO-628)
+    if not path:
         raise HTTPException(404)
-    return FileResponse(os.path.join(STATIC, "shots", name), media_type="image/webp",
+    return FileResponse(path, media_type="image/webp",
                         headers={"Cache-Control": "public, max-age=604800"})
 
 

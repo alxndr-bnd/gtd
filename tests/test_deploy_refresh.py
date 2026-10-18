@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -212,7 +213,8 @@ def test_smoke_checks_the_candidate_tag_url(tmp_path, fakes):
     r, _ = _run(SMOKE, tmp_path, tmp_path, FAKE_CODE="200", PREV_REVISION="gtd-00041", **env)
     assert r.returncode == 0, r.stdout + r.stderr
     curl = Path(f"{log}.curl").read_text()
-    assert "https://candidate---gtd-x.a.run.app/" in curl and " https://gtd-x.a.run.app/" not in curl
+    hosts = {urlsplit(w).hostname for w in curl.split() if w.startswith("https:")}  # хосты, а не подстроки
+    assert "candidate---gtd-x.a.run.app" in hosts and "gtd-x.a.run.app" not in hosts
 
 
 def test_the_deploy_keeps_the_tag_and_the_first_deploy_gets_one_too():

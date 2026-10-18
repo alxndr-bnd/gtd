@@ -221,13 +221,13 @@ def test_consent_page(web, client):
     cid = client_id(client, [CLAUDE, LOCAL])
     _, challenge = pkce()
     r = web.get("/authorize?" + urlencode(authz(cid, challenge)))
-    assert r.status_code == 200 and "Подключить Claude к GTD?" in r.text
+    assert r.status_code == 200 and "Подключить Claude к Serbito GTD?" in r.text
     assert "<b>claude.ai</b>" in r.text and "a***@example.com" in r.text  # адрес возврата и аккаунт — на виду
     assert r.headers["x-frame-options"] == "DENY" and r.headers["referrer-policy"] == "same-origin"
     assert 'id="oauth-warn"' not in r.text  # адрес Claude: код уходит Claude, кто бы ни назвался
     A.run("update users set lang='en'")
     r = web.get("/authorize?" + urlencode(authz(cid, challenge, LOCAL)))
-    assert "Connect Claude to GTD?" in r.text and "an app on this computer (<b>localhost</b>)" in r.text
+    assert "Connect Claude to Serbito GTD?" in r.text and "an app on this computer (<b>localhost</b>)" in r.text
     assert 'id="oauth-warn"' in r.text and "Any program on this computer" in r.text  # loopback: предупреждение
 
 
@@ -245,11 +245,11 @@ def test_consent_shows_client_and_redirect_host(web, client, lang, uri, host, te
     cid = client_id(client, [uri])
     r = web.get("/authorize?" + urlencode(authz(cid, pkce()[1], uri)))
     assert r.status_code == 200, r.text
-    assert ("Connect Claude to GTD?" if lang == "en" else "Подключить Claude к GTD?") in r.text
+    assert ("Connect Claude to Serbito GTD?" if lang == "en" else "Подключить Claude к Serbito GTD?") in r.text
     assert text in r.text
     warn = re.search(r'<p class="warn" id="oauth-warn">(.*?)</p>', r.text).group(1)
     assert f"<b>{host}</b>" in warn and "Claude" in warn
-    assert ("does not check it" if lang == "en" else "GTD его не проверяет") in warn
+    assert ("does not check it" if lang == "en" else "Serbito GTD его не проверяет") in warn
 
 
 def test_client_name_is_escaped(web, client):
@@ -670,3 +670,16 @@ def test_official_client_oauth(web, mode):
     assert [t["title"] for t in listed.structured_content["tasks"]] == ["found via oauth"]
     assert storage.tokens.access_token.startswith("gtdo_") and storage.client.client_id.startswith("gtdc_")
     assert A.row("select name from oauth_clients")["name"] == "SDK test"
+
+
+def test_log_never_holds_codes_or_tokens(web, client, caplog):
+    """py/clear-text-logging-sensitive-data (SERBITO-628): в журнал идут client_id и номера грантов, но не код
+    и не токены. client_id — публичный (RFC 7591), его делает new_client_id, а не new_secret."""
+    caplog.set_level(logging.INFO, logger="gtd")
+    cid = client_id(client)
+    code, verifier = get_code(web, cid)
+    t = exchange(client, cid, code, verifier).json()
+    t2 = refresh(client, cid, t["refresh_token"]).json()
+    assert cid in caplog.text and "oauth client registered" in caplog.text
+    for secret in (code, verifier, t["access_token"], t["refresh_token"], t2["access_token"], t2["refresh_token"]):
+        assert secret not in caplog.text

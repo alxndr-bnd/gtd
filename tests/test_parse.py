@@ -227,3 +227,93 @@ def test_duration_with_date_english(text, title, when):
 ])
 def test_duration_with_date_serbian(text, title, when):
     assert A.parse_when(text, NOW) == (title, when)
+
+
+# ── Дата внутри пути или ссылки — не срок (SERBITO-620) ──
+REPRO_620 = "SERBITO-443: подать заявку (факты в ~/claude-handoff/2026-10-14/443-outreach.md) 27.01.2027 10:00"
+
+
+@pytest.mark.parametrize("text, title, when", [
+    # Пример из тикета: дата в пути остаётся в заголовке, срок — явная дата в конце
+    (REPRO_620, "SERBITO-443: подать заявку (факты в ~/claude-handoff/2026-10-14/443-outreach.md)",
+     at(2027, 1, 27, 10, 0)),
+    # Ссылка с датой и явная дата рядом
+    ("прочитать https://example.com/2026/10/14/post завтра в 10:00",
+     "прочитать https://example.com/2026/10/14/post", at(2026, 9, 26, 10, 0)),
+    ("read https://example.com/2026/10/14/post tomorrow 10am",
+     "read https://example.com/2026/10/14/post", at(2026, 9, 26, 10, 0)),
+    ("read https://example.com/2026-10-14/post on 2026-10-24",
+     "read https://example.com/2026-10-14/post", at(2026, 10, 24, 9, 0)),
+    ("see https://example.com/news/24.10/12:00 24 oct 3pm",
+     "see https://example.com/news/24.10/12:00", at(2026, 10, 24, 15, 0)),
+    # Путь с датой и явная дата: две даты в одном тексте
+    ("проверить ~/logs/2026-10-14/run.txt 24.10 в 12:00", "проверить ~/logs/2026-10-14/run.txt",
+     at(2026, 10, 24, 12, 0)),
+    ("check /var/log/2026-10-14.log on friday", "check /var/log/2026-10-14.log", at(2026, 10, 2, 9, 0)),
+    (r"открыть C:\reports\2026-10-14\a.xlsx в пятницу", r"открыть C:\reports\2026-10-14\a.xlsx",
+     at(2026, 10, 2, 9, 0)),
+    ("отчёт 2026-10-24 (черновик в docs/2026-10-14/draft.md)", "отчёт (черновик в docs/2026-10-14/draft.md)",
+     at(2026, 10, 24, 9, 0)),
+])
+def test_date_in_path_or_url_is_not_due(text, title, when):
+    assert A.parse_when(text, NOW) == (title, when)
+
+
+@pytest.mark.parametrize("text", [
+    "прочитать https://example.com/2026/10/14/post",
+    "read https://example.com/2026-10-14/post",
+    "файл ~/claude-handoff/2026-10-14/443-outreach.md",
+    "see https://example.com/24.10/at/10:00",
+    "release build-2026-10-14 notes",
+    "версия v1.24.10 вышла",
+    "ticket id:2026-10-14 closed",
+])
+def test_only_path_date_gives_no_due(text):
+    assert A.parse_when(text, NOW) == (text, None)
+
+
+def test_capture_repro_620():
+    """Через parse_task — общий разбор приложения, бота и MCP."""
+    p = A.parse_task(0, REPRO_620)  # без #проекта база не нужна
+    assert p["title"] == "SERBITO-443: подать заявку (факты в ~/claude-handoff/2026-10-14/443-outreach.md)"
+    assert datetime.fromtimestamp(p["remind_at"], A.TZ).replace(tzinfo=None) == datetime(2027, 1, 27, 10, 0)
+
+
+# ── Год из двух цифр и диапазон времени (SERBITO-621) ──
+@pytest.mark.parametrize("text, title, when", [
+    # Двузначный год — 20yy, токен уходит из заголовка целиком (до v0.58.0 оставалось «.26»)
+    ("оплатить 24.10.26", "оплатить", at(2026, 10, 24, 9, 0)),
+    ("встреча 24.10.26 в 10:00", "встреча", at(2026, 10, 24, 10, 0)),
+    ("к 1.10.26 оплата", "к оплата", at(2026, 10, 1, 9, 0)),  # однозначный день — с признаком
+    ("pay 24.10.26", "pay", at(2026, 10, 24, 9, 0)),
+    ("pay 24.10.26 10:00", "pay", at(2026, 10, 24, 10, 0)),
+    ("1.10.26 10:00 call", "call", at(2026, 10, 1, 10, 0)),
+    ("trip 01.03.27 3pm", "trip", at(2027, 3, 1, 15, 0)),
+    # Диапазон времени: срок по началу, диапазон остаётся в заголовке (до v0.58.0 оставался хвост «/11:00»)
+    ("встреча 10:00/11:00", "встреча 10:00/11:00", at(2026, 9, 26, 10, 0)),
+    ("встреча в 10:00–11:00 завтра", "встреча в 10:00–11:00", at(2026, 9, 26, 10, 0)),
+    ("созвон 24.10.26 15:00-16:00", "созвон 15:00-16:00", at(2026, 10, 24, 15, 0)),
+    ("meeting 10:00/11:00", "meeting 10:00/11:00", at(2026, 9, 26, 10, 0)),
+    ("meeting 16:00-17:00", "meeting 16:00-17:00", at(2026, 9, 25, 16, 0)),
+    ("meeting 10:00 - 11:00 on friday", "meeting 10:00 - 11:00", at(2026, 10, 2, 10, 0)),
+])
+def test_two_digit_year_and_time_range(text, title, when):
+    assert A.parse_when(text, NOW) == (title, when)
+
+
+@pytest.mark.parametrize("text", [
+    "оплата 1.10.26",  # однозначный день без признака — число
+    "версия 12.10.26 вышла",
+    "release v1.24.10",
+    "version 1.10.26 is out",
+    "ver 24.10.26",
+    "build 1.24.10",
+    "build 24.10.26.1",
+    "id:24.10.26 closed",
+    "tag x-24.10.26",
+    "see ~/logs/10:00/11:00 run",  # путь, а не диапазон
+    "range 10:00/11:00/12:00",
+    "meeting 25:00-26:00",
+])
+def test_two_digit_year_not_a_date(text):
+    assert A.parse_when(text, NOW) == (text, None)
