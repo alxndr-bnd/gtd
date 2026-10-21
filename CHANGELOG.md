@@ -16,6 +16,13 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- New Contexts section: open a context to see all its open tasks, grouped by Next, Waiting, Calendar and Someday. Click @context on any task to open it.
+  - RU: Новый раздел «Контексты»: откройте контекст и увидите все его открытые задачи по группам Next, Waiting, Календарь и Someday. Нажмите @контекст на любой задаче, чтобы открыть его.
+- The menu shows Recent: your last 5 projects and contexts, one click away on every device.
+  - RU: В меню появились «Недавние»: последние 5 проектов и контекстов в один клик, на всех устройствах.
+
 ## [0.64.0] - 2026-10-21
 
 ### Security

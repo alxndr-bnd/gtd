@@ -6,9 +6,11 @@ import app as A
 
 
 def test_requires_auth(client):
-    for path in ("/api/counts", "/api/items", "/api/projects", "/api/contexts", "/api/me"):
+    for path in ("/api/counts", "/api/items", "/api/projects", "/api/contexts", "/api/contexts/open", "/api/recent",
+                 "/api/me"):
         assert client.get(path).status_code == 401, path
     assert client.post("/api/capture", json={"text": "x"}).status_code == 401
+    assert client.post("/api/recent", json={"kind": "context", "name": "x"}).status_code == 401
 
 
 def test_config_reports_session(client, login):
@@ -182,6 +184,22 @@ def test_old_single_context_migrates_once():
     A.run("update items set contexts='{}' where id=%s", (iid,))
     A.run(A.SCHEMA)
     assert A.row("select contexts from items where id=%s", (iid,))["contexts"] == []
+
+
+def test_old_multiword_context_splits(client, login):
+    """SERBITO-647: контекст из нескольких слов от прежнего PATCH («at home») при старте делится на слова — иначе
+    его страницу /c/<имя> не открыть. Повторный старт ничего не меняет."""
+    uid = login(client)
+    old = A.capture(uid, "старая задача")["id"]
+    ok = A.capture(uid, "новая @дом")["id"]
+    A.run("update items set contexts=%s where id=%s", (["at home", "дом", "Дом"], old))  # так её оставила ревизия
+    A.split_old_contexts()
+    assert A.row("select contexts from items where id=%s", (old,))["contexts"] == ["at", "home", "дом"]
+    assert A.row("select contexts from items where id=%s", (ok,))["contexts"] == ["дом"]
+    A.split_old_contexts()
+    assert A.row("select contexts from items where id=%s", (old,))["contexts"] == ["at", "home", "дом"]
+    assert client.get("/c/home").status_code == 200
+    assert {c["name"] for c in client.get("/api/contexts/open").json()} == {"at", "home", "дом"}
 
 
 def test_users_are_isolated(new_client, login):

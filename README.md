@@ -16,7 +16,10 @@ FastAPI + PostgreSQL, one container. English and Russian.
 
 - **Quick capture** with natural dates: `call mom tomorrow at 10am #Family @phone` → task, reminder, project, context.
 - **GTD lists:** Inbox · Next (filter by @context) · Waiting · Calendar/reminders · Projects (⚠ without a next
-  action, archive) · Someday · Reference · Done · Weekly Review.
+  action, archive) · Contexts · Someday · Reference · Done · Weekly Review.
+- **Contexts:** each @context has its own page with all its open tasks, grouped Next → Waiting → Calendar → Someday.
+  Click `@context` on any task to open it. **Recent** in the menu keeps the last 5 projects and contexts one click
+  away, on every device.
 - **Process Inbox step by step:** one task at a time, the GTD questions in order (actionable? under 2 minutes? mine?
   more than one step? a fixed date?), with large buttons, progress and keyboard shortcuts.
 - **Telegram bot:** send a message — it lands in the Inbox; reminders come with ✅ Done / 💤 +1h / ⏭ Next buttons.

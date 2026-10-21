@@ -407,8 +407,8 @@ def test_item_page_noindex(client):
     assert "noindex" not in client.get("/").headers.get("x-robots-tag", "")
 
 
-APP_PATHS = ["/next", "/waiting", "/scheduled", "/projects", "/someday", "/reference", "/done", "/review", "/account",
-             "/stats", "/p/7"]
+APP_PATHS = ["/next", "/waiting", "/scheduled", "/projects", "/contexts", "/someday", "/reference", "/done", "/review",
+             "/account", "/stats", "/p/7", "/c/home", "/c/%D0%B4%D0%BE%D0%BC", "/c/%40Work"]
 
 
 @pytest.mark.parametrize("path", APP_PATHS + ["/en" + p for p in APP_PATHS])
@@ -421,7 +421,8 @@ def test_section_addresses_open_the_app(client, path):
     assert f'<html lang="{"en" if path.startswith("/en/") else "ru"}">' in r.text
 
 
-@pytest.mark.parametrize("path", ["/inbox", "/p/x", "/nextt", "/en/p/x"])
+@pytest.mark.parametrize("path", ["/inbox", "/p/x", "/nextt", "/en/p/x", "/c/", "/c/a%20b", "/en/c/%40", "/c/a/b",
+                                  "/context"])
 def test_unknown_section_is_404(client, path):
     assert client.get(path).status_code == 404
 

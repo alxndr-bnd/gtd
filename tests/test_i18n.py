@@ -305,8 +305,8 @@ def test_ui_dictionaries_have_same_keys():
     assert shape(UI["ru"]) == shape(UI["en"])  # те же ключи, пункты и подстановки
     # пункты чек-листа и ключи разделов — те же, что ждёт код
     assert [o[0] for o in UI["en"]["onb"]] == [o[0] for o in UI["ru"]["onb"]] == ["capture", "process", "telegram"]
-    assert set(UI["en"]["views"]) == {"inbox", "next", "waiting", "scheduled", "projects", "someday", "reference",
-                                     "done", "review"}
+    assert set(UI["en"]["views"]) == {"inbox", "next", "waiting", "scheduled", "projects", "contexts", "someday",
+                                     "reference", "done", "review"}
 
 
 def test_no_russian_in_english_ui():

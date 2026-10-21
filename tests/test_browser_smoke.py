@@ -14,7 +14,7 @@ import socket
 import threading
 import time
 from contextlib import contextmanager
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import pytest
 import uvicorn
@@ -35,7 +35,7 @@ SAVE_MS = 30000  # потолок ожидания ответа сервера �
 # Кнопка Google грузит скрипт с accounts.google.com — в тестах вместо него заглушка с тем же API
 GSI_STUB = ("window.google={accounts:{id:{initialize(){},"
             "renderButton(el,o){el.textContent='Google';window.__gsi=o;}}}};")  # o — параметры кнопки для проверки
-SECTIONS = ["inbox", "next", "waiting", "scheduled", "projects", "someday", "reference", "done", "review"]
+SECTIONS = ["inbox", "next", "waiting", "scheduled", "projects", "contexts", "someday", "reference", "done", "review"]
 # Боевая CSP до её включения (SERBITO-548): GTD_CSP_ENFORCE_IN_TESTS=1 — сервер смоука шлёт политику как
 # Content-Security-Policy, нарушение блокирует загрузку и падает тестом. С app.CSP_ENFORCE = True — всегда так
 CSP_ENFORCE = A.CSP_ENFORCE or os.getenv("GTD_CSP_ENFORCE_IN_TESTS") == "1"
@@ -2935,4 +2935,186 @@ def test_task_context_menu_long_press_on_phone(watch):
     with saves(w, "убрать дату с телефона", "PATCH", f"/api/items/{c}"):
         w.page.tap(".cm [data-cm=undate]")
     assert item(c)["remind_at"] is None
+    w.check("итог")
+
+
+# ── SERBITO-647: контексты и «Недавние» ──
+def ctx_user(lang):
+    """Задачи с @дом (@home) во всех группах страницы контекста, выполненная и одна — в другом контексте."""
+    home = "дом" if lang == "ru" else "home"
+    uid = A.run("insert into users(tg_id,name,created,lang,checklist_hidden,dnd_tip_seen) values(0,'Smoke',%s,%s,"
+                "true,true) returning id", (int(time.time()), lang))
+    ids = {k: A.capture(uid, f"{text} @{home}")["id"] for k, text in [
+        ("next", "Water the plants"), ("waiting", "Wait for the plumber"), ("remind", "Take out the trash"),
+        ("someday", "Paint the fence"), ("done", "Wash the windows")]}
+    ids["other"] = A.capture(uid, "Call Marko @телефон")["id"]
+    ids["trip"] = A.capture(uid, "Pack bags #Trip")["id"]
+    for status in ("waiting", "someday", "done"):
+        A.run("update items set status=%s where id=%s", (status, ids[status]))
+    A.run("update items set completed_at=%s where id=%s", (int(time.time()), ids["done"]))
+    A.run("update items set remind_at=%s where id=%s", (int(time.time()) + 3600, ids["remind"]))
+    pid = A.row("select project_id from items where id=%s", (ids["trip"],))["project_id"]
+    return uid, home, pid, ids
+
+
+def cx_groups(w):
+    """Группы страницы контекста: [(группа, [id задач])] в порядке на экране."""
+    return w.page.eval_on_selector_all("main section.cxg", """els => els.map(s => [s.dataset.group,
+        [...s.querySelectorAll('.it[data-id]')].map(e => +e.dataset.id)])""")
+
+
+def recent_links(w):
+    return w.page.eval_on_selector_all("nav .recent a", """els => els.map(a => [a.dataset.view,
+        a.dataset.pid ? +a.dataset.pid : a.dataset.cname, a.getAttribute('aria-current')])""")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_context_page_from_task_row(watch, lang):
+    """@контекст на задаче — ссылка на /c/<имя> (с клавиатуры тоже), карточку не открывает. Страница контекста — все
+    открытые задачи группами Next → Waiting → Календарь → Someday, выполненные свёрнуты; поле добавляет задачу с этим
+    @контекстом. «← Контексты» ведёт в раздел со счётчиками, Back возвращает по истории."""
+    uid, home, _, ids = ctx_user(lang)
+    pre = "/en" if lang == "en" else ""
+    w = watch(lang)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    w.goto(f"{pre}/next")
+    link = f'main .it[data-id="{ids["next"]}"] a.cxa[data-cname="{home}"]'
+    w.wait(link, f"[{lang}] @контекст на задаче")
+    assert w.page.get_attribute(link, "href") == f"{pre}/c/{quote(home)}"
+    assert w.page.locator(f'main .chip[data-ctx="{home}"]').count()  # чипы-фильтр в Next остаются
+    w.page.focus(link)
+    w.page.keyboard.press("Enter")
+    path_is(w, f"{pre}/c/{quote(home)}", f"[{lang}] страница контекста")
+    w.wait('main section.cxg[data-group="someday"]', f"[{lang}] группы")
+    assert not w.page.locator("#dlg[open]").count(), "ссылка открыла карточку"
+    assert cx_groups(w) == [["next", [ids["next"]]], ["waiting", [ids["waiting"]]], ["scheduled", [ids["remind"]]],
+                            ["someday", [ids["someday"]]]]
+    assert w.page.locator(f'main .it[data-id="{ids["other"]}"]').count() == 0
+    assert w.page.locator(f'main details.donesec:not([open]) .it[data-id="{ids["done"]}"]').count() == 1
+    assert w.page.locator('nav > a.on[data-view="contexts"][aria-current="true"]').count()
+    assert home in w.page.get_attribute("#cap", "placeholder")
+
+    w.page.fill("#cap", "Buy bread")
+    with saves(w, f"[{lang}] захват в контексте", "POST", "/api/capture"):
+        w.page.press("#cap", "Enter")
+    assert A.row("select status, contexts from items where user_id=%s and title='Buy bread'", (uid,)) \
+        == {"status": "next", "contexts": [home]}
+    w.wait('main section.cxg[data-group="next"] .it .t:text-is("Buy bread")', f"[{lang}] новая задача в Next")
+    # «@» внутри слова (почта) — не контекст и для сервера: @контекст всё равно добавится
+    w.page.fill("#cap", f"Write ivan@{home}")
+    with saves(w, f"[{lang}] захват с @ в слове", "POST", "/api/capture"):
+        w.page.press("#cap", "Enter")
+    assert A.row("select contexts from items where user_id=%s and title like 'Write ivan@%%'", (uid,)) \
+        == {"contexts": [home]}
+
+    w.page.click('main p > a[data-view="contexts"]')
+    path_is(w, f"{pre}/contexts", f"[{lang}] ← Контексты")
+    w.wait(f'main a.cxr[data-cname="{home}"]', f"[{lang}] раздел Контексты")
+    rows = w.page.eval_on_selector_all("main a.cxr", "els => els.map(a => [a.dataset.cname, a.innerText])")
+    assert [r[0] for r in rows] == [home, "телефон"] and "6" in rows[0][1] and "1" in rows[1][1], rows
+    assert w.page.inner_text('nav > a[data-view="contexts"] .n') == "2"
+    w.page.go_back()
+    path_is(w, f"{pre}/c/{quote(home)}", f"[{lang}] Back к контексту")
+    w.wait('main section.cxg[data-group="next"]', f"[{lang}] контекст после Back")
+    w.page.go_back()
+    path_is(w, f"{pre}/next", f"[{lang}] Back в Next")
+    w.wait('nav > a.on[data-view="next"]', f"[{lang}] Next после Back")
+    # Мышью — так же; строка раздела «Контексты» тоже ведёт на страницу
+    w.page.click(f'main .it[data-id="{ids["other"]}"] a.cxa')
+    path_is(w, f"{pre}/c/{quote('телефон')}", f"[{lang}] @телефон мышью")
+    w.wait(f'main section.cxg[data-group="next"] .it[data-id="{ids["other"]}"]', f"[{lang}] задача @телефон")
+    w.page.click('nav > a[data-view="contexts"]')
+    w.wait(f'main a.cxr[data-cname="{home}"]', f"[{lang}] раздел из меню")
+    w.page.click(f'main a.cxr[data-cname="{home}"]')
+    path_is(w, f"{pre}/c/{quote(home)}", f"[{lang}] строка раздела")
+    w.goto(f"{pre}/c/%40{quote(home.upper())}")  # «@ДОМ» в адресе — тот же контекст, адрес — обычный
+    path_is(w, f"{pre}/c/{quote(home)}", f"[{lang}] адрес с @")
+    w.wait('main section.cxg[data-group="next"]', f"[{lang}] страница по адресу с @")
+    w.check(f"[{lang}] итог")
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_recent_projects_and_contexts(watch, lang):
+    """«Недавние» в меню: открытые проекты и контексты, свежие сверху, текущий выделен (aria-current); список хранит
+    сервер — он переживает перезагрузку. Повтор поднимает наверх без дубля; ходят и стрелки меню. Проект в архиве
+    и контекст без открытых задач из списка уходят."""
+    uid, home, pid, ids = ctx_user(lang)
+    w = watch(lang)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] вход")
+    assert w.page.locator("nav .recent[hidden]").count() == 1  # ещё ничего не открывали
+
+    with saves(w, f"[{lang}] открыт проект", "POST", "/api/recent"):
+        w.page.click('nav > a[data-view="projects"]')
+        w.wait("main .it.pj .t", f"[{lang}] проекты")
+        w.page.click("main .it.pj .t")
+    w.wait(f'nav .recent a.on[data-pid="{pid}"]', f"[{lang}] проект в Недавних")
+    with saves(w, f"[{lang}] открыт контекст", "POST", "/api/recent"):
+        w.page.click('nav > a[data-view="contexts"]')
+        w.wait(f'main a.cxr[data-cname="{home}"]', f"[{lang}] контексты")
+        w.page.click(f'main a.cxr[data-cname="{home}"]')
+    w.wait(f'nav .recent a.on[data-cname="{home}"]', f"[{lang}] контекст в Недавних")
+    assert recent_links(w) == [["contexts", home, "page"], ["projects", pid, None]]
+    assert w.page.locator('nav a[aria-current="page"]').count() == 1
+
+    w.goto("/next")  # перезагрузка: список — с сервера
+    w.wait('nav > a.on[data-view="next"]', f"[{lang}] Next")
+    w.wait("nav .recent a", f"[{lang}] Недавние после перезагрузки")
+    assert recent_links(w) == [["contexts", home, None], ["projects", pid, None]]
+
+    # Стрелки меню: после Weekly Review — «Недавние»; Enter открывает, повтор поднимает наверх без дубля
+    w.page.focus('nav > a[data-view="review"]')
+    w.page.keyboard.press("ArrowDown")
+    w.page.keyboard.press("ArrowDown")
+    assert w.page.evaluate(FOCUSED)["cls"].startswith("rec")
+    with saves(w, f"[{lang}] повтор проекта", "POST", "/api/recent"):
+        w.page.keyboard.press("Enter")
+    w.wait(f'main h2.pjh [data-act="archproj"]', f"[{lang}] проект из Недавних")
+    w.wait(f'nav .recent a:first-of-type[data-pid="{pid}"]', f"[{lang}] проект наверху")
+    assert recent_links(w) == [["projects", pid, "page"], ["contexts", home, None]]
+    # Ссылка переехала наверх — выбор и фокус ушли за ней, а не остались на её прежнем месте
+    w.page.wait_for_function(f"() => document.activeElement?.dataset.pid === '{pid}'", timeout=WAIT_MS)
+    assert w.page.locator("nav a.kb").evaluate_all("els => els.map(a => a.dataset.pid)") == [str(pid)]
+
+    w.page.click('main h2.pjh [data-act="archproj"]')
+    w.wait('#dlg[open] [data-arch="all"]', f"[{lang}] диалог архива")
+    with saves(w, f"[{lang}] архив", "POST", f"/api/projects/{pid}/archive"):
+        w.page.click('#dlg [data-arch="all"]')
+    w.page.wait_for_selector(f'nav .recent a[data-pid="{pid}"]', state="detached", timeout=WAIT_MS)
+    assert recent_links(w) == [["contexts", home, None]]
+
+    A.run("update items set status='done' where user_id=%s and %s = any(contexts)", (uid, home))
+    w.goto("/")
+    w.wait('nav > a.on[data-view="inbox"]', f"[{lang}] Inbox")
+    assert w.page.locator("nav .recent[hidden]").count() == 1, recent_links(w)  # контекст без открытых задач
+    w.check(f"[{lang}] итог")
+
+
+def test_recent_in_phone_drawer(watch):
+    """Телефон: «Недавние» — в выезжающем меню, ссылка открывает страницу и закрывает меню; страницы контекстов
+    не шире экрана."""
+    uid, home, pid, _ = ctx_user("ru")
+    w = watch(viewport=PHONE, touch=True)
+    w.goto("/dev-login")
+    w.wait('nav > a.on[data-view="inbox"]', "вход")
+    with saves(w, "открыт проект", "POST", "/api/recent"):
+        w.goto(f"/p/{pid}")
+    with saves(w, "открыт контекст", "POST", "/api/recent"):
+        w.goto(f"/c/{quote(home)}")
+    w.wait('main section.cxg[data-group="next"]', "страница контекста")
+    assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0], w.page.evaluate(WIDER)
+    w.page.tap(".burger")
+    w.wait("nav.open", "меню открыто")
+    w.wait(f'nav .recent a[data-pid="{pid}"]', "Недавние в меню")
+    w.page.wait_for_function("() => document.querySelector('nav').getBoundingClientRect().left >= 0", timeout=WAIT_MS)  # выехало
+    box = w.page.locator(f'nav .recent a[data-pid="{pid}"]').bounding_box()
+    assert box and box["x"] >= 0 and box["x"] + box["width"] <= PHONE[0] and box["height"] >= 36, box
+    with saves(w, "проект из меню", "POST", "/api/recent"):
+        w.page.tap(f'nav .recent a[data-pid="{pid}"]')
+    path_is(w, f"/p/{pid}", "проект из Недавних")
+    w.wait("nav:not(.open)", "меню закрылось")
+    w.goto("/contexts")
+    w.wait(f'main a.cxr[data-cname="{home}"]', "раздел Контексты")
+    assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0], w.page.evaluate(WIDER)
     w.check("итог")

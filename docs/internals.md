@@ -167,8 +167,9 @@ no language at all — Russian.
 ## Public pages and UI
 
 App sections: Inbox · Next (filter by @context) · Waiting · Calendar/reminders · Projects (⚠ without a next
-action) · Someday · Reference · Done · Weekly Review.
-Every section has its own address — `/` (Inbox), `/next`, `/projects`, `/p/<id>` (a project), `/account`… and the
+action) · Contexts · Someday · Reference · Done · Weekly Review.
+Every section has its own address — `/` (Inbox), `/next`, `/projects`, `/p/<id>` (a project), `/contexts`,
+`/c/<name>` (a context, URL-encoded), `/account`… and the
 same under `/en/` — so Back (button or phone gesture) returns to the previous section instead of leaving the site.
 A task card opened from a list is its own history entry `/i/<N>`: Back closes it. Server: `app.APP_VIEWS`.
 
@@ -186,6 +187,22 @@ Project archive (SERBITO-602): `projects.status` is `active` or `archived`, with
 - Screens: "🗄 Archive" on a project and in the project list; `/archive` lists archived projects with their tasks
   and "Restore"; Weekly Review lists empty projects with an Archive button. Archive CSS lives in the JS bundle:
   the guest landing must stay under 45 KB (`test_spa_bundle`).
+
+Contexts and Recent (SERBITO-647):
+- An open task is `inbox`, `next`, `waiting` or `someday` (`app.CTX_OPEN`). Context names go through
+  `norm_contexts`: `@Дом`, `Дом` and `дом` are one context; a bad name gives 400 (404 on `/c/…`).
+- `/contexts` lists contexts with open tasks: `GET /api/contexts/open` → `[{name, open}]`, most open first, then by
+  name; `/api/counts` → `contexts` is the menu count. `GET /api/contexts` (names for `@` suggestions) is unchanged.
+- `/c/<name>` shows `GET /api/items?status=all&context=<name>&done=1`. The SPA groups each task once: `remind_at` →
+  Calendar, else `next`/`inbox` → Next, `waiting`, `someday`; done tasks go to a collapsed "Completed (N)". No drag
+  and drop there: a group mixes lists. The capture field adds `@name`. `@context` on every task row is a link to it;
+  the Next chips stay as a filter (`S.ctx`), the open context is `S.cname`.
+- Recent: the SPA calls `POST /api/recent` (`{kind:"project", id}` or `{kind:"context", name}`) after a project or
+  context page renders, not on reloads of the same page. The server keeps 10 entries per user in `user_recent` and
+  `GET /api/recent` returns up to 5 live ones, newest first. Archived projects and contexts without open tasks are
+  hidden, not deleted: a restored project comes back. Deleting a project removes its entry. Account merge combines
+  both lists. The menu shows them under "Recent"; the current page has `aria-current="page"`, its section
+  `aria-current="true"`. The CSS is in the JS bundle.
 
 Process Inbox (SERBITO-603): `/process` takes Inbox tasks one at a time, oldest first, and asks the GTD questions
 in order: actionable? → under 2 minutes? → mine? → more than one step? → fixed date? Each final answer is one

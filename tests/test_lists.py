@@ -1,5 +1,5 @@
 """Списки задач: «Скоро срок» на экране Inbox (SERBITO-326), выполненные в проекте (SERBITO-327),
-ручной порядок (SERBITO-328)."""
+ручной порядок (SERBITO-328), контексты и «Недавние» (SERBITO-647)."""
 import math
 import time
 from datetime import datetime, timedelta
@@ -373,3 +373,174 @@ def test_project_order_is_per_user_and_survives_merge(new_client, login, mail):
     assert c.post("/api/auth/merge", json={"token": token}).json() == {"ok": True}
     assert project_titles(c) == ["общий", "a1", "c2", "c1"]
     assert c.get("/api/me").json()["dnd_tip_seen"] is True
+
+
+# ── SERBITO-647: контексты и «Недавние» ──
+
+def merge_into(c, email, mail):
+    """c забирает аккаунт email через привязку почты и подтверждение объединения."""
+    c.post("/api/auth/email/start", json={"email": email})
+    code = __import__("conftest").last_code(mail)
+    token = c.post("/api/auth/email/verify", json={"email": email, "code": code, "link": True}).json()["merge"]
+    assert c.post("/api/auth/merge", json={"token": token}).json() == {"ok": True}
+
+
+def recent(client):
+    return [(r["kind"], r.get("id") or r["name"]) for r in client.get("/api/recent").json()]
+
+
+def see(client, kind, ref):
+    return client.post("/api/recent", json={"kind": kind, ("id" if kind == "project" else "name"): ref})
+
+
+def test_open_contexts_counts_order_and_hidden_empty(client, login):
+    login(client)
+    for t in ("a @дом", "b @дом @work", "c @work", "d @zz", "e @улица"):
+        client.post("/api/capture", json={"text": t})
+    add(client, "f @дом", "waiting")
+    add(client, "g @дом", "someday")
+    add(client, "h @дом", "inbox")
+    add(client, "сделано @work", "done")
+    add(client, "справка @work", "reference")
+    add(client, "мусор @улица", "trash")
+    add(client, "x @пусто", "done")  # только выполненные — в разделе его нет
+    assert client.get("/api/contexts/open").json() == [{"name": "дом", "open": 5}, {"name": "work", "open": 2},
+                                                       {"name": "zz", "open": 1}, {"name": "улица", "open": 1}]
+    assert client.get("/api/counts").json()["contexts"] == 4
+    # Подсказки @ — по-прежнему все контексты, не только с открытыми задачами
+    assert "пусто" in client.get("/api/contexts").json()
+
+
+def test_items_context_filter_page_and_done(client, login):
+    """Страница контекста: status=all&context=… — открытые задачи всех списков (без справки, корзины, архива),
+    done=1 — ещё и выполненные, в конце, свежие первыми. «@Дом», «Дом» и «дом» — один контекст."""
+    login(client)
+    n1 = add(client, "n1 @дом")
+    w = add(client, "w @дом", "waiting")
+    s = add(client, "s @дом", "someday")
+    sch = add(client, "позвонить @дом", remind_at=int(time.time()) + 86400)
+    i = add(client, "i @дом", "inbox")
+    n2 = add(client, "n2 @дом @work")
+    add(client, "ref @дом", "reference")
+    add(client, "trash @дом", "trash")
+    add(client, "чужой контекст @work")
+    d1 = add(client, "d1 @дом", "done")
+    A.run("update items set completed_at=completed_at-100 where id=%s", (d1["id"],))
+    d2 = add(client, "d2 @дом", "done")
+    opened = ids(client, "status=all&context=дом")
+    assert sorted(opened) == sorted(x["id"] for x in (n1, w, s, sch, i, n2))
+    assert opened == ids(client, "status=all&context=%40%D0%94%D0%BE%D0%BC")  # «@Дом» в адресе
+    full = ids(client, "status=all&context=дом&done=1")
+    assert full[:-2] == opened and full[-2:] == [d2["id"], d1["id"]]
+    # Внутри одного списка — его ручной порядок, как на экране Next
+    nxt = [x for x in client.get("/api/items?status=all&context=дом").json() if x["status"] == "next"]
+    assert [x["id"] for x in nxt] == [n1["id"], sch["id"], n2["id"]]
+    assert nxt[1]["remind_at"]  # «Запланировано» SPA собирает по remind_at
+    # Фильтр сочетается и с отдельным списком
+    assert ids(client, "status=waiting&context=дом") == [w["id"]]
+    assert ids(client, "status=next&context=work") != [] and ids(client, "status=all&context=нет") == []
+    for bad in ("", "@", "дом работа", "a,b"):
+        assert client.get("/api/items", params={"status": "all", "context": bad}).status_code == 400, bad
+
+
+def test_context_data_is_per_user(new_client, login):
+    me, other = new_client(), new_client()
+    login(me, "alice@example.com")
+    login(other, "bob@example.com")
+    me.post("/api/capture", json={"text": "моё @дом"})
+    other.post("/api/capture", json={"text": "чужое @дом"})
+    other.post("/api/capture", json={"text": "чужое @бар"})
+    assert me.get("/api/contexts/open").json() == [{"name": "дом", "open": 1}]
+    assert [x["title"] for x in me.get("/api/items?status=all&context=дом").json()] == ["моё"]
+    assert see(me, "context", "бар").status_code == 200 and recent(me) == []  # у меня в нём задач нет
+
+
+def test_recent_newest_first_dedupe_and_mixed(client, login):
+    login(client)
+    a, b = new_project(client, "Ремонт"), new_project(client, "Отпуск")
+    client.post("/api/capture", json={"text": "x @дом"})
+    client.post("/api/capture", json={"text": "y @Телефон"})
+    assert client.get("/api/recent").json() == []
+    see(client, "project", a)
+    see(client, "context", "@Дом")
+    see(client, "project", b)
+    r = see(client, "context", "телефон")
+    assert r.json() == client.get("/api/recent").json() == [
+        {"kind": "context", "name": "телефон", "open": 1}, {"kind": "project", "id": b, "title": "Отпуск"},
+        {"kind": "context", "name": "дом", "open": 1}, {"kind": "project", "id": a, "title": "Ремонт"}]
+    see(client, "project", a)  # повтор поднимает наверх, а не дублирует
+    see(client, "context", "ДОМ")
+    assert recent(client) == [("context", "дом"), ("project", a), ("context", "телефон"), ("project", b)]
+    assert A.row("select count(*) n from user_recent")["n"] == 4
+
+
+def test_recent_shows_five_keeps_ten(client, login):
+    login(client)
+    pids = [new_project(client, f"p{n}") for n in range(12)]
+    for pid in pids:
+        see(client, "project", pid)
+    assert recent(client) == [("project", p) for p in reversed(pids[-5:])]
+    assert A.row("select count(*) n from user_recent")["n"] == A.RECENT_KEEP == 10
+    # Мёртвые в меню не попадают: следующие живые из сохранённых десяти занимают их места
+    for pid in pids[-3:]:
+        client.post(f"/api/projects/{pid}/archive", json={"mode": "project"})
+    assert recent(client) == [("project", p) for p in reversed(pids[-8:-3])]
+    client.post(f"/api/projects/{pids[-1]}/restore")
+    assert recent(client)[0] == ("project", pids[-1])  # вернули из архива — снова в списке
+
+
+def test_recent_drops_dead_entries(client, login):
+    """Проект в архиве или удалён, у контекста не осталось открытых задач — в «Недавних» их нет."""
+    login(client)
+    arch, gone, live = new_project(client, "архив"), new_project(client, "удалю"), new_project(client, "живой")
+    t = client.post("/api/capture", json={"text": "дело @улица"}).json()
+    client.post("/api/capture", json={"text": "дело @дом"})
+    for pid in (arch, gone, live):
+        see(client, "project", pid)
+    see(client, "context", "улица")
+    see(client, "context", "дом")
+    see(client, "context", "пусто")  # открыли адрес контекста без задач — храним, но не показываем
+    client.post(f"/api/projects/{arch}/archive", json={"mode": "project"})
+    client.delete(f"/api/projects/{gone}")
+    client.patch(f"/api/items/{t['id']}", json={"status": "done"})
+    assert recent(client) == [("context", "дом"), ("project", live)]
+    assert not A.row("select 1 from user_recent where kind='project' and key=%s", (str(gone),))  # удалён — и строка
+
+
+def test_recent_validation_and_isolation(new_client, login):
+    me, other = new_client(), new_client()
+    login(me, "alice@example.com")
+    login(other, "bob@example.com")
+    theirs = new_project(other, "чужой")
+    see(other, "project", theirs)
+    assert see(me, "project", theirs).status_code == 404  # чужой проект — как несуществующий
+    assert see(me, "project", 999999).status_code == 404
+    for body in ({}, {"kind": "x", "name": "дом"}, {"kind": "project", "id": "1"}, {"kind": "project", "id": True},
+                 {"kind": "project"}, {"kind": "context"}, {"kind": "context", "name": ""},
+                 {"kind": "context", "name": "a b"}, {"kind": "context", "name": ["дом"]}):
+        assert me.post("/api/recent", json=body).status_code == 400, body
+    assert recent(me) == [] and recent(other) == [("project", theirs)]
+
+
+def test_recent_survives_merge(new_client, login, mail):
+    """Объединение аккаунтов: недавние обоих — один список по времени открытия, одноимённый проект второго ведёт на
+    склеенный проект первого, и снова не больше десяти строк."""
+    c, carol = new_client(), new_client()
+    uid = login(c, "alice@example.com")
+    mine = new_project(c, "Общий")
+    c.post("/api/capture", json={"text": "a @дом"})
+    see(c, "project", mine)
+    see(c, "context", "дом")
+    login(carol, "carol@example.com")
+    glued, own = new_project(carol, "общий"), new_project(carol, "Своё")
+    carol.post("/api/capture", json={"text": "b @улица"})
+    for n in range(8):
+        see(carol, "project", new_project(carol, f"p{n}"))
+    see(carol, "project", glued)
+    see(carol, "context", "улица")
+    see(carol, "project", own)
+    merge_into(c, "carol@example.com", mail)
+    p7, p6 = (A.row("select id from projects where title=%s", (t,))["id"] for t in ("p7", "p6"))
+    assert recent(c) == [("project", own), ("context", "улица"), ("project", mine), ("project", p7), ("project", p6)]
+    assert A.row("select count(*) n from user_recent")["n"] == A.row(
+        "select count(*) n from user_recent where user_id=%s", (uid,))["n"] == 10  # и только у него

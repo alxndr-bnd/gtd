@@ -356,6 +356,13 @@ create table if not exists process_runs(
   id bigserial primary key, user_id bigint not null, channel text not null, started bigint not null,
   items integer not null default 0);
 create index if not exists process_runs_started on process_runs(started);
+-- Недавние проекты и контексты (SERBITO-647): что пользователь открывал, на сервере — общее для всех устройств.
+-- kind — project (key — id проекта) или context (key — имя без «@»); seen — когда открыл, мс, у одного
+-- пользователя растёт строго. Хранится RECENT_KEEP последних, в боковом меню — RECENT_SHOW живых из них
+create table if not exists user_recent(
+  user_id bigint not null, kind text not null, key text not null, seen bigint not null,
+  primary key (user_id, kind, key));
+create index if not exists user_recent_seen on user_recent(user_id, seen desc);
 """
 
 with _pool.connection() as _c:
@@ -879,6 +886,20 @@ def norm_contexts(value) -> list[str]:
             if c[:50] not in out:
                 out.append(c[:50])
     return out[:CONTEXTS_MAX]
+
+
+def split_old_contexts() -> None:
+    """Контексты из нескольких слов (SERBITO-647): до SERBITO-423 PATCH хранил контекст строкой как есть («at home»),
+    и старт перенёс её в contexts целиком. Страница /c/<имя> такой не откроет — делим, как norm_contexts. На старте;
+    кандидатов отбирает база, пишем только изменённые — повторный старт ничего не трогает."""
+    for r in rows("select id, contexts from items where exists (select 1 from unnest(contexts) c "
+                  "where c ~ '[^[:alnum:]_-]' or c <> lower(c) or length(c) > 50)"):
+        cs = norm_contexts(r["contexts"])
+        if cs != r["contexts"]:
+            run("update items set contexts=%s where id=%s", (cs, r["id"]))
+
+
+split_old_contexts()
 
 
 def parse_task(uid: int, raw: str) -> dict:
@@ -2042,6 +2063,7 @@ def attach(uid: int, field: str, value) -> int | None:
             run("delete from api_tokens where user_id=%s", (other["id"],))
             run("delete from oauth_grants where user_id=%s", (other["id"],))  # токены OAuth — каскадом
             run("delete from oauth_codes where user_id=%s", (other["id"],))
+            run("delete from user_recent where user_id=%s", (other["id"],))  # SERBITO-647
             run("delete from users where id=%s", (other["id"],))
     run(f"update users set {field}=%s where id=%s", (value, uid))
     return None
@@ -2058,10 +2080,12 @@ def merge_accounts(keep: int, drop: int):
             raise AuthError(400, "merge_missing")
         mine = {p["title"].casefold(): p["id"]
                 for p in c.execute("select id, title from projects where user_id=%s", (keep,)).fetchall()}
+        glued = {}  # id проекта drop -> одноимённый проект keep: недавние drop ведут уже на него (SERBITO-647)
         for p in c.execute("select id, title from projects where user_id=%s order by position nulls last, id",
                            (drop,)).fetchall():
             same = mine.get(p["title"].casefold())
             if same:
+                glued[str(p["id"])] = str(same)
                 c.execute("update items set project_id=%s where project_id=%s", (same, p["id"]))
                 c.execute("delete from projects where id=%s", (p["id"],))
             else:  # в конец списка keep, в своём порядке (SERBITO-391)
@@ -2077,6 +2101,13 @@ def merge_accounts(keep: int, drop: int):
         for table in ("items", "user_sessions", "login_tokens", "api_tokens", "oauth_grants", "oauth_codes"):
             c.execute(f"update {table} set user_id=%s where user_id=%s", (keep, drop))
         c.execute("update tg_logins set link_user_id=%s where link_user_id=%s", (keep, drop))
+        # Недавние (SERBITO-647): общий список, каждый раз — по последнему открытию, и снова RECENT_KEEP свежих
+        for r in c.execute("delete from user_recent where user_id=%s returning kind, key, seen", (drop,)).fetchall():
+            key = glued.get(r["key"], r["key"]) if r["kind"] == "project" else r["key"]
+            c.execute("insert into user_recent(user_id, kind, key, seen) values(%s,%s,%s,%s) on conflict "
+                      "(user_id, kind, key) do update set seen=greatest(user_recent.seen, excluded.seen)",
+                      (keep, r["kind"], key, r["seen"]))
+        c.execute(RECENT_TRIM, (keep, keep, RECENT_KEEP))
         if d["dnd_tip_seen"]:  # подсказку о перестановке уже закрыли в одном из аккаунтов (SERBITO-390)
             c.execute("update users set dnd_tip_seen=true where id=%s", (keep,))
         moved = {f: d[f] for f in IDENTITIES if d[f] and not k[f]}
@@ -2704,6 +2735,90 @@ def list_contexts(uid: int = Depends(current_user)):
         "and i.status not in ('trash','archived') group by c order by n desc, c", (uid,))]
 
 
+# Открытые задачи контекста (SERBITO-647): страница /c/<имя> и счётчики в разделе «Контексты». Справка (reference) —
+# не задача, выполненные, корзина и архив — не открытые
+CTX_OPEN = ("inbox", "next", "waiting", "someday")
+
+
+def context_counts(uid: int) -> dict[str, int]:
+    """Сколько открытых задач в каждом контексте; контекста без открытых задач в ответе нет."""
+    return {r["c"]: r["n"] for r in rows(
+        "select c, count(*) n from items i, unnest(i.contexts) c where i.user_id=%s and i.status = any(%s) "
+        "group by c", (uid, list(CTX_OPEN)))}
+
+
+def one_context(value) -> str:
+    """Имя одного контекста из адреса или тела запроса: «@Дом» -> «дом». Пусто, несколько слов — 400."""
+    try:
+        cs = norm_contexts(value) if isinstance(value, str) else None
+    except ValueError:
+        cs = None
+    if not cs or len(cs) != 1:
+        raise HTTPException(400, "bad context")
+    return cs[0]
+
+
+@app.get("/api/contexts/open")
+def list_open_contexts(uid: int = Depends(current_user)):
+    """Раздел «Контексты» (SERBITO-647): [{name, open}] — где больше открытых задач, выше, при равенстве — по имени.
+    Порядок имён — в Python: сравнение строк в Postgres зависит от локали базы."""
+    return [{"name": c, "open": n} for c, n in sorted(context_counts(uid).items(), key=lambda x: (-x[1], x[0]))]
+
+
+# ── Недавние (SERBITO-647): последние открытые страницы проектов и контекстов, в боковом меню. Пишет фронт при
+# каждом открытии такой страницы; повтор поднимает наверх. Мёртвые (проект в архиве, у контекста нет открытых задач)
+# хранятся, но не показываются: проект вернули из архива — он снова в списке. Удалили проект — строку удаляет
+# delete_project
+RECENT_KEEP = 10  # строк на пользователя
+RECENT_SHOW = 5   # ссылок в меню
+RECENT_KINDS = ("project", "context")
+RECENT_TRIM = ("delete from user_recent where user_id=%s and (kind, key) not in (select kind, key from user_recent "
+               "where user_id=%s order by seen desc, kind, key limit %s)")
+
+
+def recent_list(uid: int) -> list[dict]:
+    """До RECENT_SHOW живых недавних, свежие первыми: {kind: project, id, title} или {kind: context, name, open}."""
+    rs = rows("select r.kind, r.key, p.id, p.title from user_recent r left join projects p on r.kind='project' "
+              "and p.id::text=r.key and p.user_id=r.user_id and p.status='active' where r.user_id=%s "
+              "order by r.seen desc, r.kind, r.key", (uid,))
+    ctx = context_counts(uid) if any(r["kind"] == "context" for r in rs) else {}
+    out = []
+    for r in rs:
+        if r["kind"] == "project" and r["id"]:
+            out.append({"kind": "project", "id": r["id"], "title": r["title"]})
+        elif r["kind"] == "context" and ctx.get(r["key"]):
+            out.append({"kind": "context", "name": r["key"], "open": ctx[r["key"]]})
+    return out[:RECENT_SHOW]
+
+
+@app.get("/api/recent")
+def get_recent(uid: int = Depends(current_user)):
+    return recent_list(uid)
+
+
+@app.post("/api/recent")
+def add_recent(body: dict, uid: int = Depends(current_user)):
+    """Открыли страницу: {kind: project, id} или {kind: context, name}. Чужой или несуществующий проект — 404.
+    Ответ — обновлённый список, как GET."""
+    kind = body.get("kind")
+    if kind not in RECENT_KINDS:
+        raise HTTPException(400, "kind: project или context")
+    if kind == "project":
+        pid = body.get("id")
+        if type(pid) is not int:
+            raise HTTPException(400, "id")
+        key = str(project_get(uid, pid)["id"])
+    else:
+        key = one_context(body.get("name"))
+    # seen — время в мс, но не меньше прошлого +1: два открытия в одну миллисекунду не встанут вровень
+    with _pool.connection() as c, c.transaction():
+        c.execute("insert into user_recent(user_id, kind, key, seen) select %s, %s, %s, greatest(%s, "
+                  "coalesce(max(seen), 0) + 1) from user_recent where user_id=%s on conflict (user_id, kind, key) "
+                  "do update set seen=excluded.seen", (uid, kind, key, int(time.time() * 1000), uid))
+        c.execute(RECENT_TRIM, (uid, uid, RECENT_KEEP))
+    return recent_list(uid)
+
+
 @app.post("/api/logout")
 def logout(request: Request):
     """Выход: сессия удаляется из базы, cookie — из браузера."""
@@ -2785,6 +2900,7 @@ def counts(uid: int = Depends(current_user)):
                          "and status not in ('done','trash','archived')", (uid,))["n"]
     c["projects"] = row("select count(*) n from projects where user_id=%s and status='active'", (uid,))["n"]
     c["archived_projects"] = row("select count(*) n from projects where user_id=%s and status='archived'", (uid,))["n"]
+    c["contexts"] = len(context_counts(uid))  # контекстов с открытыми задачами — счётчик раздела (SERBITO-647)
     c["onboarding"] = checklist
     return c
 
@@ -2814,9 +2930,12 @@ def due_cutoff(now: datetime | None = None) -> int:
 
 
 @app.get("/api/items")
-def list_items(status: str = "inbox", project_id: int | None = None, done: bool = False,
+def list_items(status: str = "inbox", project_id: int | None = None, done: bool = False, context: str | None = None,
                uid: int = Depends(current_user)):
     where, args = "i.user_id=%s", [uid]
+    if context is not None:  # задачи одного контекста (SERBITO-647), «@Дом» и «дом» — одно и то же
+        where += " and %s = any(i.contexts)"
+        args.append(one_context(context))
     if status == "scheduled":
         where += " and i.remind_at is not null and i.status not in ('done','trash','archived')"
         order = "i.remind_at"
@@ -2836,6 +2955,12 @@ def list_items(status: str = "inbox", project_id: int | None = None, done: bool 
         if status == "all":  # экран проекта: без корзины; выполненные — только если он их показывает (done=1)
             where += " and i.status not in ('trash','done')" if not done else " and i.status<>'trash'"
             order = "i.ppos nulls last, i.id"  # свой порядок у проекта
+    elif context is not None and status == "all":
+        # Страница контекста: открытые задачи (CTX_OPEN) в порядке их списков, выполненные — если просят (done=1),
+        # в конце, свежие первыми: лимит отрезает самые старые
+        where += " and i.status = any(%s)"
+        args.append([*CTX_OPEN, "done"] if done else list(CTX_OPEN))
+        order = "i.status='done', i.completed_at desc nulls first, i.position nulls last, i.id"
     return rows(f"{ITEM_SQL} where {where} order by {order} limit 500", args)
 
 
@@ -3184,6 +3309,7 @@ def delete_project(pid: int, items: str = "keep", uid: int = Depends(current_use
         else:
             n = c.execute("update items set project_id=null where project_id=%s and user_id=%s", (pid, uid)).rowcount
         c.execute("delete from projects where id=%s and user_id=%s", (pid, uid))
+        c.execute("delete from user_recent where user_id=%s and kind='project' and key=%s", (uid, str(pid)))
     return {"ok": True, "items": items, "affected": n}
 
 
@@ -3572,8 +3698,8 @@ def item_page(num: int, request: Request):
 # Адреса разделов и проектов (SERBITO-354): переход в приложении — запись в истории браузера, и Back (кнопка,
 # жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Сервер отдаёт на них то же приложение, что
 # на /i/N: раздел выбирает фронт по адресу. Inbox — это / (и /en/). Список — тот же, что ROUTE_VIEWS в index.html
-APP_VIEWS = ("next", "waiting", "scheduled", "projects", "archive", "someday", "reference", "done", "review", "account",
-             "stats", "process")
+APP_VIEWS = ("next", "waiting", "scheduled", "projects", "contexts", "archive", "someday", "reference", "done",
+             "review", "account", "stats", "process")
 
 
 def section_page(request: Request):
@@ -3582,10 +3708,20 @@ def section_page(request: Request):
     return r
 
 
+def context_page(name: str, request: Request):
+    """Страница контекста /c/<имя> (SERBITO-647): имя в адресе — как @токен, в любом регистре; не имя — 404."""
+    try:
+        one_context(name)
+    except HTTPException:
+        raise HTTPException(404) from None
+    return section_page(request)
+
+
 for _prefix in ("", "/en"):
     for _view in APP_VIEWS:
         app.add_api_route(f"{_prefix}/{_view}", section_page, methods=["GET"], include_in_schema=False)
     app.add_api_route(_prefix + "/p/{pid:int}", section_page, methods=["GET"], include_in_schema=False)
+    app.add_api_route(_prefix + "/c/{name}", context_page, methods=["GET"], include_in_schema=False)
 
 
 # ── MCP для AI-ассистентов (SERBITO-375): /mcp с Bearer-токеном, OAuth 2.1 для коннекторов (oauth.py). Модули берут

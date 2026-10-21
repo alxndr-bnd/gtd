@@ -204,11 +204,13 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
 {
 "ru": {
   "views": {"inbox": "📥 Inbox", "next": "⏭ Next", "waiting": "⏳ Waiting", "scheduled": "📅 Календарь / напоминания",
-    "projects": "📁 Projects", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Готово", "review": "🔍 Weekly Review"},
+    "projects": "📁 Projects", "contexts": "🏷 Контексты", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Готово",
+    "review": "🔍 Weekly Review"},
   "help": {"inbox": "Всё, что ещё не осмыслено. Разбери: что это и что делать дальше?",
     "next": "Конкретные следующие физические действия.", "waiting": "Жду ответа/результата от других.",
     "scheduled": "Задачи с напоминанием — по времени.", "someday": "Когда-нибудь / может быть.",
-    "reference": "Материалы без действия.", "done": "Выполнено."},
+    "reference": "Материалы без действия.", "done": "Выполнено.",
+    "contexts": "Где или с чем делать задачу. Открой контекст — там все его открытые задачи."},
   "empty": {
     "inbox": ["Запиши всё, что крутится в голове, — разберёшь потом", "позвонить маме завтра в 10:00"],
     "next": ["Шаги, которые можно сделать сразу. Из Inbox — кнопкой «→ Next» или сразу с @контекстом", "купить батарейки @магазин"],
@@ -218,7 +220,9 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "someday": ["Идеи на потом: не сейчас, но жалко потерять. Из Inbox — кнопкой «→ Someday»", "выучить испанский"],
     "reference": ["Полезное без действия: инструкции, адреса, номера. Из Inbox — кнопкой «→ Ref»", "размер фильтра для пылесоса"],
     "done": ["Отметь задачу галочкой — она окажется здесь", ""],
-    "project": ["В проекте пока нет задач — добавь первую в поле выше", ""]},
+    "project": ["В проекте пока нет задач — добавь первую в поле выше", ""],
+    "contexts": ["Контекст — где или с чем делать задачу. Допиши @контекст к задаче, и он появится здесь", "купить батарейки @магазин"],
+    "context": ["В этом контексте нет открытых задач — добавь первую в поле выше", ""]},
   "empty_default": "Пусто 🎉",
   "inbox_empty": "Inbox пуст 🎉",
   "inbox_sec": "🗂 Не разобрано",
@@ -231,7 +235,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "onb_title": "Первые шаги в GTD", "onb_close": "Скрыть", "ctx_offer": "Контекст:",
   "cap_hints": ["Быстрый захват: «позвонить в банк завтра в 10:00 #дом @телефон»",
     "Что сделать? «завтра в 10:00 #дом @телефон»", "Что нужно сделать? #проект @контекст", "Что нужно сделать?", "Задача…"],
-  "cap_add": "Добавить в Inbox", "cap_btn": "Добавить", "cap_project": "Добавить задачу в #{p}",
+  "cap_add": "Добавить в Inbox", "cap_btn": "Добавить", "cap_project": "Добавить задачу в #{p}", "cap_context": "Добавить задачу в @{c}",
   "task_missing": "Задача #{n} не найдена",
   "login_page": "Вход", "login_hint": "Вход или регистрация — аккаунт создастся сам",
   "bot_line": "Telegram-бот {link}: задача — одним сообщением, напоминания приходят в чат",
@@ -286,6 +290,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>Alt+↑↓ переставить<br>Shift+F10 меню задачи<br>← меню · → задачи · Esc сброс",
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
   "all": "все", "back_projects": "← Projects", "rename": "Переименовать", "delete": "Удалить",
+  "back_contexts": "← Контексты", "recent": "Недавние",
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие. Порядок меняется перетаскиванием или Alt+↑↓.",
   "new_project": "Новый проект", "create": "Создать",
   "to_project": "→ Project", "pick_project": "В какой проект?", "new_project_opt": "+ Новый проект…",
@@ -360,11 +365,13 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
 },
 "en": {
   "views": {"inbox": "📥 Inbox", "next": "⏭ Next", "waiting": "⏳ Waiting", "scheduled": "📅 Calendar / reminders",
-    "projects": "📁 Projects", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Done", "review": "🔍 Weekly Review"},
+    "projects": "📁 Projects", "contexts": "🏷 Contexts", "someday": "💭 Someday", "reference": "📚 Reference", "done": "✅ Done",
+    "review": "🔍 Weekly Review"},
   "help": {"inbox": "Everything not yet clarified. Sort it out: what is it, and what's the next step?",
     "next": "Concrete next physical actions.", "waiting": "Waiting for a reply or a result from others.",
     "scheduled": "Tasks with a reminder, by time.", "someday": "Someday / maybe.",
-    "reference": "Material with no action.", "done": "Completed."},
+    "reference": "Material with no action.", "done": "Completed.",
+    "contexts": "Where or with what you do a task. Open a context to see all its open tasks."},
   "empty": {
     "inbox": ["Write down everything on your mind — sort it out later", "call mom tomorrow at 10:00"],
     "next": ["Steps you can take right away. From the Inbox, press “→ Next”, or add an @context right away", "buy batteries @store"],
@@ -374,7 +381,9 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
     "someday": ["Ideas for later: not now, but too good to lose. From the Inbox, press “→ Someday”", "learn Spanish"],
     "reference": ["Useful info with no action: instructions, addresses, numbers. From the Inbox, press “→ Ref”", "vacuum filter size"],
     "done": ["Tick a task off and it lands here", ""],
-    "project": ["No tasks in this project yet — add the first one in the field above", ""]},
+    "project": ["No tasks in this project yet — add the first one in the field above", ""],
+    "contexts": ["A context is where or with what you do a task. Add an @context to a task and it shows up here", "buy batteries @store"],
+    "context": ["No open tasks in this context — add the first one in the field above", ""]},
   "empty_default": "Empty 🎉",
   "inbox_empty": "Inbox is empty 🎉",
   "inbox_sec": "🗂 Not sorted yet",
@@ -387,7 +396,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "onb_title": "First steps in GTD", "onb_close": "Hide", "ctx_offer": "Context:",
   "cap_hints": ["Quick capture: “call the bank tomorrow at 10am #home @phone”",
     "What to do? “tomorrow at 10am #home @phone”", "What needs doing? #project @context", "What needs doing?", "Task…"],
-  "cap_add": "Add to Inbox", "cap_btn": "Add", "cap_project": "Add a task to #{p}",
+  "cap_add": "Add to Inbox", "cap_btn": "Add", "cap_project": "Add a task to #{p}", "cap_context": "Add a task to @{c}",
   "task_missing": "Task #{n} not found",
   "login_page": "Sign in", "login_hint": "Sign in or sign up — the account is created automatically",
   "bot_line": "Telegram bot {link}: send a task as a message, get reminders in the chat",
@@ -442,6 +451,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>Alt+↑↓ reorder<br>Shift+F10 task menu<br>← menu · → tasks · Esc clear",
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
+  "back_contexts": "← Contexts", "recent": "Recent",
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action. Drag a project or press Alt+↑↓ to change the order.",
   "new_project": "New project", "create": "Create",
   "to_project": "→ Project", "pick_project": "Which project?", "new_project_opt": "+ New project…",
@@ -525,7 +535,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 // что и для бота: русский — ru, uk, be, сербский кириллицей; английский — все остальные
 const I18N = window.GTD_I18N || JSON.parse($('#i18n').textContent);  // из бандла /app.<хеш>.js (SERBITO-444) или со страницы
 const LANG_NAMES = {ru:'Русский', en:'English'};  // название языка пишется на нём самом — поэтому не в словаре
-const VIEW_KEYS = ['inbox','next','waiting','scheduled','projects','someday','reference','done','review'];
+const VIEW_KEYS = ['inbox','next','waiting','scheduled','projects','contexts','someday','reference','done','review'];
 // VIEWS, HELP, EMPTY (пустой раздел: что сюда попадает + пример), ONB (чек-лист первого запуска:
 // [поле из /api/counts → onboarding, пункт, пояснение]), CAP_HINTS — части словаря текущего языка
 let LANG, L, VIEWS, HELP, EMPTY, ONB, CAP_HINTS;
@@ -550,41 +560,55 @@ function applyLang(){  // после /api/me: вошли на /en/ — запо�
 }
 // До /api/config — язык страницы от сервера (/en/ — en, иначе ru): им говорит лендинг гостю
 setLang(document.documentElement.lang);
-let S = {view:'inbox', items:[], projects:[], contexts:[], counts:{}, ctx:null, pid:null, cfg:{}};
+let S = {view:'inbox', items:[], projects:[], contexts:[], recent:[], counts:{}, ctx:null, pid:null, cname:null, cfg:{}};
 
 // ── Адреса разделов (SERBITO-354): /next, /projects, /p/<id>… (на /en/ — /en/next). Переход — запись в истории
 // браузера, и Back (кнопка, жест на телефоне) возвращает в прошлый раздел, а не уводит с сайта. Inbox — это /.
-// Карточка задачи — /i/<номер>: открыли из списка — своя запись, Back её закрывает. Список — app.APP_VIEWS
-const ROUTE_VIEWS = ['next','waiting','scheduled','projects','archive','someday','reference','done','review','account','stats','process'];
+// Карточка задачи — /i/<номер>: открыли из списка — своя запись, Back её закрывает. Список — app.APP_VIEWS.
+// Страница контекста (SERBITO-647) — /c/<имя>: S.cname, а не S.ctx (S.ctx — фильтр-чип в Next)
+const ROUTE_VIEWS = ['next','waiting','scheduled','projects','contexts','archive','someday','reference','done','review','account',
+  'stats','process'];
+// Имя контекста из адреса — как app.one_context: без «@», в нижнем регистре, ровно одно слово; иначе null
+function ctxName(s){
+  try{ s = decodeURIComponent(s); }catch{ return null; }
+  const w = s.toLowerCase().match(/[\p{L}\p{N}_-]+/gu) || [];
+  return w.length===1 ? w[0].slice(0, 50) : null;
+}
 function routeOf(path = location.pathname){
   const p = path.replace(/^\/en(?=\/|$)/, '') || '/';
   let m;
   if((m = p.match(/^\/i\/(\d+)$/))) return {card:+m[1]};
   if((m = p.match(/^\/p\/(\d+)$/))) return {view:'projects', pid:+m[1]};
+  if((m = p.match(/^\/c\/([^/]+)$/))) return {view:'contexts', cname:ctxName(m[1])};
   const v = p.slice(1);
   return {view:ROUTE_VIEWS.includes(v) ? v : 'inbox', pid:null};
 }
-// S.en — разделы под /en/: вошли на /en/… и язык не выбран явно в «Аккаунте»
-function viewPath(view = S.view, pid = S.pid){
-  const p = view==='projects' && pid ? `/p/${pid}` : view==='inbox' ? '/' : '/'+view;
+// S.en — разделы под /en/: вошли на /en/… и язык не выбран явно в «Аккаунте». sub — id проекта или имя контекста
+function viewPath(view = S.view, sub = view==='contexts' ? S.cname : S.pid){
+  const p = view==='projects' && sub ? `/p/${sub}` : view==='contexts' && sub ? `/c/${encodeURIComponent(sub)}`
+    : view==='inbox' ? '/' : '/'+view;
   return S.en ? (p==='/' ? '/en/' : '/en'+p) : p;
 }
-function routeApply(r){ S.view = r.view || 'inbox'; S.pid = r.pid || null; S.ctx = null; S.sel = null; if(S.view!=='process') S.proc = null; }
-// Перейти в раздел (проект): новая запись в истории, если адрес другой
-function go(view, pid = null){
-  routeApply({view, pid});
+function routeApply(r){
+  S.view = r.view || 'inbox'; S.pid = r.pid || null; S.cname = r.cname || null; S.ctx = null; S.sel = null;
+  if(S.view!=='process') S.proc = null;
+}
+// Перейти в раздел (проект, контекст): новая запись в истории, если адрес другой
+function go(view, sub = null){
+  routeApply({view, pid:view==='projects' ? sub : null, cname:view==='contexts' ? sub : null});
   const path = viewPath();
   if(location.pathname !== path) history.pushState(null, '', path);
   return load();
 }
 S.en = pathEn();
 routeApply(routeOf());
+if(S.cname && location.pathname !== viewPath()) history.replaceState(null, '', viewPath());  // /c/%40Дом → /c/дом
 // Back / Forward: карточка /i/N — открыть её; иначе закрыть открытый диалог и показать раздел из адреса
 addEventListener('popstate', () => {
   const r = routeOf(), d = $('#dlg');
   if(r.card) return openByNum(r.card);
   if(d.open) d.close();
-  if(r.view !== S.view || (r.pid || null) !== S.pid){ routeApply(r); load(); }
+  if(r.view !== S.view || (r.pid || null) !== S.pid || (r.cname || null) !== S.cname){ routeApply(r); load(); }
 });
 
 // Accept-Language — выбранный язык интерфейса: на нём сервер пишет ошибки и письма
@@ -603,8 +627,8 @@ const toLocalInput = ts => { if(!ts) return ''; const d=new Date(ts*1000); d.set
 // старый порядок и перерисовала его поверх нового. Рисует только последняя начатая load() и только при пустой
 // очереди перестановок: dndSave() сдвигает счётчик, а когда очередь опустеет, свою load() запустит сама.
 // Исключение — человек ушёл в другой раздел или проект: переставленного списка на экране нет, ждать очередь незачем
-let loadSeq = 0;
-const viewKey = () => S.view + '/' + (S.pid || '');
+let loadSeq = 0, recentSeq = 0;
+const viewKey = () => S.view + '/' + (S.pid || S.cname || '');
 async function load(){
   const seq = ++loadSeq, stale = () => seq !== loadSeq || (moving > 0 && viewKey() === movedIn);
   try{
@@ -617,8 +641,8 @@ async function load(){
     const resume = oauthResume(); if(resume) return location.replace(resume);  // вошли ради подключения приложения
     onbTrack(counts.onboarding);
     if(!S.me){ S.me = await api('/me'); applyLang(); }  // имя для кнопки аккаунта и язык интерфейса
-    const projects = await api('/projects');
-    const contexts = await api('/contexts');
+    const rs = recentSeq;  // Недавние: POST /api/recent, начатый после этой перечитки, свежее её GET (SERBITO-647)
+    const [projects, contexts, recent] = await Promise.all([api('/projects'), api('/contexts'), api('/recent')]);
     if(S.pid && !projects.some(p => p.id===S.pid)){  // чужой, удалённый или завершённый проект — список проектов
       S.pid = null; if(!location.pathname.startsWith('/i/')) history.replaceState(null, '', viewPath());
     }
@@ -628,6 +652,9 @@ async function load(){
     else if(S.view==='stats') d.stats = await api('/admin/stats');
     else if(S.view==='projects' && !S.pid) d.items=[];
     else if(S.view==='archive'){ d.items = []; d.archive = await api('/archive'); }  // архив проектов (SERBITO-602)
+    // Контексты (SERBITO-647): список со счётчиками открытых; страница контекста — открытые и выполненные (done=1)
+    else if(S.view==='contexts' && !S.cname){ d.items = []; d.ctxOpen = await api('/contexts/open'); }
+    else if(S.view==='contexts') d.items = await api(`/items?status=all&context=${encodeURIComponent(S.cname)}&done=1`);
     else if(S.view==='process') d.items = await api('/items?status=inbox');  // разбор Inbox по шагам (SERBITO-603)
     else if(S.view==='projects'){  // выполненные сервер отдаёт, только если проект их показывает (SERBITO-327)
       const pj = projects.find(p=>p.id===S.pid);
@@ -640,8 +667,10 @@ async function load(){
       ? await Promise.all([api('/items?status=due'), api('/items?status=next')]) : [[], []];
     if(stale()) return;
     Object.assign(S, {counts, projects, contexts}, d);
+    if(rs === recentSeq && Array.isArray(recent)) S.recent = recent;
     if(S.view==='process' && !S.proc) procInit(S.items);  // очередь — один раз на заход: перечитка её не сбрасывает
     render();
+    recentOpen();
     await openDeepLink();
   }catch(e){ if(e.message==='auth') return loginScreen(); console.error(e); }
 }
@@ -999,19 +1028,56 @@ function navHtml(){
   // Разделы — ссылки с href (SERBITO-349): без него <a> не получает фокус с клавиатуры и не читается как ссылка
   // архив — часть раздела Projects, разбор по шагам — часть Inbox
   const on = k => S.view===k || (k==='projects' && S.view==='archive') || (k==='inbox' && S.view==='process');
-  const item = (k, l, n) => `<a href="${viewPath(k, null)}" class="${on(k)?'on':''}" data-view="${k}"${S.view===k?' aria-current="page"':''}>${l}${n}</a>`;
+  // На странице проекта или контекста «page» — у её ссылки в «Недавних», у раздела — «true» (SERBITO-647)
+  const item = (k, l, n) => `<a href="${viewPath(k, null)}" class="${on(k)?'on':''}" data-view="${k}"${S.view===k
+    ? ` aria-current="${S.pid || S.cname ? 'true' : 'page'}"` : ''}>${l}${n}</a>`;
   return `<div class="topbar"><button class="burger" data-act="drawer" aria-label="${t('menu')}" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" width="22" height="22"
       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <span class="tb-title">${cur}</span>${user}</div>
     <div class="scrim" data-act="drawer"></div>
-    <nav id="nav" aria-label="${t('menu')}"><h1 data-view="inbox" title="${t('to_inbox')}"><img src="/favicon.svg" alt="" width="24" height="24">Serbito GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===8?'<div class="sep"></div>':''}
+    <nav id="nav" aria-label="${t('menu')}"><h1 data-view="inbox" title="${t('to_inbox')}"><img src="/favicon.svg" alt="" width="24" height="24">Serbito GTD</h1>${VIEWS.map(([k,l],i)=>`${i===4||i===9?'<div class="sep"></div>':''}
     ${item(k, l, `<span class="n">${k==='review'?'':(S.counts[k]||0)}</span>`)}`).join('')}
+    ${recentHtml()}
     ${me.admin?item('stats', t('stats'), ''):''}
     <a href="${t('about_url')}" title="${t('about_title')}">${t('about')}</a>
     ${changesLink()}
     ${window.gtdConsent ? `<a class="ccl" href="${t('privacy_url')}#cookies" data-cc-open>${t('cookie_settings')}</a>` : ''}
     <div class="navfoot"><div class="sep"></div>${user}</div>
     <div class="keys">${t('keys')}</div></nav>`;
+}
+
+// ── Недавние (SERBITO-647): до 5 последних открытых страниц проектов и контекстов, свежие сверху. Хранит сервер
+// (user_recent) — те же на всех устройствах; проект в архиве и контекст без открытых задач он не отдаёт.
+// Ссылки — прямо в меню: по ним ходят стрелки (menu) и Tab в выезжающем меню на телефоне
+function recentHtml(){
+  if(!S.recent.length) return '<div class="recent" hidden></div>';
+  const cur = r => r.kind==='project' ? S.view==='projects' && S.pid===r.id : S.view==='contexts' && S.cname===r.name;
+  return `<div class="recent" role="group" aria-labelledby="rech"><div class="sep"></div><div class="rech" id="rech">${t('recent')}</div>
+    ${S.recent.map(r => { const [view, sub, label] = r.kind==='project' ? ['projects', r.id, '#'+r.title] : ['contexts', r.name, '@'+r.name];
+      return `<a href="${viewPath(view, sub)}" class="rec ${cur(r)?'on':''}" data-view="${view}" data-${r.kind==='project' ? 'pid' : 'cname'}="${esc(sub)}"${cur(r)
+        ? ' aria-current="page"' : ''}><span class="l">${esc(label)}</span></a>`; }).join('')}</div>`;
+}
+function recentDraw(){
+  const el = $('nav .recent'); if(!el) return;
+  const had = el.contains(document.activeElement);
+  // Список переставился — выбор в меню остаётся на той же ссылке, а не на том же номере; её нет — текущая страница
+  const was = S.zone==='nav' && menu()[S.navSel]?.getAttribute('href');
+  el.outerHTML = recentHtml();
+  if(was){
+    const m = menu(), i = m.findIndex(a => a.getAttribute('href')===was);
+    S.navSel = i >= 0 ? i : Math.max(m.findIndex(a => a.matches('.recent .on')), 0);
+  }
+  if(S.zone==='nav' || had) selDraw(had);
+}
+// Открыли страницу проекта или контекста — сервер поднимает её наверх и отдаёт новый список. Без ожидания: страница
+// уже нарисована, ошибка запроса ей не мешает. Перечитка того же адреса (после действия с задачей) — не новое открытие
+function recentOpen(){
+  const r = S.view==='projects' && S.pid ? {kind:'project', id:S.pid} : S.view==='contexts' && S.cname ? {kind:'context', name:S.cname} : null;
+  const key = r && JSON.stringify(r);
+  if(key === S.recentAt) return;
+  S.recentAt = key; if(!r) return;
+  const n = ++recentSeq;
+  api('/recent', 'POST', r).then(list => { if(n === recentSeq && Array.isArray(list)){ S.recent = list; recentDraw(); } }).catch(() => {});
 }
 
 // Срок прошёл, а задача не закрыта — красным и словом «просрочено» (не только цветом)
@@ -1030,7 +1096,7 @@ function itemHtml(it){
   return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}" tabindex="-1">
     <label class="ck"><input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}></label>
     <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
-      <div class="meta">${it.remind_at?dueHtml(it):''}${(it.contexts||[]).map(c=>`<span>@${esc(c)}</span>`).join('')}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
+      <div class="meta">${it.remind_at?dueHtml(it):''}${(it.contexts||[]).map(c=>`<a class="cxa" href="${viewPath('contexts', c)}" data-view="contexts" data-cname="${esc(c)}">@${esc(c)}</a>`).join('')}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
     </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}${GRIP()}</div>`;
 }
@@ -1042,17 +1108,18 @@ const ICON_INBOX = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" 
 // Поле захвата — textarea в одну строку: длинный текст переносится, и поле растёт вниз (capFit)
 // Подсказка — самая длинная из вариантов CAP_HINTS, что целиком влезает в текущую ширину поля (capHint)
 function capHint(el = $('#cap')){
-  if(!el || !el.clientWidth || el.dataset.pid) return;  // в проекте подсказка своя — «Добавить задачу в #…»
+  if(!el || !el.clientWidth || el.dataset.pid || el.dataset.cx) return;  // в проекте и контексте подсказка своя
   const cs = getComputedStyle(el), ctx = (capHint.ctx ||= document.createElement('canvas').getContext('2d'));
   ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
   const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
   el.placeholder = CAP_HINTS.find(h => ctx.measureText(h).width <= room) || CAP_HINTS.at(-1);
 }
-// pj — страница проекта (SERBITO-354): поле добавляет задачу в этот проект, подсказка и кнопка говорят об этом
-const capHtml = (pj = null) => {
-  const add = pj ? t('cap_project', {p:esc(pj.title)}) : t('cap_add');
-  return `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${pj ? add : CAP_HINTS[0]}"
-    ${pj ? `data-pid="${pj.id}"` : ''} autofocus></textarea><div id="ac" class="ac" role="listbox" hidden></div></div>
+// pj — страница проекта (SERBITO-354): поле добавляет задачу в этот проект, подсказка и кнопка говорят об этом.
+// cx — страница контекста (SERBITO-647): так же, задача получает @cx
+const capHtml = (pj = null, cx = null) => {
+  const add = pj ? t('cap_project', {p:esc(pj.title)}) : cx ? t('cap_context', {c:esc(cx)}) : t('cap_add');
+  return `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${pj || cx ? add : CAP_HINTS[0]}"
+    ${pj ? `data-pid="${pj.id}"` : cx ? `data-cx="${esc(cx)}"` : ''} autofocus></textarea><div id="ac" class="ac" role="listbox" hidden></div></div>
   <button class="pri icon" data-act="capture" aria-label="${add}" title="${add}">${ICON_INBOX}<span class="lbl">${t('cap_btn')}</span></button></div>`;
 };
 
@@ -1067,6 +1134,7 @@ function render(){
   else if(S.view==='projects' && !S.pid){ body = projectsHtml(); topCap = false; }
   else if(S.view==='archive'){ body = archiveHtml(); topCap = false; }
   else if(S.view==='process'){ body = procHtml(); topCap = false; }
+  else if(S.view==='contexts'){ body = S.cname ? contextHtml(S.cname, S.items) : contextsHtml(); topCap = false; }
   else{
     let items = S.items;
     let chips='';
@@ -1305,6 +1373,39 @@ function archiveHtml(){
       <button class="sm" data-act="restoreproj" data-pid="${p.id}" data-title="${esc(p.title)}">${t('restore')}</button></div>
     ${p.items.length ? `<details style="margin-top:6px"><summary>${t('archived_tasks', {n:p.items.length})}</summary>${p.items.map(task).join('')}</details>`
       : `<div class="meta">${t('archived_none')}</div>`}</section>`).join('') : `<div class="empty"><div>${t('archive_empty')}</div></div>`}`;
+}
+
+// ── Контексты (SERBITO-647): раздел /contexts — контексты с открытыми задачами, где их больше — выше (порядок
+// и счётчики — app.list_open_contexts); страница /c/<имя> — все открытые задачи контекста группами Next → Waiting →
+// Календарь → Someday и свёрнутые «Выполненные (N)», как у проекта. Группы — из разных списков, поэтому без
+// перетаскивания: порядок внутри группы — порядок её списка. Стили — в бандле, как у архива
+document.head.insertAdjacentHTML('beforeend', `<style>
+a.it.cxr{color:inherit;text-decoration:none;align-items:center} @media(hover:hover){a.it.cxr:hover{border-color:var(--mut)}}
+.cxg h3{display:flex;gap:8px;align-items:baseline;font-size:15px;margin:18px 0 8px} .cxg h3 .n{color:var(--mut);font-size:13px;font-weight:400}
+.meta a.cxa{color:inherit;text-decoration:none} .meta a.cxa:hover{color:var(--ac);text-decoration:underline}
+@media(pointer:coarse){.meta a.cxa{padding:8px 2px;margin:-8px 0}}
+nav .rech{color:var(--mut);font-size:12px;margin:0 10px 2px}
+nav .recent a .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+nav .recent a.on{background:var(--bg);color:var(--tx);font-weight:600;box-shadow:inset 3px 0 var(--ac)}
+</style>`);
+function contextsHtml(){
+  const list = S.ctxOpen || [];
+  return `<h2>${L.views.contexts}</h2>${list.length ? `<div class="hint">${HELP.contexts}</div>` : ''}
+  ${list.map(c => `<a class="it cxr" href="${viewPath('contexts', c.name)}" data-view="contexts" data-cname="${esc(c.name)}"><div class="b">
+    <div class="t">@${esc(c.name)}</div><div class="meta"><span>${t('open_n', {n:c.open})}</span></div></div></a>`).join('') || emptyHtml('contexts')}`;
+}
+// Группа задачи — ровно одна: со временем — Календарь, иначе по списку; inbox — к Next
+const CX_GROUPS = ['next', 'waiting', 'scheduled', 'someday'];
+const cxGroup = i => i.status==='done' ? 'done' : i.remind_at ? 'scheduled' : ['waiting', 'someday'].includes(i.status) ? i.status : 'next';
+function contextHtml(c, items){
+  const by = k => items.filter(i => cxGroup(i)===k);
+  const groups = CX_GROUPS.map(k => [k, k==='scheduled' ? by(k).sort((a,b) => a.remind_at - b.remind_at) : by(k)]).filter(([, l]) => l.length);
+  const done = by('done').sort((a,b) => (b.completed_at||0) - (a.completed_at||0));
+  const sec = done.length ? `<details class="donesec" data-done-of="c:${esc(c)}" ${S.doneOpen['c:'+c]?'open':''}>
+    <summary>${t('done_section', {n:done.length})}</summary>${done.map(itemHtml).join('')}</details>` : '';
+  return `<p><a href="${viewPath('contexts', null)}" data-view="contexts">${t('back_contexts')}</a></p><h2>@${esc(c)}</h2>
+    ${capHtml(null, c)}${groups.map(([k, l]) => `<section class="cxg" data-group="${k}"><h3>${L.views[k]}<span class="n">${l.length}</span></h3>
+    ${l.map(itemHtml).join('')}</section>`).join('') || emptyHtml('context')}${sec}`;
 }
 
 // ── Разбор Inbox по шагам (SERBITO-603). Задачи по одной, старые первыми, и вопросы GTD по порядку:
@@ -2090,9 +2191,12 @@ async function newProject(){
 }
 
 async function capture(){
-  const inp = $('#cap'); const v = inp.value.trim(); if(!v) return;
-  const pid = inp.dataset.pid ? +inp.dataset.pid : undefined;
+  const inp = $('#cap'); let v = inp.value.trim(); if(!v) return;
+  const pid = inp.dataset.pid ? +inp.dataset.pid : undefined, cx = inp.dataset.cx;
   inp.value=''; acClose(); draft.del('cap');
+  // На странице контекста — @контекст в конец текста, если его не написали сами; @ — как CTX_TOKEN на сервере:
+  // после пробела или в начале, иначе «ivan@дом» сочтём контекстом, а сервер нет (SERBITO-647)
+  if(cx && !(v.toLowerCase().match(/(?<!\S)@[\p{L}\p{N}_-]+/gu) || []).includes('@'+cx)) v += ' @'+cx;
   const it = await api('/capture','POST',{text:v, project_id:pid});
   ga('task_capture', {channel:'web'});  // только факт — текст задачи в GA не уходит
   await load(); $('#cap')?.focus();  // записываем подряд, не кликая в поле снова
@@ -2196,7 +2300,7 @@ document.addEventListener('click', async e => {
   if(el.dataset.ctx!==undefined && !act && !el.dataset.view){ S.ctx=el.dataset.ctx||null; return render(); }
   if(el.dataset.view){
     S.toBurger = !!el.closest('nav.open');  // выбрали в выезжающем меню — оно закроется, фокус вернётся на ☰
-    S.zone='main'; return go(el.dataset.view, el.dataset.pid ? +el.dataset.pid : null);
+    S.zone='main'; return go(el.dataset.view, el.dataset.pid ? +el.dataset.pid : el.dataset.cname || null);
   }
   if(el.dataset.pid && el.classList.contains('pj')) return go('projects', +el.dataset.pid);
 });
@@ -2231,7 +2335,7 @@ document.addEventListener('input', e => {
 const leaveMenu = () => { if(S.zone==='nav'){ S.zone = 'main'; selDraw(); } };
 // Пункт меню получил фокус с клавиатуры (Tab) — режим меню с этого пункта: стрелки идут от него (SERBITO-349)
 document.addEventListener('focusin', e => {
-  const a = e.target.closest?.('nav > a[data-view]');
+  const a = e.target.closest?.(NAV_LINKS);
   if(!a) return leaveMenu();
   if(a.matches(':focus-visible') && !(S.zone==='nav' && menu()[S.navSel]===a)){ S.zone = 'nav'; S.navSel = menu().indexOf(a); selDraw(); }
 });
@@ -2269,7 +2373,8 @@ document.addEventListener('mousedown', e => {
 // Меню: ↑↓ — пункты, Enter — открыть раздел, → / Esc — обратно к списку.
 // Пока печатаешь в поле, открыта карточка или подсказки @/# — стрелки не трогаем.
 const cards = () => [...document.querySelectorAll('main .it')].filter(c => c.getClientRects().length);  // без свёрнутых
-const menu = () => [...document.querySelectorAll('nav > a[data-view]')];  // без «Выйти»: случайный Enter не разлогинит
+const NAV_LINKS = 'nav > a[data-view], nav > .recent > a';  // разделы и «Недавние» (SERBITO-647)
+const menu = () => [...document.querySelectorAll(NAV_LINKS)];  // без «Выйти»: случайный Enter не разлогинит
 // focus — фокус браузера идёт за выбором (SERBITO-349): так его видят экранные чтецы, а Tab продолжает с него
 function selDraw(focus){
   const list = cards();
@@ -2281,7 +2386,7 @@ function selDraw(focus){
 }
 function toMenu(){
   S.zone = 'nav';
-  const i = menu().findIndex(a => a.dataset.view===S.view && !a.dataset.pid);
+  const i = menu().findIndex(a => a.dataset.view===S.view && !a.dataset.pid && !a.dataset.cname);
   S.navSel = i < 0 ? 0 : i;
 }
 // C (create) / N (new) — к полю захвата, если сейчас не печатаешь в поле. По e.code — физической
