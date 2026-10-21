@@ -797,6 +797,11 @@ def test_consent_on_prod_host(prod_browser, server, monkeypatch):
         w.page.click("nav a.ccl[data-cc-open]")
         banner(w, "прод: баннер из меню")
         w.page.click('#cc [data-cc="denied"]')
+        # Cookie стирает JS страницы после клика — ждём, а не проверяем сразу: под нагрузкой полного
+        # параллельного прогона он не успевал, и тест падал через раз
+        deadline = time.time() + WAIT_MS / 1000
+        while ga_cookies(w) and time.time() < deadline:
+            w.page.wait_for_timeout(50)
         assert ga_cookies(w) == [] and [c["name"] for c in w.ctx.cookies() if c["name"] == "other"] == ["other"]
         w.check("прод: итог")
     finally:
