@@ -3070,7 +3070,7 @@ def test_recent_projects_and_contexts(watch, lang):
     assert w.page.evaluate(FOCUSED)["cls"].startswith("rec")
     with saves(w, f"[{lang}] повтор проекта", "POST", "/api/recent"):
         w.page.keyboard.press("Enter")
-    w.wait(f'main h2.pjh [data-act="archproj"]', f"[{lang}] проект из Недавних")
+    w.wait('main h2.pjh [data-act="archproj"]', f"[{lang}] проект из Недавних")
     w.wait(f'nav .recent a:first-of-type[data-pid="{pid}"]', f"[{lang}] проект наверху")
     assert recent_links(w) == [["projects", pid, "page"], ["contexts", home, None]]
     # Ссылка переехала наверх — выбор и фокус ушли за ней, а не остались на её прежнем месте
