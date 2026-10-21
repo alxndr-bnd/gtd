@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-10-21
+
 ### Added
 
 - New Contexts section: open a context to see all its open tasks, grouped by Next, Waiting, Calendar and Someday. Click @context on any task to open it.
@@ -605,7 +607,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.64.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.65.0...HEAD
+[0.65.0]: https://github.com/alxndr-bnd/gtd/compare/v0.64.0...v0.65.0
 [0.64.0]: https://github.com/alxndr-bnd/gtd/compare/v0.63.0...v0.64.0
 [0.63.0]: https://github.com/alxndr-bnd/gtd/compare/v0.62.0...v0.63.0
 [0.62.0]: https://github.com/alxndr-bnd/gtd/compare/v0.61.0...v0.62.0
