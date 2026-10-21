@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+
+- We updated the list of trusted security certificates. It no longer trusts certificates that were compromised. Nothing changes for you.
+  - RU: Мы обновили список доверенных сертификатов безопасности. Он больше не доверяет скомпрометированным сертификатам. Для вас ничего не меняется.
+
 ## [0.62.0] - 2026-10-18
 
 ### Security
