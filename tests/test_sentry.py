@@ -25,8 +25,10 @@ def test_enabled_on_cloud_run(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "gtd")
     assert A.init_sentry() is True
     kw = calls[0]
-    assert (kw["dsn"], kw["release"], kw["environment"], kw["send_default_pii"], kw["traces_sample_rate"]) == \
-           ("https://key@example.ingest.sentry.io/1", "gtd@0.3.0", "production", False, 0.1)
+    assert (kw["dsn"], kw["release"], kw["environment"], kw["traces_sample_rate"]) == \
+           ("https://key@example.ingest.sentry.io/1", "gtd@0.3.0", "production", 0.1)
+    # PII по умолчанию выключен; явный send_default_pii устарел в sentry-sdk 2.72 (DeprecationWarning)
+    assert "send_default_pii" not in kw and "data_collection" not in kw
     # данные пользователей не уходят: ни локальные переменные, ни тела запросов
     assert kw["include_local_variables"] is False and kw["max_request_body_size"] == "never"
     assert kw["before_breadcrumb"]({"category": "httpx", "message": "x"}, None) is None
@@ -83,6 +85,7 @@ def sentry_events(monkeypatch):
     monkeypatch.setattr(A, "CRON_SECRET", "cron-s3cret-value")
     monkeypatch.setattr(A, "TOKEN", "1234567890:AAH-abcdefghijklmnopqrstuvwxyz_0123")
     assert A.init_sentry()
+    assert not sentry_sdk.get_client().should_send_default_pii()  # PII не уходит и без явного send_default_pii
     yield transport.events
     sentry_sdk.get_client().close()
     sentry_sdk.get_global_scope().set_client(None)
