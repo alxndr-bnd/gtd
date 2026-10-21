@@ -132,7 +132,9 @@ def init_sentry() -> bool:
         return False
     sentry_sdk.init(dsn=SENTRY_DSN, release=os.getenv("SENTRY_RELEASE") or None,
                     environment="production" if os.getenv("K_SERVICE") else "development",
-                    send_default_pii=False, traces_sample_rate=0.1,
+                    traces_sample_rate=0.1,
+                    # send_default_pii не задаём: с sentry-sdk 2.72 он устарел (DeprecationWarning), а без него SDK
+                    # и так не шлёт PII — как при send_default_pii=False (тест test_sentry: should_send_default_pii).
                     # Данные пользователей в Sentry не уходят: ни локальные переменные кадров (там бывают
                     # названия задач), ни тела запросов; токен бота вычищается из всего, что осталось
                     include_local_variables=False, max_request_body_size="never",
