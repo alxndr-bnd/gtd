@@ -109,7 +109,7 @@ SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 # Google Analytics 4: поток данных для gtd.serbito.rs. Пусто — GA не подключается
 GA_ID = os.getenv("GA_MEASUREMENT_ID", "")
 GA_HOST = "gtd.serbito.rs"
-# Будильник напоминаний: Cloud Scheduler раз в минуту шлёт POST /tasks/reminders (cron_authorized).
+# Будильник напоминаний: Cloud Scheduler раз в 10 минут шлёт POST /tasks/reminders (cron_authorized).
 # SERBITO-363: доказательство — OIDC ID-токен Google от сервис-аккаунта scheduler-invoker в Authorization: Bearer,
 # aud — один из адресов сервиса. Старый общий секрет в X-Cron-Secret работает, пока джоба не переключена;
 # SCHEDULER_STATIC_TOKEN_ENABLED=0 закрывает этот путь
@@ -2706,7 +2706,7 @@ async def csp_report(request: Request):
 
 @app.post("/tasks/reminders")
 async def cron_reminders(request: Request):
-    """Будильник от Cloud Scheduler (раз в минуту): рассылает наступившие напоминания."""
+    """Будильник от Cloud Scheduler (раз в 10 минут): рассылает наступившие напоминания."""
     if not await cron_authorized(request):
         raise HTTPException(403)
     return {"sent": await send_due_reminders()}

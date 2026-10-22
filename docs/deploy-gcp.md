@@ -11,7 +11,7 @@ To run your own copy on any Docker host, see [self-host.md](self-host.md) instea
 | Image | Artifact Registry `europe-west1-docker.pkg.dev/serbito/gtd/gtd:<sha>` |
 | Database | Cloud SQL PostgreSQL 17, instance `serbitodb`, database `gtd` |
 | Bot | Telegram webhook `/tg/webhook` |
-| Reminders | Cloud Scheduler job `gtd-reminders`, every minute |
+| Reminders | Cloud Scheduler job `gtd-reminders`, every 10 minutes |
 | Errors | Sentry project `nohandoff/gtd` |
 | Dependencies | Locked with hashes (`requirements*.txt`, [README](../README.md#dependencies)); base image pinned by digest; Dependabot (`.github/dependabot.yml`: uv lock, docker digest, actions — weekly) |
 | CI | `.github/workflows/ci.yml` on every PR and push to `main`: pytest with the browser smoke, lock check, image build |

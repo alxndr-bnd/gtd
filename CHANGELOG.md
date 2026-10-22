@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+
+- A Telegram reminder now arrives up to 10 minutes after the time you set.
+  - RU: Напоминание в Telegram теперь приходит в течение 10 минут после заданного времени.
+
 ## [0.65.0] - 2026-10-21
 
 ### Added

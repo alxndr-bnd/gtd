@@ -86,13 +86,15 @@ g iam service-accounts add-iam-policy-binding "$DEPLOYER" --role roles/iam.workl
   --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL/attribute.repository/$REPO" \
   >/dev/null
 
-echo "==> Cloud Scheduler: будильник напоминаний раз в минуту"
+echo "==> Cloud Scheduler: будильник напоминаний раз в 10 минут"
+# Раз в 10 минут, а не в минуту: каждая неудачная попытка будит алерт, а минутная точность напоминаниям не нужна.
+# Опоздавшие не теряются: send_due_reminders берёт все remind_at <= сейчас
 # SERBITO-363: будильник подписывается OIDC ID-токеном общего для serbito сервис-аккаунта scheduler-invoker,
 # а не секретом в заголовке (его видел любой с cloudscheduler.jobs.get). aud — адрес сервиса, его ждёт app.py
 INVOKER=scheduler-invoker@$PROJECT.iam.gserviceaccount.com
 g iam service-accounts describe "$INVOKER" >/dev/null 2>&1 \
   || g iam service-accounts create scheduler-invoker --display-name "Cloud Scheduler OIDC identity"
-cron_args=(--location "$REGION" --schedule "* * * * *" --time-zone "Europe/Belgrade"
+cron_args=(--location "$REGION" --schedule "*/10 * * * *" --time-zone "Europe/Belgrade"
   --uri "https://gtd.serbito.rs/tasks/reminders" --http-method POST
   --oidc-service-account-email "$INVOKER" --oidc-token-audience "https://gtd.serbito.rs"
   --attempt-deadline 60s)
