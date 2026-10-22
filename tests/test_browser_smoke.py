@@ -3118,3 +3118,73 @@ def test_recent_in_phone_drawer(watch):
     w.wait(f'main a.cxr[data-cname="{home}"]', "раздел Контексты")
     assert w.page.evaluate("document.documentElement.scrollWidth") <= PHONE[0], w.page.evaluate(WIDER)
     w.check("итог")
+
+
+# ── Ссылки на Google-документы в заголовке (gtd #85) ──
+SHEET = "https://docs.google.com/spreadsheets/d/1sOIVa-tx1TTXkBW9eYAKrTYoe6SfBM05qGNsPN5Nk1Y/edit?gid=1#gid=1&range=I29"
+# Google Identity Services (токен) и Google Picker с тем же API: Picker сразу «выбирает» файл с названием
+PICKER_STUB = """
+window.google = {accounts: {id: {initialize(){}, renderButton(){}}, oauth2: {initTokenClient(o){
+  return {requestAccessToken(){ window.__scope = o.scope; o.callback({access_token: 'tok', expires_in: 3600}); }}; }}},
+  picker: {ViewId: {DOCS: 'docs'}, DocsViewMode: {LIST: 'list'}, Feature: {SUPPORT_DRIVES: 'sd'},
+    Response: {ACTION: 'action', DOCUMENTS: 'docs'}, Action: {PICKED: 'picked', CANCEL: 'cancel'}, Document: {NAME: 'name'},
+    DocsView: class { setFileIds(id){ window.__fileIds = id; return this; } setMode(){ return this; }
+      setIncludeFolders(){ return this; } setSelectFolderEnabled(){ return this; } },
+    PickerBuilder: class { addView(){ return this; } enableFeature(){ return this; } setOAuthToken(){ return this; }
+      setDeveloperKey(k){ window.__key = k; return this; } setAppId(){ return this; } setLocale(){ return this; }
+      setCallback(cb){ this.cb = cb; return this; } build(){ return this; }
+      setVisible(){ setTimeout(() => this.cb({action: 'picked', docs: [{name: 'OKR 2026 #Q4'}]})); } }}};
+window.gapi = {load(_, cb){ cb(); }};
+"""
+
+
+def test_google_doc_link_chip(watch, monkeypatch):
+    """Ссылка на Google-таблицу — чип с типом и диапазоном; клик по ссылке не открывает карточку; «Показать
+    название» берёт название из Picker и подписывает ссылку, не трогая проект и напоминание."""
+    monkeypatch.setattr(A, "GOOGLE_API_KEY", "picker-key")
+    monkeypatch.setattr(A, "GOOGLE_APP_ID", "123")
+    w = watch()
+    w.page.add_init_script(PICKER_STUB)
+    ids = smoke_user(w)
+    A.run("update items set title=%s where id=%s", (f"Доработать OKR {SHEET} и https://example.com/a.", ids["inbox"]))
+    w.page.reload()
+    card = f'main .it[data-id="{ids["inbox"]}"]'
+    w.wait(f"{card} a.gl", "чип ссылки")
+    chip = w.page.locator(f"{card} a.gl")
+    assert chip.inner_text() == "📊 Таблица Google · I29" and chip.get_attribute("href") == SHEET
+    plain = w.page.locator(f"{card} a.lnk:not(.gl)")
+    assert plain.get_attribute("href") == "https://example.com/a"  # точка в конце фразы — не часть ссылки
+    assert w.page.locator(f"{card} .t").inner_text().startswith("Доработать OKR 📊")
+
+    # Клик по ссылке — переход браузера, не карточка. Сам переход гасим, как с номером #N
+    w.page.evaluate("""() => addEventListener('click', e => {
+        if (!e.target.closest('a.lnk')) return;
+        window.__lnk = {prevented: e.defaultPrevented}; e.preventDefault();
+    })""")
+    chip.click()
+    w.page.wait_for_function("() => window.__lnk", timeout=WAIT_MS)
+    assert w.page.evaluate("window.__lnk") == {"prevented": False}
+    page_pause(w, 200)
+    assert not w.page.locator("#dlg[open]").count()
+
+    w.page.click(f'{card} [data-act="gname"]')
+    w.wait(f'{card} a.gl:has-text("OKR 2026 #Q4")', "название из Picker")
+    assert chip.inner_text() == "📊 OKR 2026 #Q4 · I29"
+    assert not w.page.locator(f'{card} [data-act="gname"]').count() and not w.page.locator("#dlg[open]").count()
+    assert w.page.evaluate("[window.__scope, window.__fileIds, window.__key]") == [
+        "https://www.googleapis.com/auth/drive.file", "1sOIVa-tx1TTXkBW9eYAKrTYoe6SfBM05qGNsPN5Nk1Y", "picker-key"]
+    it = A.row("select title, project_id, remind_at from items where id=%s", (ids["inbox"],))
+    assert it == {"title": f"Доработать OKR [OKR 2026 #Q4]({SHEET}) и https://example.com/a.",
+                  "project_id": None, "remind_at": None}
+    w.check("итог")
+
+
+def test_google_doc_link_without_picker(watch):
+    """Без ключей Picker — чип без кнопки «Показать название»."""
+    w = watch()
+    ids = smoke_user(w)
+    A.run("update items set title=%s where id=%s", (f"OKR {SHEET}", ids["inbox"]))
+    w.page.reload()
+    w.wait(f'main .it[data-id="{ids["inbox"]}"] a.gl', "чип ссылки")
+    assert not w.page.locator('[data-act="gname"]').count()
+    w.check("итог")

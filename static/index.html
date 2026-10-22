@@ -50,6 +50,10 @@ button.sm:hover{color:var(--tx)}
 .it .num{color:var(--mut);font-size:12.5px;text-decoration:none;margin-top:2px;flex-shrink:0;font-variant-numeric:tabular-nums}
 .it .num:hover{color:var(--ac)}
 .it .t{word-break:break-word} .it.done .t{text-decoration:line-through;color:var(--mut)}
+/* Ссылки в заголовке (gtd #85): Google-документ — чип с типом или названием */
+a.lnk{color:var(--ac);word-break:break-all} a.gl{word-break:normal;text-decoration:none;padding:0 6px;border:1px solid var(--bd);
+  border-radius:6px;background:var(--bg);white-space:nowrap;max-width:100%;display:inline-block;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+a.gl:hover{border-color:var(--ac)} button.gn{padding:0 6px;min-height:24px;vertical-align:baseline}  /* 24 px — минимум цели касания, WCAG 2.5.8 */
 /* Вся карточка задачи открывает её (SERBITO-299) */
 .it[data-id]{cursor:pointer;transition:border-color .12s}
 @media(hover:hover){.it[data-id]:hover{border-color:var(--mut)}}
@@ -289,6 +293,10 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "changes": "✨ Что нового", "changes_url": "/changes", "changes_new": "Есть новая версия",
   "keys": "C / N — новая задача<br>↑↓ задачи · Enter открыть<br>Alt+↑↓ переставить<br>Shift+F10 меню задачи<br>← меню · → задачи · Esc сброс",
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
+  "gl": {"document": "Документ Google", "spreadsheets": "Таблица Google", "presentation": "Презентация Google",
+    "forms": "Форма Google", "file": "Файл Google Drive", "folders": "Папка Google Drive"},
+  "gl_name": "Показать название", "gl_name_hint": "Google спросит, к какому аккаунту есть доступ к документу",
+  "gl_fail": "Не удалось получить название документа",
   "all": "все", "back_projects": "← Projects", "rename": "Переименовать", "delete": "Удалить",
   "back_contexts": "← Контексты", "recent": "Недавние",
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие. Порядок меняется перетаскиванием или Alt+↑↓.",
@@ -450,6 +458,10 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "changes": "✨ What's new", "changes_url": "/en/changes", "changes_new": "There is a new version",
   "keys": "C / N — new task<br>↑↓ tasks · Enter open<br>Alt+↑↓ reorder<br>Shift+F10 task menu<br>← menu · → tasks · Esc clear",
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
+  "gl": {"document": "Google Doc", "spreadsheets": "Google Sheet", "presentation": "Google Slides",
+    "forms": "Google Form", "file": "Google Drive file", "folders": "Google Drive folder"},
+  "gl_name": "Show name", "gl_name_hint": "Google asks which account has access to the document",
+  "gl_fail": "Could not get the document name",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
   "back_contexts": "← Contexts", "recent": "Recent",
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action. Drag a project or press Alt+↑↓ to change the order.",
@@ -1082,6 +1094,88 @@ function recentOpen(){
 
 // Срок прошёл, а задача не закрыта — красным и словом «просрочено» (не только цветом)
 const overdue = it => it.remind_at && it.remind_at < Date.now()/1000 && !['done','trash'].includes(it.status);
+// Ссылки в заголовке (gtd #85): [название](url) и голый URL — кликабельны, открываются в новой вкладке.
+// Google-документ — чип «📊 Таблица Google · I29»; без названия у карточки — кнопка «Показать название» (gname)
+const MD_LINK = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const LINK_RE = new RegExp(MD_LINK.source + /|https?:\/\/[^\s<>"]+/.source, 'g');
+const GL_ICON = {document:'📄', spreadsheets:'📊', presentation:'📽', forms:'📝', file:'📎', folders:'📁'};
+const plainTitle = s => String(s ?? '').replace(MD_LINK, '$1');
+function gdoc(url){  // {kind, id, range} у ссылки на Google Docs/Drive; id нет — у публичной формы (/forms/d/e/…)
+  let u; try{ u = new URL(url); }catch{ return null; }
+  if(u.protocol!=='https:' || !/^(docs|drive)\.google\.com$/.test(u.hostname)) return null;
+  const p = u.pathname.replace(/^\/u\/\d+|\/u\/\d+(?=\/d\/)/, '').split('/').filter(Boolean);  // /u/1/ — номер аккаунта
+  let kind = null, id = null;
+  if(u.hostname==='docs.google.com'){ if(p[0] in GL_ICON && p[1]==='d'){ kind = p[0]; id = p[2]!=='e' ? p[2] : null; } }
+  else if(p[0]==='file' && p[1]==='d'){ kind = 'file'; id = p[2]; }
+  else if(p[0]==='drive' && p.includes('folders')){ kind = 'folders'; id = p[p.indexOf('folders') + 1]; }
+  else if(p[0]==='open' && u.searchParams.get('id')){ kind = 'file'; id = u.searchParams.get('id'); }
+  if(!kind) return null;
+  const range = u.searchParams.get('range') || new URLSearchParams(u.hash.slice(1)).get('range') || '';
+  return {kind, id: id && /^[\w-]{10,}$/.test(id) ? id : null, range};
+}
+function linkHtml(url, name, it){
+  const g = gdoc(url);
+  const a = text => `<a class="lnk${g ? ' gl' : ''}" href="${esc(url)}" target="_blank" rel="noopener" data-act="link">${text}</a>`;
+  if(!g) return a(esc(name || url));
+  const label = `${GL_ICON[g.kind]} ${esc(name || t('gl.'+g.kind))}${g.range ? ` · ${esc(g.range)}` : ''}`;
+  const btn = !name && g.id && it && S.cfg?.picker ? ` <button type="button" class="sm gn" data-act="gname" data-url="${esc(url)}"
+    title="${t('gl_name_hint')}">🔓 ${t('gl_name')}</button>` : '';
+  return a(label) + btn;
+}
+function titleHtml(title, it){  // it — карточка задачи: только у неё кнопка «Показать название»
+  title = String(title ?? '');
+  let out = '', last = 0;
+  for(const m of title.matchAll(LINK_RE)){
+    const [all, name] = m; let url = m[2], tail = '';
+    if(!url){ url = all.replace(/[.,;:!?)]+$/, ''); tail = all.slice(url.length); }  // точка в конце фразы — не ссылка
+    out += esc(title.slice(last, m.index)) + linkHtml(url, name, it) + esc(tail);
+    last = m.index + all.length;
+  }
+  return out + esc(title.slice(last));
+}
+
+// Название Google-документа (gtd #85). Сервер его не узнает: приватный документ без входа отвечает 401. Поэтому —
+// в браузере: токен drive.file от Google Identity Services, затем Google Picker сразу на этом файле. Выбор файла
+// даёт приложению доступ к нему, название приходит в ответе Picker и подписывает ссылку (POST link-name).
+// Токен — только в памяти вкладки, до своего срока (~1 ч); скрипты грузятся при наведении на кнопку
+const GP = {};
+const loadScript = src => new Promise((ok, fail) => {
+  const s = document.createElement('script'); s.src = src; s.async = true; s.onload = ok; s.onerror = fail; document.head.appendChild(s);
+});
+function pickerReady(){
+  return GP.ready ??= Promise.all([
+    window.google?.accounts?.oauth2 ? null : loadScript('https://accounts.google.com/gsi/client'),
+    (window.gapi ? Promise.resolve() : loadScript('https://apis.google.com/js/api.js')).then(() => new Promise(ok => gapi.load('picker', ok))),
+  ]).catch(err => { GP.ready = null; throw err; });
+}
+function driveToken(){
+  if(GP.tok && Date.now() < GP.exp) return Promise.resolve(GP.tok);
+  return new Promise((ok, fail) => google.accounts.oauth2.initTokenClient({client_id:S.cfg.google,
+    scope:'https://www.googleapis.com/auth/drive.file', error_callback:fail,
+    callback: r => { if(!r.access_token) return fail(r); GP.tok = r.access_token; GP.exp = Date.now() + (r.expires_in - 60) * 1000; ok(GP.tok); },
+  }).requestAccessToken());
+}
+async function gname(id, url){
+  const g = gdoc(url); if(!g?.id || !S.cfg.picker) return;
+  try{
+    await pickerReady();
+    const tok = await driveToken(), P = google.picker;
+    const doc = await new Promise(ok => {
+      const view = new P.DocsView(P.ViewId.DOCS).setFileIds(g.id).setMode(P.DocsViewMode.LIST);
+      if(g.kind==='folders') view.setIncludeFolders(true).setSelectFolderEnabled(true);
+      new P.PickerBuilder().addView(view).enableFeature(P.Feature.SUPPORT_DRIVES).setOAuthToken(tok)
+        .setDeveloperKey(S.cfg.picker.key).setAppId(S.cfg.picker.app).setLocale(LANG)
+        .setCallback(d => { const a = d[P.Response.ACTION]; if(a===P.Action.PICKED) ok(d[P.Response.DOCUMENTS][0]); else if(a===P.Action.CANCEL) ok(null); })
+        .build().setVisible(true);
+    });
+    if(!doc) return;
+    const r = await api(`/items/${id}/link-name`, 'POST', {url, name: doc[P.Document.NAME]});
+    if(!r?.id) throw new Error(r?.detail || 'link-name');
+    load();
+  }catch(err){ console.warn('gname', err); toast(t('gl_fail')); }
+}
+document.addEventListener('pointerover', e => { if(e.target.closest?.('[data-act="gname"]') && S.cfg?.picker) pickerReady().catch(() => {}); });
+
 const dueHtml = it => overdue(it) ? `<span class="due over">⏰ ${fmtTs(it.remind_at)} · ${t('overdue')}</span>`
   : `<span class="due">⏰ ${fmtTs(it.remind_at)}</span>`;
 function itemHtml(it){
@@ -1094,8 +1188,8 @@ function itemHtml(it){
   else if(it.status==='done') acts.push(['next',t('restore')]);
   // tabindex=-1: карточку фокусирует выбор стрелками и возврат из диалога, в порядок Tab она не входит
   return `<div class="it ${it.status==='done'?'done':''}" data-id="${it.id}" tabindex="-1">
-    <label class="ck"><input type="checkbox" data-act="toggle" aria-label="${esc(it.title)}" ${it.status==='done'?'checked':''}></label>
-    <div class="b"><div class="t" data-act="edit">${esc(it.title)}</div>
+    <label class="ck"><input type="checkbox" data-act="toggle" aria-label="${esc(plainTitle(it.title))}" ${it.status==='done'?'checked':''}></label>
+    <div class="b"><div class="t" data-act="edit">${titleHtml(it.title, it)}</div>
       <div class="meta">${it.remind_at?dueHtml(it):''}${(it.contexts||[]).map(c=>`<a class="cxa" href="${viewPath('contexts', c)}" data-view="contexts" data-cname="${esc(c)}">@${esc(c)}</a>`).join('')}${it.project?`<span>#${esc(it.project)}</span>`:''}${it.source==='telegram'?'<span>✈️</span>':''}${it.notes?'<span>📝</span>':''}</div>
       ${acts.length?`<div class="act ${acts.some(a=>a[0]==='trash')?'has-del':''}">${acts.map(([s,l])=>`<button class="sm ${s==='trash'?'del':''}" ${s==='project'?'data-act="toproj"':`data-act="mv" data-st="${s}"`} ${s==='trash'?`aria-label="${t('to_trash')}"`:''}>${l.replace(/^→ /, '<span class="ar">→ </span>')}</button>`).join('')}</div>`:''}
     </div>${it.num?`<a class="num" href="/i/${it.num}" data-act="edit" title="${t('task_n', {n:it.num})}">#${it.num}</a>`:''}${GRIP()}</div>`;
@@ -1364,7 +1458,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 const fmtDay = ts => ts ? new Date(ts*1000).toLocaleDateString(LANG==='en' ? 'en-GB' : 'ru-RU', {day:'numeric', month:'short', year:'numeric'}) : '';
 function archiveHtml(){
   const list = S.archive || [];
-  const task = i => `<div class="ar ai ${i.status==='done'?'done':''}"><span>${i.status==='done'?'✅':'🗄'} ${esc(i.title)}</span>
+  const task = i => `<div class="ar ai ${i.status==='done'?'done':''}"><span>${i.status==='done'?'✅':'🗄'} ${titleHtml(i.title)}</span>
     <a class="num" href="/i/${i.num}" data-act="opennum" data-n="${i.num}" title="${t('task_n', {n:i.num})}">#${i.num}</a></div>`;
   return `<p><a href="${viewPath('projects', null)}" data-act="back">${t('back_projects')}</a></p><h2>${t('archive_title')}</h2>
   ${list.length ? `<div class="hint">${t('archive_hint')}</div>` + list.map(p => `<section class="rv">
@@ -1474,7 +1568,7 @@ function procHtml(){
   return `<div class="prh"><h2>${t('proc.title')}</h2><span class="prn">${t('proc.of', {i, n})}</span></div>
   <div class="prbar" role="progressbar" aria-label="${t('proc.title')}" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${i-1}">
     <i style="width:${Math.round((i-1) / n * 100)}%"></i></div>
-  <div class="prc"><div class="b"><div class="prt">${esc(it.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ''}
+  <div class="prc"><div class="b"><div class="prt">${titleHtml(it.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ''}
     ${it.notes ? `<div class="prno">${esc(it.notes)}</div>` : ''}</div><span class="num">#${it.num}</span></div>
   <section class="prq" aria-labelledby="prq-h">${procStepHtml(it)}</section>
   <div class="prf">${P.hist.length ? `<button data-act="prback">${t('proc.back')} <span class="prk">Esc</span></button>` : ''}
@@ -1578,7 +1672,7 @@ async function procDecide(body){
     : L.moved_to[d.status] || d.status;
   const prev = {title:it.title, notes:it.notes || '', status:'inbox', project_id:it.project_id ?? null, contexts:it.contexts || [],
     remind_at:it.remind_at ?? null};
-  toast(t('moved', {title:it.title, to}), {undo: async () => {
+  toast(t('moved', {title:plainTitle(it.title), to}), {undo: async () => {
     await api('/items/'+it.id, 'PATCH', prev);
     if(S.proc === P){ P.queue.splice(P.pos, 0, it); P.done--; procReset(); }  // задача снова перед глазами
   }});
@@ -1633,8 +1727,8 @@ function reviewHtml(){
   <div class="rv"><h3>${t('review.s3')}</h3>${stalled.length?stalled.map(p=>`<div>⚠ <a href="${viewPath('projects', p.id)}" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a></div>`).join(''):empty.length?'':t('review.s3_ok')}
     ${empty.length ? `<p class="hint" style="margin:8px 0 4px">${t('review.empty')}</p>${empty.map(p=>`<div class="ar"><a href="${viewPath('projects', p.id)}" data-pid="${p.id}" data-view="projects">${esc(p.title)}</a>
       <button class="sm" data-act="archproj" data-pid="${p.id}">${t('archive')}</button></div>`).join('')}` : ''}</div>
-  <div class="rv"><h3>${t('review.s4')}</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${esc(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):t('review.s4_ok')}</div>
-  <div class="rv"><h3>${t('review.s5')}</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${esc(i.title)}</div>`).join(''):t('review.s5_none')}</div>
+  <div class="rv"><h3>${t('review.s4')}</h3>${oldWait.length?oldWait.map(i=>`<div>⏳ ${titleHtml(i.title)} <small>(${fmtTs(i.created)})</small></div>`).join(''):t('review.s4_ok')}</div>
+  <div class="rv"><h3>${t('review.s5')}</h3>${soon.length?soon.map(i=>`<div>⏰ ${fmtTs(i.remind_at)} — ${titleHtml(i.title)}</div>`).join(''):t('review.s5_none')}</div>
   <div class="rv"><h3>${t('review.s6')}</h3>${t('review.s6_text', {n:c.someday||0})}</div>`;
 }
 
@@ -1689,15 +1783,15 @@ async function moveItem(id, status){
   load();
   if(r?.archive_offer) setTimeout(() => offerArchive(r.archive_offer));  // после тоста: «Отменить» видно под вопросом
   const chips = status==='next' && prev==='inbox' && !it.contexts?.length ? S.contexts.slice(0, 3) : [];
-  toast(t('moved', {title:it.title, to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev}), chips,
+  toast(t('moved', {title:plainTitle(it.title), to:L.moved_to[status]||status}), {undo: () => api('/items/'+id, 'PATCH', {status:prev}), chips,
     pick: async c => { await api('/items/'+id, 'PATCH', {contexts:[c]}); load();
-      toast(t('moved', {title:it.title, to:`${L.moved_to.next} @${c}`}), {undo: () => api('/items/'+id, 'PATCH', {contexts:[]})}); }});
+      toast(t('moved', {title:plainTitle(it.title), to:`${L.moved_to.next} @${c}`}), {undo: () => api('/items/'+id, 'PATCH', {contexts:[]})}); }});
 }
 S.pendingDel = new Set();  // удалённые, но ещё не отправленные на сервер (ждут конца таймера)
 function deleteItem(id){
   const it = findItem(id) || {title:''};
   S.pendingDel.add(id); render();
-  toast(t('deleted', {title:it.title}), {
+  toast(t('deleted', {title:plainTitle(it.title)}), {
     undo: () => { S.pendingDel.delete(id); },
     commit: () => { S.pendingDel.delete(id);
       fetch('/api/items/'+id, {method:'DELETE', keepalive:true}).then(r => r.json()).then(d => offerArchive(d.archive_offer)).catch(() => {}); }});
@@ -1831,7 +1925,7 @@ function openToProject(id){
   const it = findItem(id); if(!it) return;
   const d = $('#dlg');
   d.innerHTML = `<div id="tp"><h3 id="dlg-h" style="margin:0 0 4px">${t('pick_project')}</h3>
-    <p class="hint" style="margin:0 0 10px">${esc(it.title)}</p>
+    <p class="hint" style="margin:0 0 10px">${esc(plainTitle(it.title))}</p>
     ${pjPickHtml()}
     <label for="tp-new">${t('new_project')}</label>
     <div class="cap" style="margin:0"><input id="tp-new" autocomplete="off"><button type="button" class="pri" data-pick="new">${t('create')}</button></div>
@@ -1850,7 +1944,7 @@ function openToProject(id){
     try{ await api('/items/'+id, 'PATCH', {project_id:+pid, status:'next'}); }
     catch{ $('#tpmsg').textContent = t('failed'); return; }
     d.close(); await load();
-    toast(t('moved', {title:it.title, to:'#'+title}), {undo: () => api('/items/'+id, 'PATCH', prev)});
+    toast(t('moved', {title:plainTitle(it.title), to:'#'+title}), {undo: () => api('/items/'+id, 'PATCH', prev)});
   };
   d.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => pick(b));
   $('#tp-new').onkeydown = e => { if(e.key==='Enter'){ e.preventDefault(); pick(d.querySelector('[data-pick=new]')); } };
@@ -2094,8 +2188,8 @@ async function cmPatch(body, to){
   const r = await api('/items/'+id, 'PATCH', body).catch(() => null);
   if(!r?.id) return toast(t('failed'));
   load();
-  const msg = 'remind_at' in body ? (body.remind_at ? t('moved', {title:it.title, to:'⏰ ' + fmtTs(body.remind_at)}) : t('cm.undated', {title:it.title}))
-    : body.project_id ? t('moved', {title:it.title, to:'#' + to}) : t('cm.unprojected', {title:it.title, p:it.project || ''});
+  const msg = 'remind_at' in body ? (body.remind_at ? t('moved', {title:plainTitle(it.title), to:'⏰ ' + fmtTs(body.remind_at)}) : t('cm.undated', {title:plainTitle(it.title)}))
+    : body.project_id ? t('moved', {title:plainTitle(it.title), to:'#' + to}) : t('cm.unprojected', {title:plainTitle(it.title), p:it.project || ''});
   toast(msg, {undo: () => api('/items/'+id, 'PATCH', prev)});
 }
 async function cmProject(pid, title){
@@ -2201,7 +2295,7 @@ async function capture(){
   ga('task_capture', {channel:'web'});  // только факт — текст задачи в GA не уходит
   await load(); $('#cap')?.focus();  // записываем подряд, не кликая в поле снова
   if(it?.id && S.view!=='inbox')
-    toast(t('moved', {title:it.title, to:it.project ? '#'+it.project : L.moved_to[it.status]||it.status}),
+    toast(t('moved', {title:plainTitle(it.title), to:it.project ? '#'+it.project : L.moved_to[it.status]||it.status}),
       {undo: () => api('/items/'+it.id, 'DELETE')});
 }
 
@@ -2251,6 +2345,8 @@ document.addEventListener('click', async e => {
   if(el.tagName==='A' && el.dataset.view && (e.metaKey || e.ctrlKey || e.shiftKey)) return;  // раздел в новой вкладке
   if(el.tagName==='A' && (el.dataset.view || el.getAttribute('href')?.startsWith('#'))) e.preventDefault();  // переход — сами
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
+  if(act==='link') return;  // ссылка в заголовке — открывает браузер, не карточку (gtd #85)
+  if(act==='gname') return gname(id, el.dataset.url);
   if(act==='drawer') return drawer(!$('nav').classList.contains('open'));
   if(act==='umenu'){ const m = el.parentElement.querySelector('.umenu'); m.hidden = !m.hidden; el.setAttribute('aria-expanded', !m.hidden); return; }
   if(act==='capture') return capture();

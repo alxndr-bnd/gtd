@@ -99,6 +99,10 @@ if os.getenv("DEV", "") == "1" and not DEV:
 # Кто видит «Статистику» — id аккаунтов, а не почты: конфиг лежит в публичном репозитории
 ADMIN_USER_IDS = {int(x) for x in os.getenv("ADMIN_USER_IDS", "").split(",") if x.strip()}
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+# Название Google-документа по ссылке в задаче (gtd #85): Google Picker со scope drive.file. Ключ API (браузерный,
+# ограничен рефереррами) и номер проекта Google Cloud; нет одного из них — чип ссылки без кнопки «Показать название»
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+GOOGLE_APP_ID = os.getenv("GOOGLE_APP_ID", "")
 # Почта — через Brevo SMTP relay, тот же аккаунт, что у serbito
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -1781,14 +1785,15 @@ def sentry_csp_uri() -> str:
 CSP_ENFORCE = False
 CSP = "; ".join([
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://accounts.google.com https://telegram.org "
+    # apis.google.com — Google Picker (название документа по ссылке, gtd #85)
+    "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://telegram.org "
     "https://www.googletagmanager.com https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline' https://accounts.google.com",
     "img-src 'self' data: https:",
     # www.google.com — GA4 шлёт туда часть пингов /g/collect (Sentry GTD-6, Firefox Mobile, 2026-10-12)
     "connect-src 'self' https://accounts.google.com https://*.google-analytics.com https://*.analytics.google.com "
     "https://*.googletagmanager.com https://www.google.com https://cloudflareinsights.com",
-    "frame-src https://accounts.google.com https://oauth.telegram.org",
+    "frame-src https://accounts.google.com https://oauth.telegram.org https://docs.google.com",
     "font-src 'self' data:",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
     # Отчёты идут к нам, а не прямо в Sentry: /csp-report отсеивает шум и пересылает остальное (GTD-2)
@@ -2600,6 +2605,8 @@ def config(request: Request):
     # user — чтобы фронт сразу знал, показывать ли вход, без заведомого 401 на /api/counts;
     # lang — язык браузера по его Accept-Language (SPA шлёт этот запрос без своего заголовка): «Авто» на сайте
     return {"bot": BOT_USERNAME if TOKEN else "", "dev": DEV, "google": GOOGLE_CLIENT_ID,
+            "picker": {"key": GOOGLE_API_KEY, "app": GOOGLE_APP_ID}
+            if GOOGLE_CLIENT_ID and GOOGLE_API_KEY and GOOGLE_APP_ID else None,
             "email": bool(SMTP_PASSWORD or DEV), "user": bool(session_user(request)),
             "lang": pages.pick_lang(request.headers.get("accept-language")),
             "version": pages.VERSION_LABEL}  # работающая версия — в меню рядом с «Что нового» (SERBITO-329)
@@ -3039,6 +3046,35 @@ def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
         if offer:
             it["archive_offer"] = offer
     return it
+
+
+# Ссылка на Google-документ в заголовке (gtd #85): голый URL — не внутри [название](url). Хвост ссылки — до пробела
+GOOGLE_DOC_URL = re.compile(r"https://(?:docs|drive)\.google\.com/\S+")
+LINK_NAME_MAX = 200
+
+
+@app.post("/api/items/{iid}/link-name")
+def link_name(iid: int, body: dict, uid: int = Depends(current_user)):
+    """Подписать ссылку на Google-документ в заголовке его названием: url → [название](url). Название приходит из
+    Google Picker в браузере. Заголовок не разбираем как строку захвата (parse_task): «#2026» или «завтра»
+    в названии документа не должны стать проектом или напоминанием. Ссылки нет среди голых — 404."""
+    cur = item_get(uid, iid)
+    if not cur:
+        raise HTTPException(404)
+    url, name = body.get("url"), body.get("name")
+    if not isinstance(url, str) or not GOOGLE_DOC_URL.fullmatch(url) or not isinstance(name, str):
+        raise HTTPException(400, "bad link")
+    # [ ] ломают разметку ссылки, переводы строк — заголовок
+    name = " ".join(name.replace("[", "(").replace("]", ")").split())[:LINK_NAME_MAX]
+    if not name or ")" in url:
+        raise HTTPException(400, "bad link")
+    bare = re.compile(r"(?<!\]\()" + re.escape(url) + r"(?!\S)")
+    title, n = bare.subn(lambda _: f"[{name}]({url})", cur["title"], count=1)
+    if not n:
+        raise HTTPException(404, "link not found")
+    track(uid, "web")
+    run("update items set title=%s where id=%s and user_id=%s", (title, iid, uid))
+    return item_get(uid, iid)
 
 
 MOVE_SCOPES = {"list": ("position", "status"), "project": ("ppos", "project_id")}

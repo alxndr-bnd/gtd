@@ -73,7 +73,7 @@ Configuration:
   the env file. Added from the tag: `SENTRY_RELEASE` (`v0.3.0` → `gtd@0.3.0`) and `APP_VERSION`
   (`0.3.0`) — the version shown in the footer, the app menu and `/changes`.
 - Secrets — Secret Manager via `--set-secrets` in the workflow: `gtd-database-url`, `GOOGLE_CLIENT_ID`,
-  `EMAIL_HOST_PASSWORD` (→ `SMTP_PASSWORD`), `gtd-sentry-dsn`, and
+  `EMAIL_HOST_PASSWORD` (→ `SMTP_PASSWORD`), `gtd-sentry-dsn`, `gtd-google-api-key` (→ `GOOGLE_API_KEY`), and
   `gtd-telegram-bot-token` (optional: while the secret has no enabled version, the service deploys without the bot).
 
 ## Database
@@ -123,8 +123,13 @@ on the free plan the 300 emails/day limit covers both projects.
    `EMAIL_HOST_PASSWORD`, the repo in the WIF condition, and the Cloud Scheduler job `gtd-reminders`.
    Idempotent.
 3. Google Cloud Console → APIs & Services → Credentials → the serbito OAuth client (the one whose ID is in
-   `GOOGLE_CLIENT_ID`) → Authorized JavaScript origins: `https://gtd.serbito.rs`, `http://localhost:8000`,
-   `http://localhost`.
+   `GOOGLE_CLIENT_ID`) → Authorized JavaScript origins: `https://gtd.serbito.rs`. HTTPS only: Google publishes
+   the app ("In production") only when no client of the project has an `http://` URL. Without publishing, only
+   test users can sign in. Locally, use Dev login (`DEV=1`).
+   Document names for Google links in tasks (gtd #85, optional): enable the Google Picker API, add the scope
+   `drive.file` to the OAuth consent screen, and create a browser API key restricted to `https://gtd.serbito.rs/*`
+   and the Picker API. The key is in the secret `gtd-google-api-key` (→ `GOOGLE_API_KEY`, key `gtd-picker`), the
+   project number is `GOOGLE_APP_ID` in `.github/deploy.env.yaml`. Done for production on 2026-10-22.
 4. First release, then the domain:
    `gcloud beta run domain-mappings create --service gtd --domain gtd.serbito.rs --region europe-west1`
    and DNS `CNAME gtd → ghs.googlehosted.com.` (on Cloudflare — DNS only, no proxy, otherwise Google

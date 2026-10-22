@@ -756,7 +756,7 @@ def about(base: str, lang: str, ga: str) -> str:
 # Политика конфиденциальности (SERBITO-282). Каждое утверждение сверено с app.py и index.html — меняешь, что
 # хранится или куда уходит, правь и этот текст. Адрес для запросов о данных — только здесь, больше нигде
 PRIVACY_EMAIL = "alexander.bondarchuk@gmail.com"
-PRIVACY_DAY = "2026-09-29"  # редакция политики: дата в тексте, dateModified и lastmod в sitemap
+PRIVACY_DAY = "2026-10-23"  # редакция политики: дата в тексте, dateModified и lastmod в sitemap
 T["ru"].update(privacy="Конфиденциальность", privacy_title="Политика конфиденциальности — Serbito GTD",
                privacy_desc="Какие данные хранит Serbito GTD, что получает аналитика, как дать или отозвать "
                             "согласие на cookie, кто обрабатывает данные и как удалить аккаунт.")
@@ -821,6 +821,19 @@ PRIVACY = {
 <li><b>Передумать</b> можно в любой момент: ссылка «Настройки cookie» внизу каждой страницы и в меню
 приложения. При отказе удаляем cookie <code>_ga*</code> этого сайта.</li>
 </ul>
+<h2 id="google-drive">Google Drive</h2>
+<ul class="ex">
+<li><b>Только по кнопке</b> «Показать название» у ссылки на Google-документ в задаче. Google спрашивает
+разрешение <code>drive.file</code> — доступ только к файлам, которые ты сам выберешь в окне Google. К остальному
+Диску доступа нет.</li>
+<li><b>Что берём</b>: название выбранного документа. Оно попадает в заголовок задачи и хранится как её текст.
+Содержимое документа не читаем.</li>
+<li><b>Токен доступа Google</b> живёт только в памяти вкладки браузера, около часа, и на наш сервер не уходит.
+Отозвать доступ можно в <a href="https://myaccount.google.com/connections">настройках аккаунта Google</a>.</li>
+<li>Данные из API Google используем по <a href="https://developers.google.com/terms/api-services-user-data-policy">
+правилам Google API Services User Data Policy</a>, включая требования Limited Use: только для этой функции,
+не передаём третьим лицам и не используем для рекламы.</li>
+</ul>
 <h2>Кто обрабатывает данные</h2>
 <ul class="ex">
 <li><b>Google Cloud</b> (Cloud Run и Cloud SQL, регион europe-west1, Бельгия) — сервер и база данных.</li>
@@ -882,6 +895,20 @@ Google's advertising permissions stay off.</li>
 doesn't let us store it, the banner shows up on your next visit.</li>
 <li><b>Change your mind</b> at any time: the “Cookie settings” link at the bottom of every page and in the app
 menu. Declining deletes this site's <code>_ga*</code> cookies.</li>
+</ul>
+<h2 id="google-drive">Google Drive</h2>
+<ul class="ex">
+<li><b>Only on request</b>: when you press “Show name” on a Google document link in a task. Google asks for the
+<code>drive.file</code> permission — access only to the files you pick in the Google window. We have no access
+to the rest of your Drive.</li>
+<li><b>What we take</b>: the name of the picked document. It goes into the task title and is stored as its text.
+We do not read the document content.</li>
+<li><b>The Google access token</b> stays only in the memory of the browser tab, for about an hour, and never
+reaches our server. You can revoke access in your <a href="https://myaccount.google.com/connections">Google
+Account settings</a>.</li>
+<li>Our use of data from Google APIs follows the <a href="https://developers.google.com/terms/api-services-user-data-policy">
+Google API Services User Data Policy</a>, including the Limited Use requirements: only for this feature, not
+shared with third parties and not used for ads.</li>
 </ul>
 <h2>Who processes data</h2>
 <ul class="ex">

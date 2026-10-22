@@ -37,7 +37,7 @@ g projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$RUNTIME" 
   --role roles/cloudsql.client --condition=None >/dev/null
 
 echo "==> Секреты"
-for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn; do
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn gtd-google-api-key; do
   g secrets describe "$s" >/dev/null 2>&1 || g secrets create "$s" --replication-policy=automatic >/dev/null
 done
 has_value() { g secrets versions list "$1" --format='value(state)' | grep -qi enabled; }
@@ -58,13 +58,20 @@ if ! has_value gtd-telegram-bot-token; then
     echo "    токена нет — деплой пойдёт без бота; появится токен — запусти скрипт ещё раз"
   fi
 fi
+# Ключ Google Picker (gtd #85): браузерный, только Picker API и только с адресов gtd. Нет ключа — создаём
+if ! has_value gtd-google-api-key; then
+  g services enable picker.googleapis.com apikeys.googleapis.com
+  key=$(g services api-keys create --display-name=gtd-picker --api-target=service=picker.googleapis.com \
+    --allowed-referrers="https://gtd.serbito.rs/*,http://localhost:8000/*" --format='value(response.name)')
+  put_value gtd-google-api-key "$(g services api-keys get-key-string "$key" --format='value(keyString)')"
+fi
 # GOOGLE_CLIENT_ID и EMAIL_HOST_PASSWORD — общие с serbito, доступ только на чтение этих двух
 if ! has_value gtd-sentry-dsn; then
   read -rsp "DSN проекта gtd в Sentry (nohandoff): " dsn || dsn=""; echo
   [[ -n "$dsn" ]] || { echo "Без DSN деплой не пройдёт: секрет подключён в workflow" >&2; exit 1; }
   put_value gtd-sentry-dsn "$dsn"
 fi
-for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
+for s in gtd-database-url gtd-telegram-bot-token gtd-sentry-dsn gtd-google-api-key GOOGLE_CLIENT_ID EMAIL_HOST_PASSWORD; do
   g secrets add-iam-policy-binding "$s" --member "serviceAccount:$RUNTIME" \
     --role roles/secretmanager.secretAccessor >/dev/null
 done
