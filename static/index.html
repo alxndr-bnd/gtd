@@ -50,10 +50,10 @@ button.sm:hover{color:var(--tx)}
 .it .num{color:var(--mut);font-size:12.5px;text-decoration:none;margin-top:2px;flex-shrink:0;font-variant-numeric:tabular-nums}
 .it .num:hover{color:var(--ac)}
 .it .t{word-break:break-word} .it.done .t{text-decoration:line-through;color:var(--mut)}
-/* Ссылки в заголовке (gtd #85): Google-документ — чип с типом или названием */
-a.lnk{color:var(--ac);word-break:break-all} a.gl{word-break:normal;text-decoration:none;padding:0 6px;border:1px solid var(--bd);
-  border-radius:6px;background:var(--bg);white-space:nowrap;max-width:100%;display:inline-block;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
-a.gl:hover{border-color:var(--ac)} button.gn{padding:0 6px;min-height:24px;vertical-align:baseline}  /* 24 px — минимум цели касания, WCAG 2.5.8 */
+a.lnk{color:var(--ac);word-break:break-all}
+.gl{display:inline-flex;max-width:100%;vertical-align:bottom;border:1px solid var(--bd);border-radius:6px;background:var(--bg);overflow:hidden}
+.gl:hover,.gl:focus-within{border-color:var(--ac)} .gl a{word-break:normal;text-decoration:none;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gl button{border:0;border-left:1px solid var(--bd);border-radius:0;background:none;padding:0 6px;min-width:24px;min-height:24px;font:inherit;line-height:1}
 /* Вся карточка задачи открывает её (SERBITO-299) */
 .it[data-id]{cursor:pointer;transition:border-color .12s}
 @media(hover:hover){.it[data-id]:hover{border-color:var(--mut)}}
@@ -1096,6 +1096,8 @@ function recentOpen(){
 const overdue = it => it.remind_at && it.remind_at < Date.now()/1000 && !['done','trash'].includes(it.status);
 // Ссылки в заголовке (gtd #85): [название](url) и голый URL — кликабельны, открываются в новой вкладке.
 // Google-документ — чип «📊 Таблица Google · I29»; без названия у карточки — кнопка «Показать название» (gname)
+// Чип — одна плашка .gl: ссылка и справа 🔓. Кнопка — соседка ссылки, а не внутри <a>: интерактивное в ссылке
+// вкладывать нельзя. Кнопка не ниже 24 px — минимум цели касания, WCAG 2.5.8
 const MD_LINK = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
 const LINK_RE = new RegExp(MD_LINK.source + /|https?:\/\/[^\s<>"]+/.source, 'g');
 const GL_ICON = {document:'📄', spreadsheets:'📊', presentation:'📽', forms:'📝', file:'📎', folders:'📁'};
@@ -1115,12 +1117,12 @@ function gdoc(url){  // {kind, id, range} у ссылки на Google Docs/Drive
 }
 function linkHtml(url, name, it){
   const g = gdoc(url);
-  const a = text => `<a class="lnk${g ? ' gl' : ''}" href="${esc(url)}" target="_blank" rel="noopener" data-act="link">${text}</a>`;
+  const a = text => `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener" data-act="link">${text}</a>`;
   if(!g) return a(esc(name || url));
   const label = `${GL_ICON[g.kind]} ${esc(name || t('gl.'+g.kind))}${g.range ? ` · ${esc(g.range)}` : ''}`;
-  const btn = !name && g.id && it && S.cfg?.picker ? ` <button type="button" class="sm gn" data-act="gname" data-url="${esc(url)}"
-    title="${t('gl_name_hint')}">🔓 ${t('gl_name')}</button>` : '';
-  return a(label) + btn;
+  const btn = !name && g.id && it && S.cfg?.picker ? `<button type="button" class="gn" data-act="gname" data-url="${esc(url)}"
+    title="${t('gl_name')} — ${t('gl_name_hint')}" aria-label="${t('gl_name')}">🔓</button>` : '';
+  return `<span class="gl">${a(label)}${btn}</span>`;
 }
 function titleHtml(title, it){  // it — карточка задачи: только у неё кнопка «Показать название»
   title = String(title ?? '');

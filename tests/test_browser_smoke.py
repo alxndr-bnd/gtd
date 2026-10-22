@@ -3149,12 +3149,12 @@ def test_google_doc_link_chip(watch, monkeypatch):
     A.run("update items set title=%s where id=%s", (f"Доработать OKR {SHEET} и https://example.com/a.", ids["inbox"]))
     w.page.reload()
     card = f'main .it[data-id="{ids["inbox"]}"]'
-    w.wait(f"{card} a.gl", "чип ссылки")
-    chip = w.page.locator(f"{card} a.gl")
+    w.wait(f"{card} .gl a", "чип ссылки")
+    chip = w.page.locator(f"{card} .gl a")
     assert chip.inner_text() == "📊 Таблица Google · I29" and chip.get_attribute("href") == SHEET
-    plain = w.page.locator(f"{card} a.lnk:not(.gl)")
+    plain = w.page.locator(f"{card} .t > a.lnk")
     assert plain.get_attribute("href") == "https://example.com/a"  # точка в конце фразы — не часть ссылки
-    assert w.page.locator(f"{card} .t").inner_text().startswith("Доработать OKR 📊")
+    assert w.page.locator(f"{card} .t").text_content().startswith("Доработать OKR 📊")
 
     # Клик по ссылке — переход браузера, не карточка. Сам переход гасим, как с номером #N
     w.page.evaluate("""() => addEventListener('click', e => {
@@ -3168,7 +3168,7 @@ def test_google_doc_link_chip(watch, monkeypatch):
     assert not w.page.locator("#dlg[open]").count()
 
     w.page.click(f'{card} [data-act="gname"]')
-    w.wait(f'{card} a.gl:has-text("OKR 2026 #Q4")', "название из Picker")
+    w.wait(f'{card} .gl a:has-text("OKR 2026 #Q4")', "название из Picker")
     assert chip.inner_text() == "📊 OKR 2026 #Q4 · I29"
     assert not w.page.locator(f'{card} [data-act="gname"]').count() and not w.page.locator("#dlg[open]").count()
     assert w.page.evaluate("[window.__scope, window.__fileIds, window.__key]") == [
@@ -3185,6 +3185,6 @@ def test_google_doc_link_without_picker(watch):
     ids = smoke_user(w)
     A.run("update items set title=%s where id=%s", (f"OKR {SHEET}", ids["inbox"]))
     w.page.reload()
-    w.wait(f'main .it[data-id="{ids["inbox"]}"] a.gl', "чип ссылки")
+    w.wait(f'main .it[data-id="{ids["inbox"]}"] .gl a', "чип ссылки")
     assert not w.page.locator('[data-act="gname"]').count()
     w.check("итог")
