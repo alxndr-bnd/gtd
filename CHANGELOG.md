@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Security
+
+- A tracing library is updated to a version without a known security issue. Nothing changes for you.
+  - RU: Библиотека трассировки обновлена до версии без известной уязвимости. Для вас ничего не меняется.
+
 ## [0.66.0] - 2026-10-22
 
 ### Changed
