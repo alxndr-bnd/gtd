@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.68.0] - 2026-10-23
+
 ### Added
 
 - A link to a Google Doc, Sheet or Slides in a task shows as a short chip with the document type, and links open in a new tab.
@@ -630,7 +632,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.67.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.68.0...HEAD
+[0.68.0]: https://github.com/alxndr-bnd/gtd/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/alxndr-bnd/gtd/compare/v0.66.0...v0.67.0
 [0.66.0]: https://github.com/alxndr-bnd/gtd/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/alxndr-bnd/gtd/compare/v0.64.0...v0.65.0
