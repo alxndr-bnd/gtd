@@ -127,6 +127,8 @@ def clean(monkeypatch):
     A._seen_today.clear()
     monkeypatch.setattr(A, "TOKEN", "")
     monkeypatch.setattr(A, "BOT_USERNAME", "")
+    # Название Google-документа по ссылке (gtd #85) — без сети: тест, которому оно нужно, подменяет сам
+    monkeypatch.setattr(A, "fetch_doc_title", lambda url: None)
 
 
 @pytest.fixture

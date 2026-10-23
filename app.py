@@ -873,6 +873,7 @@ def _clean(t: str) -> str:
 
 CONTEXTS_MAX = 20  # контекстов у одной задачи — больше не сохраняем
 CTX_TOKEN = re.compile(r"(?<!\S)@([\w-]+)")
+MD_LINK = re.compile(r"\[[^\]\n]+\]\(https?://[^\s)]+\)")  # [название](url) в заголовке (gtd #85)
 
 
 def norm_contexts(value) -> list[str]:
@@ -911,8 +912,15 @@ def parse_task(uid: int, raw: str) -> dict:
     Один разбор на поле захвата (capture) и заголовок в карточке (PATCH /api/items, SERBITO-298).
     Все @контексты — список (SERBITO-423); их нет — None, как и у остальных полей без токена.
     #Проект_Имя — проект пользователя по названию (без учёта регистра, «_» — пробел), нет — создаётся.
-    Токены вырезаются из заголовка; остались одни токены — заголовок остаётся как был введён."""
-    text = raw.strip()
+    Токены вырезаются из заголовка; остались одни токены — заголовок остаётся как был введён.
+    [название](url) — ссылка, а не токены: «#Q4» или «завтра» в названии документа не разбираем (gtd #85).
+    Голые ссылки на публичные Google-документы получают название (name_links)."""
+    links: list[str] = []
+
+    def hide(m):
+        links.append(m.group())
+        return f"\x00{len(links) - 1}\x00"
+    text = MD_LINK.sub(hide, raw.strip())
     ctxs = norm_contexts(CTX_TOKEN.findall(text)) or None
     text = CTX_TOKEN.sub("", text)
     proj_id = None
@@ -921,7 +929,8 @@ def parse_task(uid: int, raw: str) -> dict:
         proj_id = project_by_title(uid, m.group(1).replace("_", " "))
         text = text[: m.start()] + text[m.end():]
     title, remind = parse_when(text, datetime.now(TZ))
-    return {"title": title or raw.strip(), "contexts": ctxs, "project_id": proj_id, "remind_at": remind}
+    title = re.sub(r"\x00(\d+)\x00", lambda m: links[int(m.group(1))], title) if title else raw.strip()
+    return {"title": name_links(title), "contexts": ctxs, "project_id": proj_id, "remind_at": remind}
 
 
 # Позиция «в конец» (SERBITO-328): ниже самой нижней задачи списка (status) или проекта — как было до ручного
@@ -1325,7 +1334,8 @@ async def handle_message(msg):
     elif text.startswith("/"):
         await tg("sendMessage", chat_id=chat, text=tr(lang, "help"))
     else:
-        it = capture(u["id"], text, "telegram")
+        # В потоке: захват может спросить у Google название документа по ссылке (до 2 с) — не держим цикл событий
+        it = await asyncio.to_thread(capture, u["id"], text, "telegram")
         where = "Next" if it["status"] == "next" else "Inbox"
         await tg("sendMessage", chat_id=chat,
                  text=f"✓ {where} {item_ref(it)}: {html.escape(it['title'])}\n{html.escape(describe(it, lang))}".strip(),
@@ -3050,7 +3060,71 @@ def item_patch(uid: int, iid: int, body: dict, channel: str = "web") -> dict:
 
 # Ссылка на Google-документ в заголовке (gtd #85): голый URL — не внутри [название](url). Хвост ссылки — до пробела
 GOOGLE_DOC_URL = re.compile(r"https://(?:docs|drive)\.google\.com/\S+")
+BARE_GOOGLE_URL = re.compile(r"(?<!\S)https://(?:docs|drive)\.google\.com/\S+")  # после пробела: не из [..](url)
 LINK_NAME_MAX = 200
+OG_TITLE = re.compile(r'<meta\s+property="og:title"\s+content="([^"]*)"', re.I)
+DOC_TITLE_TTL, DOC_TITLE_MAX_BYTES, DOC_TITLES_PER_TASK = 3600, 512 * 1024, 3
+_doc_titles: dict[str, tuple[float, str | None]] = {}  # url -> (когда спросили, название или None)
+
+
+def clean_link_name(name: str) -> str:
+    """[ ] ломают разметку ссылки, переводы строк — заголовок."""
+    return " ".join(name.replace("[", "(").replace("]", ")").split())[:LINK_NAME_MAX]
+
+
+def fetch_doc_title(url: str) -> str | None:
+    """Название публичного Google-документа — из og:title его страницы, без входа. Приватный отвечает 401 или
+    уводит на вход (accounts.google.com) — тогда None, и чип предложит «Подключить». Защита от SSRF: только
+    https://docs|drive.google.com, без перенаправлений, 2 с и не больше 512 КБ. Ответ помним час: один и тот же
+    URL спрашивают и при вставке в поле, и при сохранении."""
+    if not GOOGLE_DOC_URL.fullmatch(url):
+        return None
+    hit = _doc_titles.get(url)
+    if hit and time.time() - hit[0] < DOC_TITLE_TTL:
+        return hit[1]
+    name = None
+    try:
+        with httpx.stream("GET", url, timeout=2, follow_redirects=False,
+                          headers={"User-Agent": "Mozilla/5.0 (compatible; SerbitoGTD)"}) as r:
+            if r.status_code == 200:
+                body = b""
+                for chunk in r.iter_bytes():
+                    body += chunk
+                    if len(body) > DOC_TITLE_MAX_BYTES or OG_TITLE.search(body.decode("utf-8", "ignore")):
+                        break
+                m = OG_TITLE.search(body.decode("utf-8", "ignore"))
+                name = clean_link_name(html.unescape(m.group(1))) if m else None
+    except httpx.HTTPError as e:
+        log.info("doc title %s: %s", url[:80], e)
+        return None  # сбой сети не запоминаем: в следующий раз спросим снова
+    if len(_doc_titles) > 1000:
+        _doc_titles.clear()
+    _doc_titles[url] = (time.time(), name or None)
+    return name or None
+
+
+def name_links(title: str) -> str:
+    """Голые ссылки на публичные Google-документы в заголовке -> [название](url), не больше трёх на задачу.
+    Точка в конце фразы — не часть ссылки."""
+    seen = 0
+
+    def named(m):
+        nonlocal seen
+        seen += 1
+        url = m.group().rstrip(".,;:!?)")
+        name = fetch_doc_title(url) if seen <= DOC_TITLES_PER_TASK and ")" not in url else None
+        return f"[{name}]({url}){m.group()[len(url):]}" if name else m.group()
+    return BARE_GOOGLE_URL.sub(named, title)
+
+
+@app.post("/api/link-title")
+def link_title(body: dict, uid: int = Depends(current_user)):
+    """Название публичного Google-документа для поля ввода: браузер подставляет его сразу при вставке ссылки.
+    URL — в теле, а не в адресе запроса: он не попадёт в логи. Приватный документ — name: null."""
+    url = body.get("url")
+    if not isinstance(url, str) or not GOOGLE_DOC_URL.fullmatch(url):
+        raise HTTPException(400, "bad link")
+    return {"name": fetch_doc_title(url)}
 
 
 @app.post("/api/items/{iid}/link-name")
@@ -3064,8 +3138,7 @@ def link_name(iid: int, body: dict, uid: int = Depends(current_user)):
     url, name = body.get("url"), body.get("name")
     if not isinstance(url, str) or not GOOGLE_DOC_URL.fullmatch(url) or not isinstance(name, str):
         raise HTTPException(400, "bad link")
-    # [ ] ломают разметку ссылки, переводы строк — заголовок
-    name = " ".join(name.replace("[", "(").replace("]", ")").split())[:LINK_NAME_MAX]
+    name = clean_link_name(name)
     if not name or ")" in url:
         raise HTTPException(400, "bad link")
     bare = re.compile(r"(?<!\]\()" + re.escape(url) + r"(?!\S)")

@@ -3188,3 +3188,22 @@ def test_google_doc_link_without_picker(watch):
     w.wait(f'main .it[data-id="{ids["inbox"]}"] .gl a', "чип ссылки")
     assert not w.page.locator('[data-act="gname"]').count()
     w.check("итог")
+
+
+def test_paste_public_google_link_gets_name(watch, monkeypatch):
+    """Вставили ссылку на публичный Google-документ в поле захвата — название подставилось сразу, до сохранения;
+    приватная ссылка осталась голой. После «Добавить» в задаче то же название."""
+    public = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+    monkeypatch.setattr(A, "fetch_doc_title", {public: "Example Spreadsheet"}.get)
+    w = watch()
+    smoke_user(w)
+    w.page.focus("#cap")
+    w.page.evaluate("""([a, b]) => { const el = document.querySelector('#cap');
+        el.value = `Смотри ${a} и ${b} `; el.setSelectionRange(el.value.length, el.value.length);
+        el.dispatchEvent(new ClipboardEvent('paste', {bubbles: true})); }""", [public, SHEET])
+    w.page.wait_for_function("() => document.querySelector('#cap').value.includes('[Example')", timeout=WAIT_MS)
+    assert w.page.input_value("#cap") == f"Смотри [Example Spreadsheet]({public}) и {SHEET} "
+    assert w.page.evaluate("document.querySelector('#cap').selectionStart") == len(w.page.input_value("#cap"))
+    w.page.click('[data-act="capture"]')
+    w.wait('main .gl a:has-text("Example Spreadsheet")', "задача с названием")
+    w.check("итог")

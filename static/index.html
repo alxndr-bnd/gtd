@@ -2429,6 +2429,28 @@ document.addEventListener('input', e => {
   acUpdate(e.target);
   e.target.value ? draft.set('cap', e.target.value) : draft.del('cap');  // недописанная задача не потеряется
 });
+// Вставили ссылку на Google-документ в поле захвата или заголовок карточки (gtd #85): публичный документ сразу
+// получает название — url → [название](url), как при сохранении на сервере. Приватный остаётся голой ссылкой,
+// его подпишет «Подключить». Пока ждём ответа, текст могли поменять: подменяем ссылку в текущем значении поля
+const BARE_GDOC = /(?<!\S)https:\/\/(?:docs|drive)\.google\.com\/\S+/g;
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+document.addEventListener('paste', e => {
+  const el = e.target;
+  if(el.id!=='cap' && el.id!=='ef-title') return;
+  setTimeout(() => {
+    const urls = [...el.value.matchAll(BARE_GDOC)].map(m => m[0].replace(/[.,;:!?)]+$/, '')).filter(u => !u.includes(')')).slice(0, 3);
+    for(const url of new Set(urls)) api('/link-title', 'POST', {url}).then(r => {
+      if(!r?.name) return;
+      // та же голая ссылка: после пробела, дальше — знаки препинания и конец слова
+      const at = el.value.search(new RegExp('(?<!\\S)' + reEsc(url) + '(?=[.,;:!?)]*(?:\\s|$))'));
+      if(at < 0) return;
+      const md = `[${r.name}](${url})`, caret = el.selectionStart, shift = md.length - url.length;
+      el.value = el.value.slice(0, at) + md + el.value.slice(at + url.length);
+      if(document.activeElement===el && caret >= at){ el.setSelectionRange(caret + shift, caret + shift); }
+      el.dispatchEvent(new Event('input', {bubbles:true}));  // высота поля, подсказки и черновик — как после ввода
+    }).catch(() => {});
+  });
+});
 // Ушли в поле или кликнули мышью мимо меню — выходим из режима меню
 const leaveMenu = () => { if(S.zone==='nav'){ S.zone = 'main'; selDraw(); } };
 // Пункт меню получил фокус с клавиатуры (Tab) — режим меню с этого пункта: стрелки идут от него (SERBITO-349)
