@@ -3190,20 +3190,30 @@ def test_google_doc_link_without_picker(watch):
     w.check("итог")
 
 
-def test_paste_public_google_link_gets_name(watch, monkeypatch):
-    """Вставили ссылку на публичный Google-документ в поле захвата — название подставилось сразу, до сохранения;
-    приватная ссылка осталась голой. После «Добавить» в задаче то же название."""
+def test_paste_google_links_become_chips(watch, monkeypatch):
+    """Вставили ссылки на Google-документы в поле захвата — они ушли из текста в чипы: публичный сразу с названием,
+    приватный — с типом. Чипы переживают перезагрузку (черновик), «×» убирает чип. При записи ссылки — в тексте."""
     public = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+    doc = "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit"
     monkeypatch.setattr(A, "fetch_doc_title", {public: "Example Spreadsheet"}.get)
     w = watch()
     smoke_user(w)
     w.page.focus("#cap")
-    w.page.evaluate("""([a, b]) => { const el = document.querySelector('#cap');
-        el.value = `Смотри ${a} и ${b} `; el.setSelectionRange(el.value.length, el.value.length);
-        el.dispatchEvent(new ClipboardEvent('paste', {bubbles: true})); }""", [public, SHEET])
-    w.page.wait_for_function("() => document.querySelector('#cap').value.includes('[Example')", timeout=WAIT_MS)
-    assert w.page.input_value("#cap") == f"Смотри [Example Spreadsheet]({public}) и {SHEET} "
-    assert w.page.evaluate("document.querySelector('#cap').selectionStart") == len(w.page.input_value("#cap"))
+    w.page.evaluate("""(urls) => { const el = document.querySelector('#cap');
+        el.value = `Смотри ${urls[0]} и ${urls[1]} ${urls[2]}`; el.setSelectionRange(el.value.length, el.value.length);
+        el.dispatchEvent(new ClipboardEvent('paste', {bubbles: true})); }""", [public, SHEET, doc])
+    w.wait('#capl .gl a:has-text("Example Spreadsheet")', "чип с названием")
+    assert w.page.input_value("#cap") == "Смотри и "
+    assert w.page.locator("#capl .gl a").all_inner_texts() == ["📊 Example Spreadsheet", "📊 Таблица Google · I29",
+                                                               "📄 Документ Google"]
+    w.page.reload()  # черновик: текст и чипы на месте, названия — без повторного запроса
+    w.wait('#capl .gl a:has-text("Example Spreadsheet")', "чипы из черновика")
+    assert w.page.input_value("#cap") == "Смотри и "
+    w.page.click('#capl [data-act="caplx"][data-i="2"]')
+    assert w.page.locator("#capl .gl").count() == 2
     w.page.click('[data-act="capture"]')
-    w.wait('main .gl a:has-text("Example Spreadsheet")', "задача с названием")
+    w.wait('main .it .gl a:has-text("Example Spreadsheet")', "задача с чипами")
+    assert not w.page.locator("#capl .gl").count() and w.page.input_value("#cap") == ""
+    assert A.row("select title from items order by id desc limit 1")["title"] == \
+        f"Смотри и [Example Spreadsheet]({public}) {SHEET}"
     w.check("итог")

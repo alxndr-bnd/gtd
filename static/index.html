@@ -50,10 +50,6 @@ button.sm:hover{color:var(--tx)}
 .it .num{color:var(--mut);font-size:12.5px;text-decoration:none;margin-top:2px;flex-shrink:0;font-variant-numeric:tabular-nums}
 .it .num:hover{color:var(--ac)}
 .it .t{word-break:break-word} .it.done .t{text-decoration:line-through;color:var(--mut)}
-a.lnk{color:var(--ac);word-break:break-all}
-.gl{display:inline-flex;max-width:100%;vertical-align:bottom;border:1px solid var(--bd);border-radius:6px;background:var(--bg);overflow:hidden}
-.gl:hover,.gl:focus-within{border-color:var(--ac)} .gl a{word-break:normal;text-decoration:none;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gl button{border:0;border-left:1px solid var(--bd);border-radius:0;background:none;padding:0 6px;min-width:24px;min-height:24px;font:inherit;line-height:1}
 /* Вся карточка задачи открывает её (SERBITO-299) */
 .it[data-id]{cursor:pointer;transition:border-color .12s}
 @media(hover:hover){.it[data-id]:hover{border-color:var(--mut)}}
@@ -296,7 +292,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "gl": {"document": "Документ Google", "spreadsheets": "Таблица Google", "presentation": "Презентация Google",
     "forms": "Форма Google", "file": "Файл Google Drive", "folders": "Папка Google Drive"},
   "gl_name": "Подключить", "gl_name_hint": "Подключить Google, чтобы показать название документа",
-  "gl_fail": "Не удалось получить название документа",
+  "gl_fail": "Не удалось получить название документа", "gl_remove": "Убрать ссылку",
   "all": "все", "back_projects": "← Projects", "rename": "Переименовать", "delete": "Удалить",
   "back_contexts": "← Контексты", "recent": "Недавние",
   "projects_hint": "Всё, что требует больше одного шага. У каждого активного проекта должно быть следующее действие. Порядок меняется перетаскиванием или Alt+↑↓.",
@@ -461,7 +457,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "gl": {"document": "Google Doc", "spreadsheets": "Google Sheet", "presentation": "Google Slides",
     "forms": "Google Form", "file": "Google Drive file", "folders": "Google Drive folder"},
   "gl_name": "Connect", "gl_name_hint": "Connect Google to show the document name",
-  "gl_fail": "Could not get the document name",
+  "gl_fail": "Could not get the document name", "gl_remove": "Remove link",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
   "back_contexts": "← Contexts", "recent": "Recent",
   "projects_hint": "Anything that takes more than one step. Every active project needs a next action. Drag a project or press Alt+↑↓ to change the order.",
@@ -1115,14 +1111,60 @@ function gdoc(url){  // {kind, id, range} у ссылки на Google Docs/Drive
   const range = u.searchParams.get('range') || new URLSearchParams(u.hash.slice(1)).get('range') || '';
   return {kind, id: id && /^[\w-]{10,}$/.test(id) ? id : null, range};
 }
-function linkHtml(url, name, it){
+function linkHtml(url, name, it, extra = ''){  // extra — ещё кнопка в плашке (× в поле захвата)
   const g = gdoc(url);
   const a = text => `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener" data-act="link">${text}</a>`;
   if(!g) return a(esc(name || url));
   const label = `${GL_ICON[g.kind]} ${esc(name || t('gl.'+g.kind))}${g.range ? ` · ${esc(g.range)}` : ''}`;
   const btn = !name && g.id && it && S.cfg?.picker ? `<button type="button" class="gn" data-act="gname" data-url="${esc(url)}"
     title="${t('gl_name_hint')}">${t('gl_name')}</button>` : '';
-  return `<span class="gl">${a(label)}${btn}</span>`;
+  return `<span class="gl">${a(label)}${btn}${extra}</span>`;
+}
+// Стили чипа — из бандла, а не в HTML лендинга: у того бюджет размера (test_spa_bundle)
+document.head.insertAdjacentHTML('beforeend', `<style>
+a.lnk{color:var(--ac);word-break:break-all}
+.gl{display:inline-flex;max-width:100%;vertical-align:bottom;border:1px solid var(--bd);border-radius:6px;background:var(--bg);overflow:hidden}
+.gl:hover,.gl:focus-within{border-color:var(--ac)} .gl a{word-break:normal;text-decoration:none;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gl button{border:0;border-left:1px solid var(--bd);border-radius:0;background:none;padding:0 6px;min-width:24px;min-height:24px;height:auto;font:inherit;line-height:1;color:var(--mut)}
+.capw.has-l{flex-direction:column} .capw.has-l textarea{border-bottom:0;border-radius:10px 10px 0 0}
+.capl{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px;border:1px solid var(--bd);border-top:0;border-radius:0 0 10px 10px;background:var(--card);text-align:left}
+.cap .capl button{height:auto;padding:0 6px;border-radius:0}  /* перебивает .hero .cap button */
+.capw.has-l textarea:focus{outline:0} .capw.has-l:focus-within .capl,.capw.has-l:focus-within textarea{border-color:var(--ac)}</style>`);  /* рамка фокуса — у поля целиком */
+
+// Ссылки в поле захвата (gtd #85): распознанная ссылка на Google-документ уходит из текста в чип внутри рамки
+// поля, под текстом, — как в карточке. При записи чипы возвращаются в текст задачи: [название](url) или голая
+// ссылка (её назовёт сервер, если документ публичный). Черновик — полный текст: после перерисовки чипы
+// собираются из него заново, без запросов к серверу
+const CAPL = [];  // [{url, name}] — чипы поля #cap
+const capText = (inp = $('#cap')) => [inp?.value.trim(), ...CAPL.map(l => l.name ? `[${l.name}](${l.url})` : l.url)]
+  .filter(Boolean).join(' ');
+const capDraft = () => { const v = capText(); v ? draft.set('cap', v) : draft.del('cap'); };
+function caplDraw(){
+  const box = $('#capl'); if(!box) return;
+  box.hidden = !CAPL.length; box.closest('.capw').classList.toggle('has-l', CAPL.length > 0);
+  box.innerHTML = CAPL.map((l, i) => linkHtml(l.url, l.name, null,
+    `<button type="button" data-act="caplx" data-i="${i}" title="${t('gl_remove')}" aria-label="${t('gl_remove')}">×</button>`)).join('');
+}
+function capLinks(inp, fetchNames){  // ссылки из текста поля — в чипы; fetchNames — спросить названия (вставка)
+  const re = new RegExp(MD_LINK.source + /|(?<!\S)https:\/\/(?:docs|drive)\.google\.com\/\S+/.source, 'g');
+  let caret = inp.selectionStart, cut = 0, found = false;
+  const v = inp.value.replace(re, (all, name, mdUrl, at) => {
+    const url = mdUrl || all.replace(/[.,;:!?)]+$/, ''), tail = all.slice(mdUrl ? all.length : url.length);
+    if(!gdoc(url)) return all;
+    found = true;
+    if(!CAPL.some(l => l.url===url)) CAPL.push({url, name: name || null});
+    if(at + all.length - tail.length <= caret) caret -= all.length - tail.length; else if(at < caret) caret = at;
+    cut += all.length - tail.length;
+    return tail;
+  });
+  if(!found) return;
+  inp.value = v.replace(/ {2,}/g, ' ');
+  caret = Math.min(caret, inp.value.length);
+  if(document.activeElement===inp) inp.setSelectionRange(caret, caret);
+  caplDraw(); capFit(inp); capDraft();
+  if(fetchNames) for(const l of CAPL.filter(l => !l.name)) api('/link-title', 'POST', {url:l.url}).then(r => {
+    if(r?.name && CAPL.includes(l)){ l.name = r.name; caplDraw(); capDraft(); }
+  }).catch(() => {});
 }
 function titleHtml(title, it){  // it — карточка задачи: только у неё кнопка «Подключить»
   title = String(title ?? '');
@@ -1215,7 +1257,7 @@ function capHint(el = $('#cap')){
 const capHtml = (pj = null, cx = null) => {
   const add = pj ? t('cap_project', {p:esc(pj.title)}) : cx ? t('cap_context', {c:esc(cx)}) : t('cap_add');
   return `<div class="cap"><div class="capw"><textarea id="cap" rows="1" autocomplete="off" placeholder="${pj || cx ? add : CAP_HINTS[0]}"
-    ${pj ? `data-pid="${pj.id}"` : cx ? `data-cx="${esc(cx)}"` : ''} autofocus></textarea><div id="ac" class="ac" role="listbox" hidden></div></div>
+    ${pj ? `data-pid="${pj.id}"` : cx ? `data-cx="${esc(cx)}"` : ''} autofocus></textarea><div id="capl" class="capl" hidden></div><div id="ac" class="ac" role="listbox" hidden></div></div>
   <button class="pri icon" data-act="capture" aria-label="${add}" title="${add}">${ICON_INBOX}<span class="lbl">${t('cap_btn')}</span></button></div>`;
 };
 
@@ -1264,7 +1306,8 @@ function render(){
   if(S.view==='account'){ mountGoogle(); mountTelegram(); }
   if(S.view==='process') procMount();
   dndTip.draw();
-  const cap = $('#cap'), saved = draft.get('cap'); if(cap && saved && !cap.value) cap.value = saved;  // черновик поля захвата
+  const cap = $('#cap'), saved = draft.get('cap'); CAPL.length = 0;
+  if(cap && saved && !cap.value){ cap.value = saved; capLinks(cap, false); }  // черновик поля захвата, ссылки — в чипы
   capFit(cap); capHint(cap);
   docTitle();  // и длинный SEO-заголовок лендинга после входа сменится
   gaPage();
@@ -2287,9 +2330,9 @@ async function newProject(){
 }
 
 async function capture(){
-  const inp = $('#cap'); let v = inp.value.trim(); if(!v) return;
+  const inp = $('#cap'); let v = capText(inp); if(!v) return;
   const pid = inp.dataset.pid ? +inp.dataset.pid : undefined, cx = inp.dataset.cx;
-  inp.value=''; acClose(); draft.del('cap');
+  inp.value=''; CAPL.length = 0; caplDraw(); acClose(); draft.del('cap');
   // На странице контекста — @контекст в конец текста, если его не написали сами; @ — как CTX_TOKEN на сервере:
   // после пробела или в начале, иначе «ivan@дом» сочтём контекстом, а сервер нет (SERBITO-647)
   if(cx && !(v.toLowerCase().match(/(?<!\S)@[\p{L}\p{N}_-]+/gu) || []).includes('@'+cx)) v += ' @'+cx;
@@ -2349,6 +2392,7 @@ document.addEventListener('click', async e => {
   const act = el.dataset.act, itemEl = el.closest('.it[data-id]'), id = itemEl && +itemEl.dataset.id;
   if(act==='link') return;  // ссылка в заголовке — открывает браузер, не карточку (gtd #85)
   if(act==='gname') return gname(id, el.dataset.url);
+  if(act==='caplx'){ CAPL.splice(+el.dataset.i, 1); caplDraw(); capDraft(); return $('#cap')?.focus(); }
   if(act==='drawer') return drawer(!$('nav').classList.contains('open'));
   if(act==='umenu'){ const m = el.parentElement.querySelector('.umenu'); m.hidden = !m.hidden; el.setAttribute('aria-expanded', !m.hidden); return; }
   if(act==='capture') return capture();
@@ -2427,16 +2471,17 @@ document.addEventListener('input', e => {
   if(e.target.id!=='cap') return;
   capFit(e.target);
   acUpdate(e.target);
-  e.target.value ? draft.set('cap', e.target.value) : draft.del('cap');  // недописанная задача не потеряется
+  capDraft();  // недописанная задача не потеряется — вместе с чипами ссылок
 });
-// Вставили ссылку на Google-документ в поле захвата или заголовок карточки (gtd #85): публичный документ сразу
-// получает название — url → [название](url), как при сохранении на сервере. Приватный остаётся голой ссылкой,
+// Вставили ссылку на Google-документ (gtd #85). В поле захвата она становится чипом (capLinks). В заголовке
+// карточки — текстом: публичный документ сразу получает название, url → [название](url), как на сервере. Приватный остаётся голой ссылкой,
 // его подпишет «Подключить». Пока ждём ответа, текст могли поменять: подменяем ссылку в текущем значении поля
 const BARE_GDOC = /(?<!\S)https:\/\/(?:docs|drive)\.google\.com\/\S+/g;
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 document.addEventListener('paste', e => {
   const el = e.target;
-  if(el.id!=='cap' && el.id!=='ef-title') return;
+  if(el.id==='cap') return setTimeout(() => capLinks(el, true));
+  if(el.id!=='ef-title') return;
   setTimeout(() => {
     const urls = [...el.value.matchAll(BARE_GDOC)].map(m => m[0].replace(/[.,;:!?)]+$/, '')).filter(u => !u.includes(')')).slice(0, 3);
     for(const url of new Set(urls)) api('/link-title', 'POST', {url}).then(r => {

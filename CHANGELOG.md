@@ -20,8 +20,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 - A link to a Google Doc, Sheet or Slides in a task shows as a short chip with the document type, and links open in a new tab.
   - RU: Ссылка на Google Документ, Таблицу или Презентацию в задаче показывается коротким чипом с типом документа, а ссылки открываются в новой вкладке.
-- A public Google document gets its name as soon as you paste the link.
-  - RU: Публичный Google-документ получает название сразу, как только вставишь ссылку.
+- A Google document link pasted into the capture field shows as a chip, and a public document gets its name right away.
+  - RU: Ссылка на Google-документ, вставленная в поле захвата, показывается чипом, а публичный документ сразу получает название.
 - "Connect" on the chip asks Google for access to this one document and puts its name into the task.
   - RU: «Подключить» на чипе запрашивает у Google доступ к этому документу и подставляет его название в задачу.
 
