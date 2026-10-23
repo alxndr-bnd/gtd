@@ -823,7 +823,7 @@ PRIVACY = {
 </ul>
 <h2 id="google-drive">Google Drive</h2>
 <ul class="ex">
-<li><b>Только по кнопке</b> «Показать название» у ссылки на Google-документ в задаче. Google спрашивает
+<li><b>Только по кнопке</b> «Подключить» у ссылки на Google-документ в задаче. Google спрашивает
 разрешение <code>drive.file</code> — доступ только к файлам, которые ты сам выберешь в окне Google. К остальному
 Диску доступа нет.</li>
 <li><b>Что берём</b>: название выбранного документа. Оно попадает в заголовок задачи и хранится как её текст.
@@ -898,7 +898,7 @@ menu. Declining deletes this site's <code>_ga*</code> cookies.</li>
 </ul>
 <h2 id="google-drive">Google Drive</h2>
 <ul class="ex">
-<li><b>Only on request</b>: when you press “Show name” on a Google document link in a task. Google asks for the
+<li><b>Only on request</b>: when you press “Connect” on a Google document link in a task. Google asks for the
 <code>drive.file</code> permission — access only to the files you pick in the Google window. We have no access
 to the rest of your Drive.</li>
 <li><b>What we take</b>: the name of the picked document. It goes into the task title and is stored as its text.

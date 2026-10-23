@@ -43,7 +43,7 @@ At least one sign-in method is required: email (SMTP), Google, or the Telegram b
 | `EMAIL_FROM` | `"GTD" <gtd@localhost>` | Sender of sign-in emails, e.g. `"GTD" <gtd@example.com>` |
 | `GOOGLE_CLIENT_ID` | — | Sign in with Google. OAuth client (Web) with your `BASE_URL` in Authorized JavaScript origins |
 | `GOOGLE_API_KEY` | — | Names of Google Docs/Sheets links in tasks (Google Picker). Browser API key: restrict it to your `BASE_URL` and the Google Picker API. Needs `GOOGLE_CLIENT_ID` and `GOOGLE_APP_ID` |
-| `GOOGLE_APP_ID` | — | The Google Cloud project number of the OAuth client. Without it or the key, a Google link shows as a chip without “Show name” |
+| `GOOGLE_APP_ID` | — | The Google Cloud project number of the OAuth client. Without it or the key, a Google link shows as a chip without “Connect” |
 | `TELEGRAM_BOT_TOKEN` | — | Bot token from @BotFather. Optional: without it the bot is off and the site works as usual |
 | `CRON_SECRET` | — | Secret for `POST /tasks/reminders`; needed only in webhook mode |
 | `ADMIN_USER_IDS` | — | Comma-separated account ids that see the in-app Statistics |

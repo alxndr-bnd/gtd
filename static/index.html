@@ -295,7 +295,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "restore": "↩︎ Вернуть", "to_trash": "В корзину", "task_n": "Задача #{n}",
   "gl": {"document": "Документ Google", "spreadsheets": "Таблица Google", "presentation": "Презентация Google",
     "forms": "Форма Google", "file": "Файл Google Drive", "folders": "Папка Google Drive"},
-  "gl_name": "Показать название", "gl_name_hint": "Google спросит, к какому аккаунту есть доступ к документу",
+  "gl_name": "Подключить", "gl_name_hint": "Подключить Google, чтобы показать название документа",
   "gl_fail": "Не удалось получить название документа",
   "all": "все", "back_projects": "← Projects", "rename": "Переименовать", "delete": "Удалить",
   "back_contexts": "← Контексты", "recent": "Недавние",
@@ -460,7 +460,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "restore": "↩︎ Restore", "to_trash": "Move to trash", "task_n": "Task #{n}",
   "gl": {"document": "Google Doc", "spreadsheets": "Google Sheet", "presentation": "Google Slides",
     "forms": "Google Form", "file": "Google Drive file", "folders": "Google Drive folder"},
-  "gl_name": "Show name", "gl_name_hint": "Google asks which account has access to the document",
+  "gl_name": "Connect", "gl_name_hint": "Connect Google to show the document name",
   "gl_fail": "Could not get the document name",
   "all": "all", "back_projects": "← Projects", "rename": "Rename", "delete": "Delete",
   "back_contexts": "← Contexts", "recent": "Recent",
@@ -1095,8 +1095,8 @@ function recentOpen(){
 // Срок прошёл, а задача не закрыта — красным и словом «просрочено» (не только цветом)
 const overdue = it => it.remind_at && it.remind_at < Date.now()/1000 && !['done','trash'].includes(it.status);
 // Ссылки в заголовке (gtd #85): [название](url) и голый URL — кликабельны, открываются в новой вкладке.
-// Google-документ — чип «📊 Таблица Google · I29»; без названия у карточки — кнопка «Показать название» (gname)
-// Чип — одна плашка .gl: ссылка и справа 🔓. Кнопка — соседка ссылки, а не внутри <a>: интерактивное в ссылке
+// Google-документ — чип «📊 Таблица Google · I29»; без названия у карточки — «Подключить» (gname)
+// Чип — одна плашка .gl: ссылка и справа «Подключить». Кнопка — соседка ссылки, а не внутри <a>: интерактивное в ссылке
 // вкладывать нельзя. Кнопка не ниже 24 px — минимум цели касания, WCAG 2.5.8
 const MD_LINK = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
 const LINK_RE = new RegExp(MD_LINK.source + /|https?:\/\/[^\s<>"]+/.source, 'g');
@@ -1121,10 +1121,10 @@ function linkHtml(url, name, it){
   if(!g) return a(esc(name || url));
   const label = `${GL_ICON[g.kind]} ${esc(name || t('gl.'+g.kind))}${g.range ? ` · ${esc(g.range)}` : ''}`;
   const btn = !name && g.id && it && S.cfg?.picker ? `<button type="button" class="gn" data-act="gname" data-url="${esc(url)}"
-    title="${t('gl_name')} — ${t('gl_name_hint')}" aria-label="${t('gl_name')}">🔓</button>` : '';
+    title="${t('gl_name_hint')}">${t('gl_name')}</button>` : '';
   return `<span class="gl">${a(label)}${btn}</span>`;
 }
-function titleHtml(title, it){  // it — карточка задачи: только у неё кнопка «Показать название»
+function titleHtml(title, it){  // it — карточка задачи: только у неё кнопка «Подключить»
   title = String(title ?? '');
   let out = '', last = 0;
   for(const m of title.matchAll(LINK_RE)){
