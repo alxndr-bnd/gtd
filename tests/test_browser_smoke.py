@@ -3239,3 +3239,65 @@ def test_connect_in_capture_chip(watch, monkeypatch):
     it = A.row("select title, project_id from items order by id desc limit 1")
     assert it == {"title": f"Доработать OKR [OKR 2026 #Q4]({SHEET})", "project_id": None}
     w.check("итог")
+
+
+def test_project_context_menu(watch):
+    """Правый клик по проекту: наверх и вниз списка — тот же запрос, что у перетаскивания; переименовать, в архив
+    и удалить — те же диалоги, что у кнопок карточки. Клавиатура (Shift+F10) открывает то же меню."""
+    w = watch()
+    uid, (a, b, c) = project_user(w)
+    track_loads(w)
+    w.page.click(f'{PJ}[data-pid="{c}"] .t', button="right")
+    w.wait(".cm[role=menu]", "меню проекта")
+    assert cm_labels(w) == ["top", "bottom", "prename", "parch", "pdel"]
+    assert w.page.get_attribute(".cm", "aria-label") == "Действия с проектом"
+    with saves(w, "проект наверх", "POST", project_move(c)):
+        w.page.click(".cm [data-cm=top]")
+    cm_closed(w)
+    assert project_screen_order(w) == [c, a, b] and db_project_order(uid) == [c, a, b]
+    settled(w)
+
+    w.page.click(f'{PJ}[data-pid="{c}"] .t', button="right")
+    with saves(w, "проект вниз", "POST", project_move(c)):
+        w.page.click(".cm [data-cm=bottom]")
+    assert db_project_order(uid) == [a, b, c]
+    settled(w)
+
+    # Уже внизу — «В конец» ничего не шлёт
+    w.page.click(f'{PJ}[data-pid="{c}"] .t', button="right")
+    w.page.click(".cm [data-cm=bottom]")
+    cm_closed(w)
+    page_pause(w, 200)
+    assert db_project_order(uid) == [a, b, c]
+
+    w.page.focus(f'{PJ}[data-pid="{a}"]')
+    w.page.keyboard.press("Shift+F10")
+    w.wait(".cm[role=menu]", "меню проекта с клавиатуры")
+    w.page.keyboard.press("ArrowDown")
+    w.page.keyboard.press("ArrowDown")
+    assert w.page.evaluate("document.activeElement.dataset.cm") == "prename"
+    w.page.keyboard.press("Enter")
+    w.wait("#dlg[open] #pf-title", "диалог переименования")
+    assert w.page.input_value("#pf-title") == "Альфа"
+    w.page.click('#dlg [data-act="cancel"]')
+
+    w.page.click(f'{PJ}[data-pid="{b}"] .t', button="right")
+    w.page.click(".cm [data-cm=parch]")
+    w.wait("#dlg[open]", "диалог архива")
+    w.check("итог")
+
+
+def test_project_context_menu_long_press_on_phone(watch):
+    """Палец: удержать проект и отпустить на месте — меню проекта, а не перестановка."""
+    w = watch(viewport=PHONE, touch=True)
+    uid, (a, b, c) = project_user(w, touch=True)
+    card = f'{PJ}[data-pid="{b}"]'
+    touch(w, card, "pointerdown")
+    past_hold(w)
+    touch(w, card, "pointerup")
+    w.wait(".cm[role=menu]", "меню проекта по удержанию")
+    page_pause(w, 300)  # клик сразу после отпускания пальца страница гасит (DND.endAt), как и у задач
+    with saves(w, "проект наверх с телефона", "POST", project_move(b)):
+        w.page.tap(".cm [data-cm=top]")
+    assert db_project_order(uid) == [b, a, c]
+    w.check("итог")

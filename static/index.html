@@ -360,7 +360,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "done_mode": {"label": "Выполненные задачи", "hide": "Скрыть выполненные", "list": "Выполненные — в списке",
     "section": "Выполненные — отдельно"},
   "done_section": "Выполненные ({n})",
-  "cm": {"label": "Действия с задачей", "top": "Наверх списка", "bottom": "В конец списка",
+  "cm": {"label": "Действия с задачей", "label_project": "Действия с проектом", "top": "Наверх списка", "bottom": "В конец списка",
     "project": "Добавить в проект", "project_change": "Перенести в другой проект", "unproject": "Убрать из #{p}",
     "date_add": "Поставить дату", "date_change": "Изменить дату", "undate": "Убрать дату", "back": "‹ Назад",
     "find": "Найти проект", "none": "Таких проектов нет", "new": "+ Новый проект…", "new_named": "+ Новый проект «{p}»",
@@ -525,7 +525,7 @@ button.user:hover{background:var(--bg)} button.user span{flex:1;overflow:hidden;
   "done_mode": {"label": "Completed tasks", "hide": "Hide completed", "list": "Show completed in the list",
     "section": "Show completed separately"},
   "done_section": "Completed ({n})",
-  "cm": {"label": "Task actions", "top": "Move to the top", "bottom": "Move to the bottom",
+  "cm": {"label": "Task actions", "label_project": "Project actions", "top": "Move to the top", "bottom": "Move to the bottom",
     "project": "Add to a project", "project_change": "Move to another project", "unproject": "Remove from #{p}",
     "date_add": "Add a date", "date_change": "Change the date", "undate": "Remove the date", "back": "‹ Back",
     "find": "Find a project", "none": "No projects match", "new": "+ New project…", "new_named": "+ New project “{p}”",
@@ -1458,6 +1458,7 @@ function dndEnd(e){
   if(dndOrder(box) !== was) dndSave(el);
   // Удержал пальцем и отпустил на месте — меню задачи (SERBITO-604); за ручку ⠿ — только перетаскивание
   else if(held && still && el.dataset.id) cmOpen(el.isConnected ? el : cmCard(+el.dataset.id) || el, e.clientX, e.clientY);
+  else if(held && still && el.matches('.pj[data-pid]') && el.isConnected) cmOpen(el, e.clientX, e.clientY);  // и у проекта
 }
 document.addEventListener('pointerup', dndEnd);
 document.addEventListener('pointercancel', dndEnd);
@@ -2117,6 +2118,9 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 </style>`);
 const CM = {el:null, at:0};
 const cmCard = id => document.querySelector(`main .it[data-id="${id}"]`);
+// Меню проекта (на экране проектов): своя карточка .it.pj[data-pid] — порядок, переименовать, в архив, удалить
+const CM_CARD = 'main .it[data-id], main .it.pj[data-pid]';
+const cmTarget = () => CM.pid ? document.querySelector(`main .it.pj[data-pid="${CM.pid}"]`) : cmCard(CM.id);
 // Быстрые даты: время прежнее, если дата у задачи уже есть, иначе 9:00 — как у даты без времени при захвате.
 // «Сегодня», когда это время уже прошло, — ближайший целый час. «Следующая неделя» — её понедельник
 function cmWhen(kind, cur){
@@ -2133,12 +2137,13 @@ function cmWhen(kind, cur){
 const cmItem = (act, label, sub = '', more = '') => `<button type="button" role="menuitem" data-cm="${act}"${more}>${label}${sub
   ? `<span class="sub">${sub}</span>` : ''}</button>`;
 function cmOpen(card, x, y){
-  const id = +card.dataset.id, it = findItem(id); if(!it) return;
+  const pid = card.classList.contains('pj') ? +card.dataset.pid : null, id = pid ? null : +card.dataset.id, it = pid ? null : findItem(id);
+  if(!pid && !it) return;
   cmClose(false);
   const box = card.parentElement;
-  Object.assign(CM, {id, it, x, y, at:performance.now(), touch:cmPtr==='touch', scope:box?.classList.contains('dnd') ? box.dataset.scope : null});
+  Object.assign(CM, {id, pid, it, x, y, at:performance.now(), touch:cmPtr==='touch', scope:box?.classList.contains('dnd') ? box.dataset.scope : null});
   const el = CM.el = document.createElement('div');
-  el.className = 'cm'; el.tabIndex = -1; el.setAttribute('role', 'menu'); el.setAttribute('aria-label', t('cm.label'));
+  el.className = 'cm'; el.tabIndex = -1; el.setAttribute('role', 'menu'); el.setAttribute('aria-label', t(pid ? 'cm.label_project' : 'cm.label'));
   el.addEventListener('click', cmClick);
   document.body.appendChild(el);
   card.classList.add('cmon');
@@ -2149,7 +2154,9 @@ function cmOpen(card, x, y){
 function cmPane(pane, from){
   const {it, el} = CM; CM.pane = pane;
   const sub = ' aria-haspopup="menu"';
-  if(pane==='main') el.innerHTML = [
+  if(CM.pid) el.innerHTML = [cmItem('top', '⤒ ' + t('cm.top')), cmItem('bottom', '⤓ ' + t('cm.bottom')), '<hr>',
+    cmItem('prename', '✏️ ' + t('rename')), cmItem('parch', t('archive')), cmItem('pdel', '🗑 ' + t('delete'))].join('');
+  else if(pane==='main') el.innerHTML = [
     CM.scope && cmItem('top', '⤒ ' + t('cm.top')), CM.scope && cmItem('bottom', '⤓ ' + t('cm.bottom')), CM.scope && '<hr>',
     cmItem('proj', '# ' + t(it.project_id ? 'cm.project_change' : 'cm.project'), '›', sub),
     it.project_id && cmItem('unproj', t('cm.unproject', {p:esc(it.project || '')})), '<hr>',
@@ -2199,7 +2206,7 @@ function cmClose(focus){
   if(!CM.el) return;
   CM.el.remove(); CM.el = null;
   document.querySelectorAll('main .it.cmon').forEach(c => c.classList.remove('cmon'));
-  if(focus) cmCard(CM.id)?.focus({preventScroll:true});  // клавиатура — обратно на задачу
+  if(focus) cmTarget()?.focus({preventScroll:true});  // клавиатура — обратно на задачу или проект
 }
 const cmTyping = () => CM.el?.contains(document.activeElement) && document.activeElement.tagName==='INPUT';
 function cmClick(e){
@@ -2220,7 +2227,21 @@ function cmClick(e){
   }
   if(a==='unproj') return cmPatch({project_id:null});
   if(a==='undate') return cmPatch({remind_at:null});
-  if(a==='top' || a==='bottom') return cmMove(a);
+  if(a==='top' || a==='bottom') return CM.pid ? cmMoveProject(a) : cmMove(a);
+  // Проект: те же диалоги, что у кнопок ✏️, 🗄 и 🗑 на его карточке
+  const pid = CM.pid;
+  if(a==='prename'){ cmClose(false); return openRenameProject(pid); }
+  if(a==='parch'){ cmClose(false); return openArchiveProject(pid); }
+  if(a==='pdel'){ cmClose(false); return openDeleteProject(pid); }
+}
+// Проект наверх / вниз: карточку — на край списка сразу, на сервер — как перетаскивание (dndSave: соседи по краю)
+function cmMoveProject(to){
+  const card = cmTarget(), box = card?.parentElement;
+  cmClose(true);
+  if(!box?.classList.contains('dnd') || card === (to==='top' ? box.firstElementChild : box.lastElementChild)) return;
+  to==='top' ? box.prepend(card) : box.append(card);
+  if(S.sel!=null) S.sel = cards().indexOf(card);
+  dndSave(card);
 }
 // Наверх / вниз — всего списка или проекта, а не видимой части (фильтр @контекста). Экран — сразу, сервер — через
 // общую очередь перестановок (dndSave): перечитка, начатая раньше, не нарисует старый порядок (SERBITO-562)
@@ -2276,8 +2297,8 @@ document.addEventListener('keydown', e => {
     return;
   }
   if(!(e.key==='ContextMenu' || (e.shiftKey && e.key==='F10')) || $('#dlg').open) return;
-  const card = document.activeElement?.closest?.('main .it[data-id]') || (S.sel!=null ? cards()[S.sel] : null);
-  if(!card?.dataset.id) return;
+  const card = document.activeElement?.closest?.(CM_CARD) || (S.sel!=null ? cards()[S.sel] : null);
+  if(!card?.dataset.id && !card?.matches('.pj[data-pid]')) return;
   e.preventDefault(); e.stopPropagation();
   const r = card.getBoundingClientRect();
   CM.keyAt = performance.now(); cmPtr = '';
@@ -2289,7 +2310,7 @@ const LP = {};
 let cmPtr = '', cmSel = false;
 document.addEventListener('pointerdown', e => {
   cmPtr = e.pointerType;
-  const card = e.target.closest?.('main .it[data-id]');
+  const card = e.target.closest?.(CM_CARD);
   cmSel = !!card && selecting(card);
   if(CM.el && !CM.el.contains(e.target)) cmClose(false);
   // Палец вне списка с ручным порядком (Scheduled, Done, Reference, «Скоро срок»): удержание — сразу меню.
@@ -2312,7 +2333,7 @@ const lpEnd = e => {
 document.addEventListener('pointerup', lpEnd); document.addEventListener('pointercancel', lpEnd);
 document.addEventListener('contextmenu', e => {
   if(CM.el?.contains(e.target)) return e.preventDefault();
-  const card = e.target.closest?.('main .it[data-id]');
+  const card = e.target.closest?.(CM_CARD);
   if(!card || $('#dlg').open || e.target.closest('a[href],textarea,select,input:not([type=checkbox])')) return;
   const key = !!CM.el && performance.now() - (CM.keyAt ?? -1e9) < 1000;  // клавиша Menu, Shift+F10: меню уже открыто по keydown
   if(!key && cmPtr!=='touch' && cmSel) return;

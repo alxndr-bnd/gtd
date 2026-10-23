@@ -16,6 +16,11 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Added
+
+- Right-click a project (or long-press it on a phone) to move it to the top or the bottom of the list, rename, archive or delete it.
+  - RU: Правый клик по проекту (на телефоне — удержание) — наверх или в конец списка, переименовать, в архив, удалить.
+
 ## [0.68.0] - 2026-10-23
 
 ### Added
