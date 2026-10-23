@@ -1111,7 +1111,7 @@ function gdoc(url){  // {kind, id, range} у ссылки на Google Docs/Drive
   const range = u.searchParams.get('range') || new URLSearchParams(u.hash.slice(1)).get('range') || '';
   return {kind, id: id && /^[\w-]{10,}$/.test(id) ? id : null, range};
 }
-function linkHtml(url, name, it, extra = ''){  // extra — ещё кнопка в плашке (× в поле захвата)
+function linkHtml(url, name, it, extra = ''){  // it — показывать «Подключить»; extra — ещё кнопка (× в поле захвата)
   const g = gdoc(url);
   const a = text => `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener" data-act="link">${text}</a>`;
   if(!g) return a(esc(name || url));
@@ -1142,7 +1142,7 @@ const capDraft = () => { const v = capText(); v ? draft.set('cap', v) : draft.de
 function caplDraw(){
   const box = $('#capl'); if(!box) return;
   box.hidden = !CAPL.length; box.closest('.capw').classList.toggle('has-l', CAPL.length > 0);
-  box.innerHTML = CAPL.map((l, i) => linkHtml(l.url, l.name, null,
+  box.innerHTML = CAPL.map((l, i) => linkHtml(l.url, l.name, true,
     `<button type="button" data-act="caplx" data-i="${i}" title="${t('gl_remove')}" aria-label="${t('gl_remove')}">×</button>`)).join('');
 }
 function capLinks(inp, fetchNames){  // ссылки из текста поля — в чипы; fetchNames — спросить названия (вставка)
@@ -1199,6 +1199,8 @@ function driveToken(){
     callback: r => { if(!r.access_token) return fail(r); GP.tok = r.access_token; GP.exp = Date.now() + (r.expires_in - 60) * 1000; ok(GP.tok); },
   }).requestAccessToken());
 }
+// id — задача: название подписывает ссылку на сервере. Без id — чип поля захвата: название — в чип, в задачу оно
+// попадёт при записи
 async function gname(id, url){
   const g = gdoc(url); if(!g?.id || !S.cfg.picker) return;
   try{
@@ -1213,6 +1215,11 @@ async function gname(id, url){
         .build().setVisible(true);
     });
     if(!doc) return;
+    if(!id){
+      const l = CAPL.find(l => l.url===url);
+      if(l){ l.name = doc[P.Document.NAME]; caplDraw(); capDraft(); }
+      return $('#cap')?.focus();
+    }
     const r = await api(`/items/${id}/link-name`, 'POST', {url, name: doc[P.Document.NAME]});
     if(!r?.id) throw new Error(r?.detail || 'link-name');
     load();

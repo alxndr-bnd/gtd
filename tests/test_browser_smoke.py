@@ -3217,3 +3217,25 @@ def test_paste_google_links_become_chips(watch, monkeypatch):
     assert A.row("select title from items order by id desc limit 1")["title"] == \
         f"Смотри и [Example Spreadsheet]({public}) {SHEET}"
     w.check("итог")
+
+
+def test_connect_in_capture_chip(watch, monkeypatch):
+    """Приватная ссылка в поле захвата: «Подключить» в чипе берёт название из Picker прямо в чип, до записи;
+    при записи оно уже в тексте задачи, а «#Q4» в названии не стал проектом."""
+    monkeypatch.setattr(A, "GOOGLE_API_KEY", "picker-key")
+    monkeypatch.setattr(A, "GOOGLE_APP_ID", "123")
+    w = watch()
+    w.page.add_init_script(PICKER_STUB)
+    smoke_user(w)
+    w.page.focus("#cap")
+    w.page.evaluate("""(u) => { const el = document.querySelector('#cap'); el.value = 'Доработать OKR ' + u;
+        el.dispatchEvent(new ClipboardEvent('paste', {bubbles: true})); }""", SHEET)
+    w.wait('#capl [data-act="gname"]', "Подключить в чипе поля")
+    w.page.click('#capl [data-act="gname"]')
+    w.wait('#capl .gl a:has-text("OKR 2026 #Q4")', "название в чипе")
+    assert not w.page.locator('#capl [data-act="gname"]').count()
+    w.page.click('[data-act="capture"]')
+    w.wait('main .it .gl a:has-text("OKR 2026 #Q4")', "задача с названием")
+    it = A.row("select title, project_id from items order by id desc limit 1")
+    assert it == {"title": f"Доработать OKR [OKR 2026 #Q4]({SHEET})", "project_id": None}
+    w.check("итог")
