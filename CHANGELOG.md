@@ -16,6 +16,10 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+### Changed
+- Behind-the-scenes: browser extensions that load Google Fonts on visitors' pages no longer send error reports to us. Nothing changes for you.
+  - RU: Внутреннее: расширения браузера, которые подгружают шрифты Google на страницы посетителей, больше не присылают нам отчёты об ошибках. Для вас ничего не меняется.
+
 ## [0.69.0] - 2026-10-23
 
 ### Added
