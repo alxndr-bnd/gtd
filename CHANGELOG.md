@@ -16,6 +16,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 
 ## [Unreleased]
 
+## [0.70.0] - 2026-10-24
+
 ### Changed
 - Behind-the-scenes: browser extensions that load Google Fonts on visitors' pages no longer send error reports to us. Nothing changes for you.
   - RU: Внутреннее: расширения браузера, которые подгружают шрифты Google на страницы посетителей, больше не присылают нам отчёты об ошибках. Для вас ничего не меняется.
@@ -643,7 +645,8 @@ shows the page in both languages. `changelog.py` parses this file for the site a
 - Sign in with Google, a one-time email code or Telegram; methods with the same email share one account.
   - RU: Вход через Google, одноразовый код на почту или Telegram; способы входа с одной почтой — один аккаунт.
 
-[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.69.0...HEAD
+[Unreleased]: https://github.com/alxndr-bnd/gtd/compare/v0.70.0...HEAD
+[0.70.0]: https://github.com/alxndr-bnd/gtd/compare/v0.69.0...v0.70.0
 [0.69.0]: https://github.com/alxndr-bnd/gtd/compare/v0.68.0...v0.69.0
 [0.68.0]: https://github.com/alxndr-bnd/gtd/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/alxndr-bnd/gtd/compare/v0.66.0...v0.67.0
