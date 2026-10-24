@@ -1817,6 +1817,9 @@ CSP_NOISE_URIS = {"eval", "wasm-eval"}
 CSP_NOISE_SCHEMES = ("chrome-extension:", "moz-extension:", "safari-extension:", "safari-web-extension:",
                      "ms-browser-extension:")
 CSP_NOISE_UA = re.compile(r"HeadlessChrome|bot\b|crawler|spider|Lighthouse", re.I)
+# Шрифты с Google Fonts не грузит ни одна страница gtd: их ставит расширение или виджет
+# (Sentry GTD-7, 30 отчётов, 4 пользователя, 2026-10-23). Отбрасываем хост, а не весь CSP.
+CSP_NOISE_FONT_HOSTS = ("fonts.gstatic.com", "fonts.googleapis.com")
 CSP_REPORT_MAX = 16 * 1024
 
 
@@ -1824,8 +1827,11 @@ def csp_noise(report: dict, ua: str) -> bool:
     """True — отчёт CSP не про наш код: eval, расширение браузера или бот."""
     blocked = str(report.get("blocked-uri") or "")
     source = str(report.get("source-file") or "")
+    font = str(report.get("effective-directive") or "") == "font-src"
+    host = urlsplit(blocked).hostname if "://" in blocked else blocked.split("/", 1)[0].lower()
     return (blocked in CSP_NOISE_URIS or blocked.startswith(CSP_NOISE_SCHEMES)
-            or source.startswith(CSP_NOISE_SCHEMES) or bool(CSP_NOISE_UA.search(ua)))
+            or source.startswith(CSP_NOISE_SCHEMES) or bool(CSP_NOISE_UA.search(ua))
+            or (font and host in CSP_NOISE_FONT_HOSTS))
 
 
 def csp_headers(enforce: bool) -> list[tuple[bytes, bytes]]:
