@@ -2,7 +2,7 @@
 # -c — те же версии, что в замке образа: тесты гоняются на том, что уходит в прод (SERBITO-339).
 -r requirements.in
 -c requirements.txt
-pytest>=9.1.1
+pytest>=9.2.0
 # Параллельный гейт: pytest -n auto (SERBITO-553); у каждого воркера своя база gtd_test_<uuid> (tests/conftest.py)
 pytest-xdist>=3.8.0
 # TestClient Starlette 1.x работает на httpx2 (со старым httpx — DeprecationWarning, в pytest.ini это ошибка)
