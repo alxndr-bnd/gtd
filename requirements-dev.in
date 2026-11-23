@@ -6,6 +6,6 @@ pytest>=9.2.0
 # Параллельный гейт: pytest -n auto (SERBITO-553); у каждого воркера своя база gtd_test_<uuid> (tests/conftest.py)
 pytest-xdist>=3.8.0
 # TestClient Starlette 1.x работает на httpx2 (со старым httpx — DeprecationWarning, в pytest.ini это ошибка)
-httpx2>=2.16.0
+httpx2>=2.16.2
 # Браузерный смоук SPA (tests/test_browser_smoke.py); браузер ставится отдельно: .venv/bin/playwright install chromium
-playwright>=1.65.1
+playwright>=1.65.2
